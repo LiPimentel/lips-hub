@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Generador de Gantt — Harper</title>
+<style>
+  :root{
+    --navy:#0D1F3C; --navy-2:#16305a; --paper:#F7F7F4; --line:#DEDCD3;
+    --ink:#1c1c1a; --muted:#6b6a63; --card:#ffffff;
+    --c1:#5DCAA5; --c2:#7F77DD; --c3:#F0997B; --c4:#ED93B1; --c5:#85B7EB; --c6:#EF9F27; --c7:#97C459; --c8:#B4B2A9;
+  }
+  *{box-sizing:border-box;}
+  html{-webkit-text-size-adjust:100%;}
+  body{margin:0;font-family:Arial,Helvetica,sans-serif;background:var(--paper);color:var(--ink);}
+  header{background:var(--navy);color:#fff;padding:clamp(16px,4vw,28px) clamp(16px,4vw,32px);}
+  header h1{margin:0;font-size:clamp(17px,4vw,20px);font-weight:700;letter-spacing:0.2px;}
+  header p{margin:6px 0 0;font-size:13px;color:#c7d0e0;}
+  main{max-width:1100px;margin:0 auto;padding:clamp(14px,4vw,24px) clamp(14px,4vw,32px) 64px;}
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:clamp(14px,3vw,20px) clamp(14px,3vw,22px);margin-bottom:20px;}
+  .panel h2{font-size:14px;margin:0 0 12px;color:var(--navy);text-transform:uppercase;letter-spacing:0.6px;}
+  .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center;}
+  .btn{background:var(--navy);color:#fff;border:none;border-radius:6px;padding:9px 16px;font-size:13px;cursor:pointer;white-space:nowrap;}
+  .btn:hover{background:var(--navy-2);}
+  .btn.secondary{background:#fff;color:var(--navy);border:1px solid var(--navy);}
+  .btn.secondary:hover{background:#eef1f7;}
+  input[type=file]{font-size:12px;max-width:100%;}
+  textarea{width:100%;min-height:110px;font-family:monospace;font-size:12px;padding:10px;border:1px solid var(--line);border-radius:6px;resize:vertical;}
+  table{width:100%;border-collapse:collapse;font-size:12px;min-width:640px;}
+  th,td{border:1px solid var(--line);padding:6px 8px;text-align:left;word-break:break-word;}
+  th{background:#f0f0eb;color:var(--navy);font-weight:700;}
+  td[contenteditable=true]{outline:none;}
+  td[contenteditable=true]:focus{background:#fffbe6;}
+  .rowactions{white-space:nowrap;text-align:center;}
+  .del{color:#a32d2d;cursor:pointer;font-weight:700;}
+  .status{font-size:12px;color:var(--muted);margin-top:8px;}
+  .status.err{color:#a32d2d;}
+  .gantt-flex{display:flex;align-items:flex-start;}
+  .gantt-labels{flex:0 0 240px;width:240px;padding-top:34px;}
+  .gantt-labels .lbl{height:48px;display:flex;align-items:center;justify-content:flex-start;font-size:12px;color:var(--ink);padding:4px 10px;border-bottom:1px solid #f0f0eb;text-align:left;cursor:pointer;line-height:1.25;}
+  .gantt-labels .lbl span:last-child{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+  .gantt-labels .lbl:hover{background:#f0f0eb;}
+  .gantt-labels .lbl .n{font-weight:700;color:var(--navy);margin-right:6px;flex:0 0 auto;}
+  .gantt-scroll{flex:1;overflow-x:auto;overflow-y:hidden;border-left:1px solid var(--line);}
+  .gantt-inner{position:relative;}
+  .axis{position:relative;height:34px;border-bottom:1px solid var(--line);}
+  .axis .tick{position:absolute;top:0;bottom:0;border-left:1px solid #ececE4;}
+  .axis .tick span{position:absolute;top:6px;left:4px;font-size:11px;color:var(--muted);white-space:nowrap;}
+  .axis .tick.month span{color:var(--navy);font-weight:700;}
+  .gantt-row{position:relative;height:48px;border-bottom:1px solid #f0f0eb;}
+  .gantt-row .gridline{position:absolute;top:0;bottom:0;border-left:1px solid #f5f5ef;}
+  .gantt-bar{position:absolute;top:12px;height:24px;border-radius:5px;cursor:pointer;display:flex;align-items:center;padding-left:6px;}
+  .gantt-bar .num{font-size:11px;font-weight:700;color:#1a1a1a;background:rgba(255,255,255,0.55);border-radius:4px;padding:1px 6px;}
+  .gantt-bar:hover{filter:brightness(0.94);}
+  .gantt-bar-label{position:absolute;top:0;height:48px;display:flex;align-items:center;white-space:nowrap;font-size:11px;color:var(--muted);padding-left:8px;}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;margin-top:14px;font-size:12px;color:var(--muted);}
+  .legend .sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px;}
+  #dropzone{border:2px dashed var(--line);border-radius:8px;padding:22px;text-align:center;color:var(--muted);font-size:13px;cursor:pointer;}
+  #dropzone.drag{border-color:var(--navy);background:#eef1f7;}
+
+  @media (max-width: 640px){
+    header p{font-size:12px;}
+    .panel h2{font-size:13px;}
+    #dropzone{padding:16px 10px;font-size:12px;}
+    .gantt-labels{flex:0 0 150px;width:150px;}
+    .gantt-labels .lbl{font-size:11px;padding:4px 6px;}
+    .gantt-bar .num{font-size:10px;padding:1px 4px;}
+    .gantt-bar-label{font-size:10px;}
+    .axis .tick span{font-size:10px;}
+    .btn{padding:9px 12px;font-size:12px;}
+    #ganttPanel .row{justify-content:flex-start;}
+    #exportPdf{width:100%;}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Generador de cronogramas Gantt</h1>
+  <p>Sube un Excel, CSV o PDF con tu cronograma, revisa/corrige las filas, y genera el Gantt.</p>
+</header>
+
+<main>
+
+  <div class="panel">
+    <h2>1. Carga tu archivo</h2>
+    <div id="dropzone">
+      Arrastra aquí tu archivo (.xlsx, .csv, .pdf) o haz clic para elegirlo
+      <div style="margin-top:10px;"><input type="file" id="fileInput" accept=".xlsx,.xls,.csv,.pdf"></div>
+    </div>
+    <div class="row" style="margin-top:14px;">
+      <button class="btn secondary" id="loadSample">Cargar ejemplo (Opción 1 — Odoo PES)</button>
+      <button class="btn secondary" id="clearAll">Limpiar todo</button>
+    </div>
+    <div style="margin-top:14px;">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">O pega texto/tabla directamente (columnas separadas por tab o varios espacios: Fase, Fecha_Inicio, Fecha_Fin, Entregable, Duracion_Dias):</div>
+      <textarea id="pasteArea" placeholder="Pega aquí filas de tu cronograma..."></textarea>
+      <div class="row" style="margin-top:8px;"><button class="btn secondary" id="parsePaste">Interpretar texto pegado</button></div>
+    </div>
+    <div class="status" id="status"></div>
+  </div>
+
+  <div class="panel">
+    <h2>2. Revisa y corrige las filas</h2>
+    <div style="overflow-x:auto;">
+      <table id="dataTable">
+        <thead>
+          <tr><th>Fase</th><th>Fecha inicio</th><th>Fecha fin</th><th>Entregable</th><th>Días</th><th></th></tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+    <div class="row" style="margin-top:12px;">
+      <button class="btn secondary" id="addRow">+ Agregar fila</button>
+      <button class="btn secondary" id="downloadXlsx">Descargar tabla corregida (Excel)</button>
+      <button class="btn" id="generate">Generar Gantt</button>
+    </div>
+  </div>
+
+  <div class="panel" id="ganttPanel" style="display:none;">
+    <h2>3. Gantt</h2>
+    <div class="row" style="margin-bottom:10px;justify-content:space-between;">
+      <div style="font-size:12px;color:var(--muted);">Desplázate horizontalmente para ver todo el cronograma. Haz clic en cualquier número para ver el detalle completo.</div>
+      <button class="btn secondary" id="exportPdf">Exportar a PDF (horizontal)</button>
+    </div>
+    <div id="pdfExportArea">
+      <div class="gantt-flex">
+        <div class="gantt-labels" id="ganttLabels"></div>
+        <div class="gantt-scroll" id="ganttScroll">
+          <div class="gantt-inner" id="ganttInner">
+            <div id="axis" class="axis"></div>
+            <div id="ganttContainer"></div>
+          </div>
+        </div>
+      </div>
+      <div id="legend" class="legend"></div>
+    </div>
+    <div id="ganttIndex" style="margin-top:10px;font-size:11px;color:var(--muted);line-height:1.8;"></div>
+    <div id="ganttDetail" style="margin-top:14px;padding:14px 16px;background:#f0f0eb;border-radius:8px;font-size:13px;color:var(--muted);">
+      Haz clic en el número de una actividad para ver su detalle completo.
+    </div>
+  </div>
+
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+const COLORS = ["c1","c2","c3","c4","c5","c6","c7","c8"];
+let rows = [];
+const statusEl = document.getElementById('status');
+const tbody = document.getElementById('tbody');
+
+function setStatus(msg, isErr){
+  statusEl.textContent = msg;
+  statusEl.className = "status" + (isErr ? " err" : "");
+}
+
+function normHeader(h){
+  return String(h||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]/g,"");
+}
+
+function pickCol(headers, candidates){
+  for(const cand of candidates){
+    const idx = headers.findIndex(h => normHeader(h).includes(cand));
+    if(idx !== -1) return idx;
+  }
+  return -1;
+}
+
+function parseDateFlexible(v){
+  if(v instanceof Date) return v;
+  if(typeof v === "number"){
+    const d = new Date(Math.round((v - 25569) * 86400 * 1000));
+    return isNaN(d) ? null : d;
+  }
+  const s = String(v||"").trim();
+  if(!s) return null;
+  let m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+  if(m){
+    let [_, a, b, y] = m;
+    if(y.length===2) y = "20"+y;
+    return new Date(+y, +a-1, +b);
+  }
+  const d = new Date(s);
+  return isNaN(d) ? null : d;
+}
+
+function fmtDate(d){
+  return d.toLocaleDateString('es-DO',{day:'2-digit',month:'short',year:'numeric'});
+}
+
+function rowsFromAOA(aoa){
+  if(!aoa.length) return [];
+  const headers = aoa[0].map(String);
+  const iFase = pickCol(headers, ["fase"]);
+  const iIni = pickCol(headers, ["fechainicio","inicio"]);
+  const iFin = pickCol(headers, ["fechafin","fin"]);
+  const iEnt = pickCol(headers, ["entregable"]);
+  const iDur = pickCol(headers, ["duraciondias","duracion","dias"]);
+  const out = [];
+  for(let r=1;r<aoa.length;r++){
+    const row = aoa[r];
+    if(!row || row.every(c => c===undefined || c==="")) continue;
+    const fase = iFase!==-1 ? row[iFase] : "";
+    const ini = iIni!==-1 ? parseDateFlexible(row[iIni]) : null;
+    const fin = iFin!==-1 ? parseDateFlexible(row[iFin]) : null;
+    const ent = iEnt!==-1 ? row[iEnt] : "";
+    let dur = iDur!==-1 ? parseFloat(row[iDur]) : null;
+    if(!dur && ini && fin) dur = Math.round((fin-ini)/86400000)+1;
+    if(!fase && !ini && !fin && !ent) continue;
+    out.push({fase: fase||"", ini, fin, ent: ent||"", dur: dur||""});
+  }
+  return out;
+}
+
+function rowsFromPastedText(text){
+  const lines = text.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+  const out = [];
+  for(const line of lines){
+    const cells = line.split(/\t|  +/).map(c=>c.trim()).filter(c=>c!=="");
+    if(cells.length < 3) continue;
+    const dateIdx = [];
+    cells.forEach((c,i)=>{ if(/^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}$/.test(c)) dateIdx.push(i); });
+    if(dateIdx.length < 2) continue;
+    const ini = parseDateFlexible(cells[dateIdx[0]]);
+    const fin = parseDateFlexible(cells[dateIdx[1]]);
+    const durMatch = cells[0].match(/^\d+$/);
+    const dur = durMatch ? parseInt(durMatch[0]) : (ini && fin ? Math.round((fin-ini)/86400000)+1 : "");
+    const faseIdx = durMatch ? 1 : 0;
+    const fase = cells[faseIdx] || "";
+    const ent = cells.slice(dateIdx[1]+1).join(" ") || "";
+    out.push({fase, ini, fin, ent, dur});
+  }
+  return out;
+}
+
+async function extractPdfText(file){
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({data:buf}).promise;
+  let text = "";
+  for(let p=1;p<=pdf.numPages;p++){
+    const page = await pdf.getPage(p);
+    const content = await page.getTextContent();
+    let lastY = null, line = "";
+    for(const item of content.items){
+      if(lastY !== null && Math.abs(item.transform[5]-lastY) > 3){
+        text += line + "\n";
+        line = "";
+      }
+      line += item.str + "  ";
+      lastY = item.transform[5];
+    }
+    text += line + "\n";
+  }
+  return text;
+}
+
+function mergeRows(newRows, sourceLabel){
+  if(rows.length > 0){
+    const append = confirm(`Ya tienes ${rows.length} fila(s) cargadas.\n\nAceptar = agregar estas ${newRows.length} filas nuevas de "${sourceLabel}" a las existentes.\nCancelar = reemplazar todo con las filas nuevas.`);
+    rows = append ? rows.concat(newRows) : newRows;
+  } else {
+    rows = newRows;
+  }
+  renderTable();
+}
+
+function renderTable(){
+  tbody.innerHTML = "";
+  rows.forEach((r, idx)=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td contenteditable="true" data-k="fase">${r.fase}</td>
+      <td contenteditable="true" data-k="ini">${r.ini ? fmtDate(r.ini) : ""}</td>
+      <td contenteditable="true" data-k="fin">${r.fin ? fmtDate(r.fin) : ""}</td>
+      <td contenteditable="true" data-k="ent">${r.ent}</td>
+      <td contenteditable="true" data-k="dur">${r.dur}</td>
+      <td class="rowactions"><span class="del" data-idx="${idx}">x</span></td>`;
+    tbody.appendChild(tr);
+  });
+  tbody.querySelectorAll('.del').forEach(el=>{
+    el.addEventListener('click', ()=>{ rows.splice(+el.dataset.idx,1); renderTable(); });
+  });
+  tbody.querySelectorAll('td[contenteditable]').forEach(td=>{
+    td.addEventListener('blur', ()=>{
+      const tr = td.parentElement;
+      const idx = [...tbody.children].indexOf(tr);
+      const k = td.dataset.k;
+      const val = td.textContent.trim();
+      if(k==="ini" || k==="fin") rows[idx][k] = parseDateFlexible(val);
+      else if(k==="dur") rows[idx][k] = val;
+      else rows[idx][k] = val;
+    });
+  });
+}
+
+document.getElementById('downloadXlsx').addEventListener('click', ()=>{
+  if(!rows.length){ setStatus("No hay filas para descargar.", true); return; }
+  const aoa = [["Fase","Fecha_Inicio","Fecha_Fin","Entregable","Duracion_Dias"]];
+  rows.forEach(r => aoa.push([r.fase, r.ini ? fmtDate(r.ini) : "", r.fin ? fmtDate(r.fin) : "", r.ent, r.dur]));
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Cronograma");
+  XLSX.writeFile(wb, "cronograma_corregido.xlsx");
+  setStatus("Excel descargado con las filas corregidas.");
+});
+
+document.getElementById('addRow').addEventListener('click', ()=>{
+  rows.push({fase:"",ini:null,fin:null,ent:"",dur:""});
+  renderTable();
+});
+
+document.getElementById('clearAll').addEventListener('click', ()=>{
+  rows = []; renderTable();
+  document.getElementById('ganttPanel').style.display = "none";
+  setStatus("");
+});
+
+document.getElementById('loadSample').addEventListener('click', ()=>{
+  const rawSample = [
+    [5,"Análisis, Diseño y Preparación Inicial","6/15/2026","6/19/2026","Kick-off, mapeo de procesos, arquitectura de base de datos"],
+    [5,"Análisis, Diseño y Preparación Inicial","6/22/2026","6/26/2026","Estructura académica, registro de notas, gestión de documentos, facturación electrónica, sitio web + formulario web"],
+    [10,"Desarrollo Core Académico y Admisiones","6/29/2026","7/10/2026","Base de datos, Flujo de Admisiones parcial, selección de horario"],
+    [8,"Desarrollo Core Académico y Admisiones","7/13/2026","7/22/2026","flujo de nivel asignado, Grupos de clases, esquema calificaciones, asistencia"],
+    [4,"Desarrollo Core Académico y Admisiones","7/23/2026","7/28/2026","Portal del estudiante, niveles y programas, ciclos académicos, aulas, tandas"],
+    [6,"Desarrollo Core Académico y Admisiones","7/29/2026","8/5/2026","Registro de Empresas, Evaluaciones de profesores"],
+    [3,"Desarrollo Core Académico y Admisiones","8/5/2026","8/7/2026","Carga de documentos ficha de estudiante, sitio web + formulario web"],
+    [3,"Prepara ambiente de pruebas para PES","8/7/2026","8/11/2026","Ambiente de pruebas inicial"],
+    [11,"Pruebas iniciales para ajustes","8/11/2026","8/25/2026","Completación de pruebas por parte del equipo PES"],
+    [12,"Desarrollo Core Académico y Admisiones","8/26/2026","9/10/2026","Ajustes y correcciones de lo reportado por PES"],
+    [40,"Integración Financiera y Automatizaciones","7/6/2026","8/28/2026","CRM (Odoo) + Módulo de facturación/contabilidad, automatización de cargos, pasarelas de pago"],
+    [5,"Pruebas, Roles y Ajustes","8/17/2026","8/21/2026","Matriz de seguridad, autorizaciones por rol, acceso restringido"],
+    [10,"Pruebas, Roles y Ajustes","8/17/2026","8/28/2026","UAT completo (landing, evaluación, inscripción, facturación, notas), bug fixing"],
+    [8,"Ajustes finales","8/31/2026","9/9/2026","Revalidación en UAT"],
+    [5,"Capacitación y Salida en Vivo","9/14/2026","9/18/2026","Capacitación por áreas, entrega de manuales"],
+    [15,"Capacitación y Salida en Vivo","9/21/2026","10/9/2026","Migración de datos finales, Go-Live, soporte Hypercare"]
+  ];
+  const sample = rawSample.map(s => ({dur:s[0], fase:s[1], ini:parseDateFlexible(s[2]), fin:parseDateFlexible(s[3]), ent:s[4]}));
+  mergeRows(sample, "Ejemplo Opción 1");
+  setStatus(`Ejemplo cargado: 16 filas de la Opción 1 (total ahora: ${rows.length}).`);
+});
+
+document.getElementById('parsePaste').addEventListener('click', ()=>{
+  const text = document.getElementById('pasteArea').value;
+  const parsed = rowsFromPastedText(text);
+  if(!parsed.length){ setStatus("No se pudieron interpretar filas del texto pegado. Revisa el formato.", true); return; }
+  mergeRows(parsed, "texto pegado");
+  setStatus(`Se interpretaron ${parsed.length} filas del texto pegado (total ahora: ${rows.length}). Revísalas antes de generar el Gantt.`);
+});
+
+document.getElementById('fileInput').addEventListener('change', async (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  await handleFile(file);
+});
+
+const dz = document.getElementById('dropzone');
+dz.addEventListener('click', ()=>document.getElementById('fileInput').click());
+dz.addEventListener('dragover', e=>{e.preventDefault(); dz.classList.add('drag');});
+dz.addEventListener('dragleave', ()=>dz.classList.remove('drag'));
+dz.addEventListener('drop', async e=>{
+  e.preventDefault(); dz.classList.remove('drag');
+  const file = e.dataTransfer.files[0];
+  if(file) await handleFile(file);
+});
+
+async function handleFile(file){
+  setStatus("Procesando " + file.name + "...");
+  try{
+    const ext = file.name.split('.').pop().toLowerCase();
+    if(ext === "xlsx" || ext === "xls"){
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, {type:"array", cellDates:true});
+      let all = [];
+      wb.SheetNames.forEach(name=>{
+        const aoa = XLSX.utils.sheet_to_json(wb.Sheets[name], {header:1, raw:true});
+        all = all.concat(rowsFromAOA(aoa));
+      });
+      if(!all.length){ setStatus("No se encontraron filas reconocibles en el Excel. Revisa los encabezados (Fase, Fecha_Inicio, Fecha_Fin, Entregable).", true); return; }
+      mergeRows(all, file.name);
+      setStatus(`Se cargaron ${all.length} filas desde ${file.name} (total ahora: ${rows.length}). Revísalas antes de generar el Gantt.`);
+    } else if(ext === "csv"){
+      const text = await file.text();
+      const wb = XLSX.read(text, {type:"string"});
+      const aoa = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1, raw:true});
+      const parsed = rowsFromAOA(aoa);
+      if(!parsed.length){ setStatus("No se encontraron filas reconocibles en el CSV.", true); return; }
+      mergeRows(parsed, file.name);
+      setStatus(`Se cargaron ${parsed.length} filas desde ${file.name} (total ahora: ${rows.length}).`);
+    } else if(ext === "pdf"){
+      const text = await extractPdfText(file);
+      const parsed = rowsFromPastedText(text);
+      if(!parsed.length){
+        document.getElementById('pasteArea').value = text;
+        setStatus("El PDF se leyó, pero no se detectaron filas con fechas claras. Te dejé el texto extraído en el cuadro de pegado — ajústalo y presiona 'Interpretar texto pegado', o corrige las filas manualmente.", true);
+        return;
+      }
+      mergeRows(parsed, file.name);
+      setStatus(`Se interpretaron ${parsed.length} filas del PDF ${file.name} (total ahora: ${rows.length}). La lectura de PDF es aproximada — revisa bien cada fila antes de generar el Gantt.`);
+    } else {
+      setStatus("Formato no soportado. Usa .xlsx, .csv o .pdf", true);
+    }
+  } catch(err){
+    setStatus("Error al procesar el archivo: " + err.message, true);
+  }
+}
+
+document.getElementById('generate').addEventListener('click', ()=>{
+  const withDates = rows.filter(r => r.ini && r.fin && r.fase);
+  const inverted = withDates.filter(r => r.fin < r.ini);
+  const valid = withDates.filter(r => r.fin >= r.ini).sort((a,b)=>a.ini-b.ini);
+  const missing = rows.length - withDates.length;
+
+  if(!valid.length){ setStatus("No hay filas válidas (necesitas Fase, Fecha inicio y Fecha fin) para generar el Gantt.", true); return; }
+  if(inverted.length){
+    setStatus(`Atención: ${inverted.length} fila(s) tienen la fecha fin ANTES que la fecha inicio (ej. "${inverted[0].fase}") — se excluyeron del Gantt. Corrígelas en la tabla.`, true);
+  } else if(missing){
+    setStatus(`${missing} fila(s) sin fase o fechas completas fueron excluidas del Gantt.`);
+  }
+
+  const rangeStart = new Date(Math.min(...valid.map(r=>r.ini)));
+  const rangeEndRaw = new Date(Math.max(...valid.map(r=>r.fin)));
+  const totalDays = Math.max((rangeEndRaw - rangeStart) / 86400000, 1);
+
+  const PX_PER_DAY = totalDays > 150 ? 12 : (totalDays > 80 ? 16 : 22);
+  const timelineWidth = Math.ceil(totalDays * PX_PER_DAY) + 60;
+
+  const phases = [...new Set(valid.map(r=>r.fase))];
+  const colorOf = {};
+  phases.forEach((p,i)=>colorOf[p] = COLORS[i % COLORS.length]);
+
+  const dayOffset = d => Math.round((d - rangeStart)/86400000) * PX_PER_DAY;
+
+  const axis = document.getElementById('axis');
+  const ganttInner = document.getElementById('ganttInner');
+  ganttInner.style.width = timelineWidth+"px";
+  axis.innerHTML = "";
+  let cursor = new Date(rangeStart);
+  let lastMonth = -1;
+  while(cursor <= rangeEndRaw){
+    const x = dayOffset(cursor);
+    const isMonthStart = cursor.getMonth() !== lastMonth;
+    lastMonth = cursor.getMonth();
+    const tick = document.createElement('div');
+    tick.className = "tick" + (isMonthStart ? " month" : "");
+    tick.style.left = x+"px";
+    const label = isMonthStart
+      ? cursor.toLocaleDateString('es-DO',{month:'short',year:'numeric'})
+      : cursor.toLocaleDateString('es-DO',{day:'2-digit',month:'short'});
+    tick.innerHTML = `<span>${label}</span>`;
+    axis.appendChild(tick);
+    cursor = new Date(cursor.getTime() + 7*86400000);
+  }
+
+  const gc = document.getElementById('ganttContainer');
+  gc.innerHTML = "";
+  const labelsEl = document.getElementById('ganttLabels');
+  labelsEl.innerHTML = "";
+
+  function showDetail(r){
+    const detail = document.getElementById('ganttDetail');
+    detail.innerHTML = `<strong>#${r.num} — ${r.fase}</strong><br>
+      ${r.ent || "(sin descripción)"}<br>
+      <span style="color:var(--navy);">${fmtDate(r.ini)} – ${fmtDate(r.fin)}</span>
+      ${r.dur ? ` · ${r.dur} días` : ""}`;
+    detail.style.color = "var(--ink)";
+  }
+
+  valid.forEach((r, i)=>{
+    r.num = i+1;
+    const left = dayOffset(r.ini);
+    const width = Math.max(Math.round((r.fin - r.ini)/86400000) * PX_PER_DAY, 6);
+
+    const lbl = document.createElement('div');
+    lbl.className = "lbl";
+    lbl.title = r.ent || r.fase;
+    lbl.innerHTML = `<span class="n">#${r.num}</span><span>${r.ent || r.fase}</span>`;
+    lbl.addEventListener('click', ()=>showDetail(r));
+    labelsEl.appendChild(lbl);
+
+    const row = document.createElement('div');
+    row.className = "gantt-row";
+    row.style.width = timelineWidth+"px";
+    let gridHtml = "";
+    let gcur = new Date(rangeStart);
+    while(gcur <= rangeEndRaw){
+      gridHtml += `<div class="gridline" style="left:${dayOffset(gcur)}px;"></div>`;
+      gcur = new Date(gcur.getTime() + 7*86400000);
+    }
+    row.innerHTML = gridHtml +
+      `<div class="gantt-bar" data-num="${r.num}" style="left:${left}px;width:${width}px;background:var(--${colorOf[r.fase]});">
+         <span class="num">#${r.num}</span></div>
+       <div class="gantt-bar-label" style="left:${left+width+6}px;">${fmtDate(r.ini)}</div>`;
+    gc.appendChild(row);
+  });
+
+  gc.querySelectorAll('.gantt-bar').forEach(bar=>{
+    bar.addEventListener('click', ()=>{
+      const r = valid[+bar.dataset.num - 1];
+      showDetail(r);
+    });
+  });
+
+  const legend = document.getElementById('legend');
+  legend.innerHTML = phases.map(p=>`<span><span class="sw" style="background:var(--${colorOf[p]});"></span>${p}</span>`).join("");
+
+  document.getElementById('ganttIndex').innerHTML = valid.map(r =>
+    `<strong>#${r.num}</strong> ${r.ent ? r.ent.slice(0,60)+(r.ent.length>60?"…":"") : "(sin descripción)"}`
+  ).join(" &nbsp;·&nbsp; ");
+
+  document.getElementById('ganttPanel').style.display = "block";
+  if(!inverted.length && !missing){
+    setStatus(`Gantt generado: ${valid.length} tareas, del ${fmtDate(rangeStart)} al ${fmtDate(rangeEndRaw)}. Usa el scroll horizontal para recorrerlo.`);
+  }
+});
+
+renderTable();
+
+document.getElementById('exportPdf').addEventListener('click', async ()=>{
+  const scrollEl = document.getElementById('ganttScroll');
+  const innerEl = document.getElementById('ganttInner');
+  if(!innerEl.style.width){ setStatus("Genera el Gantt primero antes de exportar a PDF.", true); return; }
+
+  setStatus("Generando PDF horizontal...");
+  const prevOverflow = scrollEl.style.overflowX;
+  const prevWidth = scrollEl.style.width;
+  const prevFlex = scrollEl.style.flex;
+  scrollEl.style.overflowX = "visible";
+  scrollEl.style.flex = "0 0 auto";
+  scrollEl.style.width = innerEl.style.width;
+
+  try{
+    const target = document.getElementById('pdfExportArea');
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const canvas = await html2canvas(target, {
+      backgroundColor:"#ffffff",
+      scale:2,
+      width: target.scrollWidth,
+      height: target.scrollHeight,
+      windowWidth: document.documentElement.scrollWidth,
+      windowHeight: document.documentElement.scrollHeight,
+      scrollX: 0,
+      scrollY: -window.scrollY,
+      x: 0,
+      y: 0
+    });
+    const { jsPDF } = window.jspdf;
+
+    const maxW = 3000;
+    let pageW = canvas.width, pageH = canvas.height;
+    if(pageW > maxW){
+      const scaleDown = maxW / pageW;
+      pageW = maxW;
+      pageH = Math.round(canvas.height * scaleDown);
+    }
+
+    const pdf = new jsPDF({orientation:"landscape", unit:"px", format:[pageW, pageH]});
+    pdf.addImage(canvas.toDataURL("image/png"), "PNG", 0, 0, pageW, pageH);
+    pdf.save("cronograma_gantt.pdf");
+    setStatus("PDF generado y descargado (hoja horizontal, cronograma completo).");
+  } catch(err){
+    setStatus("Error al generar el PDF: " + err.message, true);
+  } finally {
+    scrollEl.style.overflowX = prevOverflow || "auto";
+    scrollEl.style.width = prevWidth || "";
+    scrollEl.style.flex = prevFlex || "";
+  }
+});
+</script>
+</body>
+</html>

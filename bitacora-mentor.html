@@ -1,0 +1,1784 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<script>
+/* ===== AI APPs · Folder Bridge (guardado en carpeta local) ===== */
+(function(){
+  const APP_ID = "bitacora-mentor";
+  const SYNC_KEYS = ["ledger-data"];
+  const DB_NAME = "aiapps-folder-bridge";
+  const STORE = "handles";
+
+  function idbOpen(){
+    return new Promise((res, rej)=>{
+      const req = indexedDB.open(DB_NAME, 1);
+      req.onupgradeneeded = () => req.result.createObjectStore(STORE);
+      req.onsuccess = () => res(req.result);
+      req.onerror = () => rej(req.error);
+    });
+  }
+  async function idbGet(key){
+    const db = await idbOpen();
+    return new Promise((res, rej)=>{
+      const rq = db.transaction(STORE, "readonly").objectStore(STORE).get(key);
+      rq.onsuccess = () => res(rq.result);
+      rq.onerror = () => rej(rq.error);
+    });
+  }
+  async function idbSet(key, val){
+    const db = await idbOpen();
+    return new Promise((res, rej)=>{
+      const tx = db.transaction(STORE, "readwrite");
+      tx.objectStore(STORE).put(val, key);
+      tx.oncomplete = () => res();
+      tx.onerror = () => rej(tx.error);
+    });
+  }
+
+  const supported = 'showDirectoryPicker' in window;
+  let dirHandle = null;
+  let writeTimer = null;
+  let badgeEl = null;
+  const FILE_NAME = APP_ID + ".data.json";
+
+  async function readFolderFile(){
+    if(!dirHandle) return null;
+    try{
+      const fh = await dirHandle.getFileHandle(FILE_NAME, {create:false});
+      const file = await fh.getFile();
+      const text = await file.text();
+      return text ? JSON.parse(text) : null;
+    }catch(e){ return null; }
+  }
+
+  async function writeFolderFile(data){
+    if(!dirHandle) return;
+    try{
+      const fh = await dirHandle.getFileHandle(FILE_NAME, {create:true});
+      const writable = await fh.createWritable();
+      await writable.write(JSON.stringify(data, null, 2));
+      await writable.close();
+    }catch(e){ console.warn("[AI APPs] No se pudo escribir en la carpeta:", e); }
+  }
+
+  function collectLocalSnapshot(){
+    const out = {};
+    SYNC_KEYS.forEach(k => { const v = localStorage.getItem(k); if(v !== null) out[k] = v; });
+    return out;
+  }
+
+  function applySnapshot(snap){
+    if(!snap) return;
+    Object.keys(snap).forEach(k => { if(SYNC_KEYS.includes(k)) localStorage.setItem.__original.call(localStorage, k, snap[k]); });
+  }
+
+  function queueWrite(){
+    clearTimeout(writeTimer);
+    writeTimer = setTimeout(()=>{ writeFolderFile(collectLocalSnapshot()); }, 700);
+  }
+
+  // Interceptar localStorage.setItem para reflejar cada cambio en el archivo de la carpeta
+  const origSetItem = localStorage.setItem.bind(localStorage);
+  function patchedSetItem(key, value){
+    origSetItem(key, value);
+    if(SYNC_KEYS.includes(key)) queueWrite();
+  }
+  patchedSetItem.__original = origSetItem;
+  localStorage.setItem = patchedSetItem;
+
+  function makeBadge(){
+    const el = document.createElement('div');
+    el.id = 'aiapps-folder-badge';
+    el.style.cssText = 'position:fixed;bottom:14px;right:14px;z-index:999999;font-family:system-ui,-apple-system,sans-serif;font-size:12.5px;line-height:1;display:inline-flex;align-items:center;gap:7px;background:#1B2430;color:#F1EDE4;padding:9px 14px;border-radius:999px;box-shadow:0 6px 20px rgba(0,0,0,0.35);border:1px solid rgba(255,255,255,0.12);user-select:none;';
+    document.body.appendChild(el);
+    return el;
+  }
+
+  function setBadge(state){
+    if(!badgeEl) return;
+    if(state === 'connected'){
+      badgeEl.textContent = '📁 Guardando en carpeta local';
+      badgeEl.style.opacity = '0.72';
+      badgeEl.style.cursor = 'default';
+      badgeEl.title = 'Los datos se están guardando en ' + FILE_NAME + ' dentro de tu carpeta AI APPs';
+      badgeEl.onclick = null;
+    } else if(state === 'reconnect'){
+      badgeEl.textContent = '📁 Reconectar carpeta de datos';
+      badgeEl.style.opacity = '1';
+      badgeEl.style.cursor = 'pointer';
+      badgeEl.onclick = connect;
+    } else if(state === 'unsupported'){
+      badgeEl.textContent = '⚠️ Guardado solo local (usa Chrome/Edge)';
+      badgeEl.style.opacity = '0.6';
+      badgeEl.style.cursor = 'default';
+      badgeEl.onclick = null;
+    } else {
+      badgeEl.textContent = '📁 Conectar carpeta de datos';
+      badgeEl.style.opacity = '1';
+      badgeEl.style.cursor = 'pointer';
+      badgeEl.onclick = connect;
+    }
+  }
+
+  async function connect(){
+    try{
+      const handle = await window.showDirectoryPicker({ id: 'aiapps-folder', mode: 'readwrite' });
+      const perm = await handle.requestPermission({ mode: 'readwrite' });
+      if(perm !== 'granted') throw new Error('permiso denegado');
+      dirHandle = handle;
+      await idbSet(APP_ID + '-dir', handle);
+      const existing = await readFolderFile();
+      if(existing){
+        applySnapshot(existing);
+        setBadge('connected');
+        location.reload();
+        return;
+      }
+      await writeFolderFile(collectLocalSnapshot());
+      setBadge('connected');
+    }catch(e){
+      console.warn('[AI APPs] Conexión de carpeta cancelada:', e);
+    }
+  }
+
+  async function tryReconnect(){
+    try{
+      const handle = await idbGet(APP_ID + '-dir');
+      if(!handle){ setBadge('idle'); return; }
+      const perm = await handle.queryPermission({ mode: 'readwrite' });
+      if(perm === 'granted'){
+        dirHandle = handle;
+        const existing = await readFolderFile();
+        if(existing){
+          const localSnap = JSON.stringify(collectLocalSnapshot());
+          const fileSnap = JSON.stringify(existing);
+          if(localSnap !== fileSnap){
+            applySnapshot(existing);
+            setBadge('connected');
+            location.reload();
+            return;
+          }
+        }
+        setBadge('connected');
+      } else {
+        setBadge('reconnect');
+      }
+    }catch(e){
+      setBadge('idle');
+    }
+  }
+
+  window.addEventListener('DOMContentLoaded', async () => {
+    badgeEl = makeBadge();
+    if(!supported){ setBadge('unsupported'); return; }
+    setBadge('idle');
+    await tryReconnect();
+  });
+})();
+</script>
+
+<meta charset="UTF-8">
+<title>Bitácora del Mentor</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<script src="./supabase-client.js"></script>
+<script src="./auth-gate.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+  :root{
+    --bg:#EDEDE4;
+    --surface:#FFFFFF;
+    --ink:#23281F;
+    --brass:#7C5CBF;
+    --brass-light:#EFE7F9;
+    --sage:#9B7FD4;
+    --sage-light:#E9E1F7;
+    --slate:#5B3E91;
+    --slate-light:#DED0F0;
+    --rust:#A64B3A;
+    --rust-light:#F3DFDA;
+    --violet-deep:#3D2463;
+    --status-activo:#5C8C5A;
+    --status-activo-light:#E1EBDE;
+    --status-pausa:#C08A3E;
+    --status-pausa-light:#F3E5CE;
+    --status-cerrado:#8A8A8A;
+    --status-cerrado-light:#E7E7E3;
+    --muted:#79796F;
+    --line:#D8D6C8;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:'Inter',sans-serif;}
+  .shell{max-width:1180px;margin:0 auto;}
+
+  .topbar{display:flex;align-items:center;justify-content:space-between;padding:22px 32px 14px;border-bottom:1px solid var(--line);flex-wrap:wrap;gap:12px;}
+  .brandmark{font-family:'Fraunces',serif;font-weight:600;font-size:21px;letter-spacing:-0.01em;margin:0;}
+  .tabs{display:flex;gap:6px;}
+  .tab-btn{background:transparent;border:1px solid transparent;padding:8px 14px;border-radius:8px;font-size:13px;cursor:pointer;color:var(--muted);font-family:'Inter',sans-serif;}
+  .tab-btn:hover{background:var(--surface);}
+  .tab-btn.active{background:var(--violet-deep);color:var(--surface);}
+
+  .app{display:flex;min-height:calc(100vh - 70px);}
+  .sidebar{width:290px;flex-shrink:0;padding:22px 18px;border-right:1px solid var(--line);}
+  .search-wrap{margin-bottom:14px;}
+  .search-wrap input{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:7px;font-size:13px;font-family:'Inter',sans-serif;background:var(--surface);color:var(--ink);}
+  .search-wrap input:focus{outline:2px solid var(--sage);outline-offset:0;}
+  .brandsub{font-size:12px;color:var(--muted);margin:0 0 14px;font-family:'IBM Plex Mono',monospace;}
+
+  .level-group{margin-bottom:16px;}
+  .level-head{font-size:10.5px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin:0 0 8px;padding-left:2px;}
+  .mentee-list{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:6px;}
+  .mentee-item{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;cursor:pointer;border:1px solid transparent;}
+  .mentee-item:hover{background:var(--surface);}
+  .mentee-item.active{background:var(--surface);border-color:var(--line);}
+  .avatar{width:32px;height:32px;border-radius:50%;background:var(--sage-light);color:var(--sage);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0;font-family:'IBM Plex Mono',monospace;position:relative;}
+  .status-dot{position:absolute;bottom:-1px;right:-1px;width:9px;height:9px;border-radius:50%;border:1.5px solid var(--surface);}
+  .mentee-meta{min-width:0;flex:1;}
+  .mentee-name-row{display:flex;align-items:center;gap:6px;}
+  .mentee-name{font-size:13.5px;font-weight:500;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .pill-puntual{font-size:9.5px;font-weight:500;color:var(--brass);background:var(--brass-light);padding:1px 6px;border-radius:10px;flex-shrink:0;}
+  .pill-warn{font-size:9.5px;font-weight:500;color:var(--status-pausa);background:var(--status-pausa-light);padding:1px 6px;border-radius:10px;flex-shrink:0;}
+  .mentee-area{font-size:11px;color:var(--muted);margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .no-results{font-size:12.5px;color:var(--muted);padding:8px 2px;}
+
+  .btn-add-mentee{width:100%;padding:9px;background:transparent;border:1px dashed var(--muted);border-radius:8px;color:var(--muted);font-size:13px;cursor:pointer;font-family:'Inter',sans-serif;margin-top:6px;}
+  .btn-add-mentee:hover{border-color:var(--ink);color:var(--ink);}
+
+  .export-block{margin-top:22px;padding-top:16px;border-top:1px solid var(--line);display:flex;gap:8px;}
+  .btn-export{flex:1;padding:8px 6px;background:transparent;border:1px solid var(--line);border-radius:7px;font-size:11.5px;cursor:pointer;color:var(--ink);font-family:'Inter',sans-serif;}
+  .btn-export:hover{background:var(--surface);}
+
+  .main{flex:1;padding:28px 32px;min-width:0;}
+  .empty{margin-top:80px;text-align:center;color:var(--muted);}
+  .empty p{font-size:14px;}
+
+  .alert-banner{background:var(--status-pausa-light);border:1px solid var(--status-pausa);border-radius:10px;padding:11px 16px;margin-bottom:16px;font-size:12.5px;color:#6B4A1F;}
+
+  .profile-card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:20px 22px;margin-bottom:26px;}
+  .profile-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;}
+  .profile-name-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  .profile-name{font-family:'Fraunces',serif;font-size:24px;font-weight:600;margin:0;}
+  .status-badge{font-size:11px;font-weight:500;padding:3px 10px;border-radius:20px;border:none;cursor:pointer;font-family:'Inter',sans-serif;}
+  .status-badge.activo{background:var(--status-activo-light);color:var(--status-activo);}
+  .status-badge.pausa{background:var(--status-pausa-light);color:var(--status-pausa);}
+  .status-badge.cerrado{background:var(--status-cerrado-light);color:var(--status-cerrado);}
+  .pending-badge{font-size:11px;font-weight:500;padding:3px 10px;border-radius:20px;background:var(--rust-light);color:var(--rust);}
+  .profile-area{font-size:13px;color:var(--brass);font-weight:500;margin:4px 0 0;}
+  .profile-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin-top:16px;padding-top:16px;border-top:1px solid var(--line);}
+  .profile-field-label{font-size:10.5px;text-transform:uppercase;letter-spacing:0.04em;color:var(--muted);margin:0 0 3px;}
+  .profile-field-value{font-size:13.5px;margin:0;}
+  .icon-btn{background:none;border:none;cursor:pointer;color:var(--muted);font-size:12px;font-family:'Inter',sans-serif;}
+  .icon-btn:hover{color:var(--rust);}
+
+  .section-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px;}
+  .section-title{font-family:'Fraunces',serif;font-size:17px;font-weight:600;margin:0;}
+  .btn-primary{background:var(--violet-deep);color:var(--surface);border:none;padding:9px 16px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;font-family:'Inter',sans-serif;}
+  .btn-primary:hover{background:#2E1A4D;}
+  .btn-danger{background:var(--rust);color:var(--surface);border:none;padding:9px 16px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;font-family:'Inter',sans-serif;}
+  .btn-secondary{background:transparent;color:var(--ink);border:1px solid var(--line);padding:9px 16px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;font-family:'Inter',sans-serif;}
+  .btn-secondary:hover{background:var(--bg);}
+
+  .entry{position:relative;padding:0 0 26px 22px;border-left:2px solid var(--line);margin-left:0;}
+  .entry:last-child{border-color:transparent;padding-bottom:0;}
+  .entry-dot{position:absolute;left:-7px;top:2px;width:12px;height:12px;border-radius:50%;border:2px solid var(--surface);}
+  .entry-card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 16px;}
+  .entry-card.draft{border-style:dashed;background:#FBFAF6;}
+  .entry-top{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap;}
+  .entry-tags{display:flex;gap:6px;align-items:center;}
+  .entry-date{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);}
+  .tag{font-size:11px;font-weight:500;padding:3px 9px;border-radius:20px;}
+  .tag-directivo{background:var(--brass-light);color:#5B3E91;}
+  .tag-socratico{background:var(--sage-light);color:#4A2E7A;}
+  .tag-colaborativo{background:var(--slate-light);color:#3D2463;}
+  .tag-draft{background:var(--rust-light);color:#7A3527;}
+  .entry-topic{font-size:14.5px;font-weight:500;margin:0 0 8px;}
+  .entry-detail{font-size:13px;color:var(--muted);line-height:1.55;margin:0 0 4px;}
+  .entry-detail b{color:var(--ink);font-weight:500;}
+  .commit-row{display:flex;align-items:flex-start;gap:8px;font-size:13px;color:var(--muted);margin:6px 0;}
+  .commit-row input{margin-top:2px;cursor:pointer;}
+  .commit-row.done span{text-decoration:line-through;color:var(--muted);}
+  .entry-footer{display:flex;justify-content:flex-end;gap:14px;margin-top:8px;}
+
+  .empty-sessions{color:var(--muted);font-size:13px;padding:18px 0;}
+
+  .overlay{position:fixed;inset:0;background:rgba(35,40,31,0.4);display:flex;align-items:center;justify-content:center;z-index:50;padding:20px;}
+  .modal{background:var(--surface);border-radius:14px;padding:26px;width:100%;max-width:440px;max-height:88vh;overflow-y:auto;}
+  .modal h3{font-family:'Fraunces',serif;font-size:19px;font-weight:600;margin:0 0 18px;}
+  .field{margin-bottom:14px;}
+  .field label{display:block;font-size:12px;color:var(--muted);margin-bottom:5px;}
+  .field input,.field select,.field textarea{width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:7px;font-size:13.5px;font-family:'Inter',sans-serif;background:var(--bg);color:var(--ink);}
+  .field textarea{resize:vertical;min-height:60px;}
+  .field input:focus,.field select:focus,.field textarea:focus{outline:2px solid var(--sage);outline-offset:0;}
+  .modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:6px;flex-wrap:wrap;}
+  .btn-ghost{background:none;border:1px solid var(--line);padding:9px 16px;border-radius:8px;font-size:13px;cursor:pointer;font-family:'Inter',sans-serif;}
+
+  .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--surface);padding:10px 18px;border-radius:8px;font-size:13px;z-index:60;display:flex;align-items:center;gap:6px;}
+  .loading{padding:60px;text-align:center;color:var(--muted);font-size:13px;}
+
+  .db-wrap{padding:24px 32px;}
+  .db-filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px;}
+  .db-filters input,.db-filters select{padding:8px 9px;border:1px solid var(--line);border-radius:7px;font-size:12.5px;font-family:'Inter',sans-serif;background:var(--surface);color:var(--ink);}
+  .db-table-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--surface);}
+  table.db-table{width:100%;border-collapse:collapse;font-size:12.5px;min-width:980px;}
+  table.db-table th{text-align:left;padding:10px 12px;background:var(--bg);border-bottom:1px solid var(--line);font-weight:500;white-space:nowrap;cursor:pointer;user-select:none;}
+  table.db-table th:hover{color:var(--brass);}
+  table.db-table td{padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top;}
+  table.db-table tr:last-child td{border-bottom:none;}
+  table.db-table tr.clickable:hover{background:var(--bg);cursor:pointer;}
+  .db-count{font-size:12px;color:var(--muted);margin:0 0 10px;}
+  .pagination{display:flex;align-items:center;justify-content:center;gap:14px;padding:14px 0 4px;}
+  .pagination button{background:var(--surface);border:1px solid var(--line);padding:7px 14px;border-radius:7px;font-size:12.5px;cursor:pointer;font-family:'Inter',sans-serif;color:var(--ink);}
+  .pagination button:disabled{opacity:0.4;cursor:not-allowed;}
+  .pagination button:not(:disabled):hover{background:var(--bg);}
+  .pagination .page-indicator{font-size:12.5px;color:var(--muted);font-family:'IBM Plex Mono',monospace;}
+
+  .member-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;}
+  .member-chip{font-size:12px;background:var(--sage-light);color:var(--violet-deep);padding:4px 10px;border-radius:20px;}
+  .member-checklist{max-height:190px;overflow-y:auto;border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--bg);}
+  .member-check-row{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:13px;}
+  .member-check-row input{cursor:pointer;}
+  .member-empty{font-size:12.5px;color:var(--muted);padding:6px 2px;}
+  .mini-status{font-size:10.5px;font-weight:500;padding:2px 8px;border-radius:20px;}
+  .mini-status.activo{background:var(--status-activo-light);color:var(--status-activo);}
+  .mini-status.pausa{background:var(--status-pausa-light);color:var(--status-pausa);}
+  .mini-status.cerrado{background:var(--status-cerrado-light);color:var(--status-cerrado);}
+
+  .rep-wrap{padding:24px 32px;}
+  .rep-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:26px;}
+  .metric-card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px 18px;}
+  .metric-label{font-size:12px;color:var(--muted);margin:0 0 6px;}
+  .metric-value{font-family:'Fraunces',serif;font-size:30px;font-weight:600;margin:0;}
+  .metric-sub{font-size:11px;color:var(--muted);margin:4px 0 0;}
+  .rep-section{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin-bottom:16px;}
+  .rep-section h4{font-family:'Fraunces',serif;font-size:15px;font-weight:600;margin:0 0 14px;}
+  .bar-row{margin-bottom:12px;}
+  .bar-row:last-child{margin-bottom:0;}
+  .bar-label{display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:5px;}
+  .bar-track{height:8px;background:var(--bg);border-radius:5px;overflow:hidden;}
+  .bar-fill{height:100%;border-radius:5px;}
+
+  @media (max-width:720px){
+    .app{flex-direction:column;}
+    .sidebar{width:100%;border-right:none;border-bottom:1px solid var(--line);}
+    .main, .db-wrap, .rep-wrap{padding:20px;}
+    .topbar{padding:16px 18px 12px;}
+    .tabs{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;}
+    .tab-btn{white-space:nowrap;}
+    .profile-name{font-size:20px;}
+    .rep-grid{grid-template-columns:1fr 1fr;}
+    .modal{padding:20px;max-width:100%;}
+    .pagination{flex-wrap:wrap;gap:8px;}
+  }
+
+  @media (max-width:420px){
+    .rep-grid{grid-template-columns:1fr;}
+    .metric-value{font-size:24px;}
+    .profile-card, .rep-section, .entry-card{padding:14px;}
+    .modal-actions{flex-direction:column-reverse;align-items:stretch;}
+    .modal-actions button{width:100%;}
+    .export-block{flex-direction:column;}
+    .db-filters{grid-template-columns:1fr;}
+  }
+</style>
+</head>
+<body>
+<div id="root" class="loading">Cargando bitácora…</div>
+
+<datalist id="area-options">
+  <option value="Búsqueda de primer empleo">
+  <option value="Desarrollo profesional / carrera">
+  <option value="Código / técnico">
+  <option value="Negocios / emprendimiento">
+  <option value="Vida personal / desarrollo">
+</datalist>
+
+<script>
+const ENFOQUES = {
+  directivo:{label:'Directivo', tagClass:'tag-directivo', dot:'#7C5CBF', color:'#7C5CBF'},
+  socratico:{label:'Socrático', tagClass:'tag-socratico', dot:'#9B7FD4', color:'#9B7FD4'},
+  colaborativo:{label:'Colaborativo', tagClass:'tag-colaborativo', dot:'#5B3E91', color:'#5B3E91'}
+};
+const NIVELES = ['Principiante','Intermedio','Avanzado'];
+const ESTADOS = { activo:'Activo', pausa:'En pausa', cerrado:'Cerrado' };
+const RESULTADOS = { logrado:'Objetivo logrado', parcial:'Logrado parcialmente', no_logrado:'No logrado' };
+const INACTIVITY_DAYS = 30;
+const COUNTRIES = ["Afganistán","Albania","Alemania","Andorra","Angola","Antigua y Barbuda","Arabia Saudita","Argelia","Argentina","Armenia","Australia","Austria","Azerbaiyán","Bahamas","Bangladés","Barbados","Baréin","Bélgica","Belice","Benín","Bielorrusia","Birmania (Myanmar)","Bolivia","Bosnia y Herzegovina","Botsuana","Brasil","Brunéi","Bulgaria","Burkina Faso","Burundi","Bután","Cabo Verde","Camboya","Camerún","Canadá","Catar","Chad","Chile","China","Chipre","Colombia","Comoras","Corea del Norte","Corea del Sur","Costa de Marfil","Costa Rica","Croacia","Cuba","Dinamarca","Dominica","Ecuador","Egipto","El Salvador","Emiratos Árabes Unidos","Eritrea","Eslovaquia","Eslovenia","España","Estados Unidos","Estonia","Esuatini","Etiopía","Filipinas","Finlandia","Fiyi","Francia","Gabón","Gambia","Georgia","Ghana","Granada","Grecia","Guatemala","Guyana","Guinea","Guinea-Bisáu","Guinea Ecuatorial","Haití","Honduras","Hungría","India","Indonesia","Irak","Irán","Irlanda","Islandia","Islas Marshall","Islas Salomón","Israel","Italia","Jamaica","Japón","Jordania","Kazajistán","Kenia","Kirguistán","Kiribati","Kosovo","Kuwait","Laos","Lesoto","Letonia","Líbano","Liberia","Libia","Liechtenstein","Lituania","Luxemburgo","Macedonia del Norte","Madagascar","Malasia","Malaui","Maldivas","Malí","Malta","Marruecos","Mauricio","Mauritania","México","Micronesia","Moldavia","Mónaco","Mongolia","Montenegro","Mozambique","Namibia","Nauru","Nepal","Nicaragua","Níger","Nigeria","Noruega","Nueva Zelanda","Omán","Países Bajos","Pakistán","Palaos","Palestina","Panamá","Papúa Nueva Guinea","Paraguay","Perú","Polonia","Portugal","Reino Unido","República Centroafricana","República Checa","República del Congo","República Democrática del Congo","República Dominicana","Ruanda","Rumanía","Rusia","Samoa","San Cristóbal y Nieves","San Marino","San Vicente y las Granadinas","Santa Lucía","Santo Tomé y Príncipe","Senegal","Serbia","Seychelles","Sierra Leona","Singapur","Siria","Somalia","Sri Lanka","Sudáfrica","Sudán","Sudán del Sur","Suecia","Suiza","Surinam","Tailandia","Tanzania","Tayikistán","Timor Oriental","Togo","Tonga","Trinidad y Tobago","Túnez","Turkmenistán","Turquía","Tuvalu","Ucrania","Uganda","Uruguay","Uzbekistán","Vanuatu","Vaticano","Venezuela","Vietnam","Yemen","Yibuti","Zambia","Zimbabue"];
+
+let state = { mentees: [], sessions: [] };
+let selectedMenteeId = null;
+let modal = null;
+let editingSessionId = null;
+let editingMenteeId = null;
+let confirmContext = null;
+let currentTab = 'mentoria';
+let searchQuery = '';
+let dbFilters = { name:'', area:'', country:'', nivel:'', tipo:'', estado:'' };
+let dbSort = { col:'name', dir:'asc' };
+let dbPage = 1;
+const DB_PAGE_SIZE = 15;
+
+let selectedGroupId = null;
+let editingGroupId = null;
+let editingGroupSessionId = null;
+let groupSearchQuery = '';
+
+const STORAGE_KEY = 'ledger-data';
+const SUPA_APP_ID = 'bitacora-mentor';
+const hasClaudeStorage = typeof window.storage !== 'undefined' && window.storage !== null;
+
+async function getSupabaseSession(){
+  if(!window.supabaseClient) return null;
+  const { data } = await window.supabaseClient.auth.getSession();
+  return data && data.session ? data.session : null;
+}
+
+const storageAdapter = {
+  async get(key){
+    const session = await getSupabaseSession();
+    if(session){
+      try{
+        const { data, error } = await window.supabaseClient
+          .from('app_data')
+          .select('data')
+          .eq('app_id', SUPA_APP_ID)
+          .maybeSingle();
+        if(error) throw error;
+        if(data && data.data){
+          const value = JSON.stringify(data.data);
+          localStorage.setItem(key, value);
+          return { key, value };
+        }
+        return null;
+      }catch(e){
+        console.warn('[Bitácora] No se pudo leer de la nube, usando caché local:', e);
+        const raw = localStorage.getItem(key);
+        return raw ? { key, value: raw } : null;
+      }
+    }
+    if(hasClaudeStorage) return await window.storage.get(key);
+    const raw = localStorage.getItem(key);
+    return raw ? { key, value: raw } : null;
+  },
+  async set(key, value){
+    const session = await getSupabaseSession();
+    if(session){
+      localStorage.setItem(key, value);
+      try{
+        const { error } = await window.supabaseClient
+          .from('app_data')
+          .upsert(
+            { user_id: session.user.id, app_id: SUPA_APP_ID, data: JSON.parse(value), updated_at: new Date().toISOString() },
+            { onConflict: 'user_id,app_id' }
+          );
+        if(error) throw error;
+      }catch(e){
+        console.warn('[Bitácora] Guardado local OK, pero falló la sincronización con la nube:', e);
+      }
+      return { key, value };
+    }
+    if(hasClaudeStorage) return await window.storage.set(key, value);
+    localStorage.setItem(key, value);
+    return { key, value };
+  }
+};
+
+async function loadData(){
+  try{
+    const res = await storageAdapter.get(STORAGE_KEY);
+    if(res && res.value) state = JSON.parse(res.value);
+  }catch(e){
+    state = { mentees: [], sessions: [] };
+  }
+  if(!state.mentees) state.mentees = [];
+  if(!state.sessions) state.sessions = [];
+  if(!state.groups) state.groups = [];
+  if(!state.groupSessions) state.groupSessions = [];
+  if(state.mentees.length && !selectedMenteeId) selectedMenteeId = state.mentees[0].id;
+  if(state.groups.length && !selectedGroupId) selectedGroupId = state.groups[0].id;
+  render();
+}
+
+async function saveData(){
+  try{
+    await storageAdapter.set(STORAGE_KEY, JSON.stringify(state));
+  }catch(e){
+    showToast('No se pudo guardar. Intenta de nuevo.');
+  }
+}
+
+function showToast(msg){
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(()=>t.remove(), 2200);
+}
+
+function showUndoToast(message, undoFn){
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.innerHTML = `<span>${esc(message)}</span>`;
+  const btn = document.createElement('button');
+  btn.textContent = 'Deshacer';
+  btn.style.cssText = 'margin-left:8px;background:none;border:1px solid rgba(255,255,255,0.45);color:var(--surface);padding:4px 10px;border-radius:6px;cursor:pointer;font-size:12px;font-family:Inter,sans-serif;';
+  t.appendChild(btn);
+  document.body.appendChild(t);
+  const timer = setTimeout(()=>t.remove(), 6000);
+  btn.onclick = async ()=>{
+    clearTimeout(timer);
+    t.remove();
+    await undoFn();
+  };
+}
+
+function askConfirm(message, onConfirm){
+  confirmContext = { message, onConfirm };
+  modal = 'confirm';
+  render();
+  renderModal();
+}
+
+function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+
+function initials(name){
+  return name.trim().split(/\s+/).slice(0,2).map(w=>w[0]?.toUpperCase()).join('');
+}
+
+function fmtDate(iso){
+  const d = new Date(iso + 'T00:00:00');
+  return d.toLocaleDateString('es-ES', {day:'2-digit', month:'short', year:'numeric'});
+}
+
+function esc(s){
+  const d = document.createElement('div');
+  d.textContent = s == null ? '' : s;
+  return d.innerHTML;
+}
+
+function sessionCount(menteeId){
+  return state.sessions.filter(s=>s.menteeId===menteeId).length;
+}
+
+function pendingCommitments(menteeId){
+  return state.sessions.filter(s=>s.menteeId===menteeId && s.commitment && !s.commitmentDone).length;
+}
+
+function daysSinceLastActivity(mentee){
+  const sessions = state.sessions.filter(s=>s.menteeId===mentee.id);
+  let lastDateStr = sessions.length ? sessions.map(s=>s.date).sort().slice(-1)[0] : mentee.createdAt.slice(0,10);
+  const last = new Date(lastDateStr + 'T00:00:00');
+  const now = new Date();
+  return Math.floor((now - last) / (1000*60*60*24));
+}
+
+function isInactive(mentee){
+  if(mentee.status !== 'activo' || mentee.type !== 'continuo') return false;
+  return daysSinceLastActivity(mentee) > INACTIVITY_DAYS;
+}
+
+function pendingGroupCommitments(groupId){
+  return state.groupSessions.filter(s=>s.groupId===groupId && s.commitment && !s.commitmentDone).length;
+}
+
+function daysSinceLastGroupActivity(group){
+  const sessions = state.groupSessions.filter(s=>s.groupId===group.id);
+  let lastDateStr = sessions.length ? sessions.map(s=>s.date).sort().slice(-1)[0] : group.createdAt.slice(0,10);
+  const last = new Date(lastDateStr + 'T00:00:00');
+  const now = new Date();
+  return Math.floor((now - last) / (1000*60*60*24));
+}
+
+function isGroupInactive(group){
+  return daysSinceLastGroupActivity(group) > INACTIVITY_DAYS;
+}
+
+function render(){
+  const root = document.getElementById('root');
+  root.className = '';
+  root.innerHTML = `
+    <div class="shell">
+      <div class="topbar">
+        <p class="brandmark">Bitácora del mentor</p>
+        <div class="tabs">
+          <button class="tab-btn" data-tab="mentoria">Mentoría</button>
+          <button class="tab-btn" data-tab="grupos">Grupos</button>
+          <button class="tab-btn" data-tab="database">Base de datos</button>
+          <button class="tab-btn" data-tab="reportes">Reportes</button>
+        </div>
+      </div>
+      <div id="app-body"></div>
+    </div>
+  `;
+  root.querySelectorAll('.tab-btn').forEach(btn=>{
+    btn.classList.toggle('active', btn.dataset.tab === currentTab);
+    btn.onclick = ()=>{ currentTab = btn.dataset.tab; render(); };
+  });
+
+  const body = document.getElementById('app-body');
+  if(currentTab === 'mentoria') renderMentoriaView(body);
+  else if(currentTab === 'grupos') renderGroupsView(body);
+  else if(currentTab === 'database') renderDatabaseView(body);
+  else if(currentTab === 'reportes') renderReportsView(body);
+}
+
+function renderMentoriaView(body){
+  const mentee = state.mentees.find(m => m.id === selectedMenteeId);
+  const sessions = mentee ? state.sessions.filter(s => s.menteeId === mentee.id).sort((a,b)=> b.date.localeCompare(a.date)) : [];
+
+  body.innerHTML = `
+    <div class="app">
+      <div class="sidebar">
+        <div class="search-wrap"><input id="search-input" type="text" placeholder="Buscar por nombre..." value="${esc(searchQuery)}"></div>
+        <p class="brandsub">${state.mentees.length} mentee${state.mentees.length===1?'':'s'} registrados</p>
+        <div id="grouped-list"></div>
+        <button class="btn-add-mentee" id="btn-new-mentee">+ nuevo mentee</button>
+        <div class="export-block">
+          <button class="btn-export" id="btn-export-csv">Exportar CSV</button>
+          <button class="btn-export" id="btn-export-xlsx">Exportar Excel</button>
+        </div>
+        <div class="export-block">
+          <button class="btn-export" id="btn-export-backup">Copia de seguridad</button>
+          <button class="btn-export" id="btn-import-backup">Importar copia</button>
+          <input type="file" id="import-file-input" accept="application/json" style="display:none;">
+        </div>
+        <p style="font-size:10.5px;color:var(--muted);margin:10px 2px 0;">${hasClaudeStorage ? 'Guardando en Claude.ai' : 'Guardando en este navegador'}</p>
+      </div>
+      <div class="main" id="main"></div>
+    </div>
+  `;
+
+  document.getElementById('search-input').oninput = (e)=>{ searchQuery = e.target.value; renderGroupedList(); };
+  renderGroupedList();
+
+  document.getElementById('btn-new-mentee').onclick = ()=>{ modal='mentee'; render(); renderModal(); };
+  document.getElementById('btn-export-csv').onclick = exportCSV;
+  document.getElementById('btn-export-xlsx').onclick = exportExcel;
+  document.getElementById('btn-export-backup').onclick = exportBackup;
+  document.getElementById('btn-import-backup').onclick = ()=> document.getElementById('import-file-input').click();
+  document.getElementById('import-file-input').onchange = (e)=>{
+    const file = e.target.files[0];
+    if(file) importBackup(file);
+    e.target.value = '';
+  };
+
+  const main = document.getElementById('main');
+  if(!mentee){
+    main.innerHTML = `<div class="empty"><p>Todavía no tienes mentees registrados.</p><p>Agrega el primero para empezar a llevar tu bitácora.</p></div>`;
+    if(modal) renderModal();
+    return;
+  }
+
+  const pendCount = pendingCommitments(mentee.id);
+  const inactive = isInactive(mentee);
+  const status = mentee.status || 'activo';
+
+  main.innerHTML = `
+    ${inactive ? `<div class="alert-banner">⚠ No tienes una sesión registrada con ${esc(mentee.name)} hace ${daysSinceLastActivity(mentee)} días.</div>` : ''}
+    <div class="profile-card">
+      <div class="profile-top">
+        <div>
+          <div class="profile-name-row">
+            <p class="profile-name">${esc(mentee.name)}</p>
+            <select id="status-select" class="status-badge ${status}">
+              <option value="activo" ${status==='activo'?'selected':''}>Activo</option>
+              <option value="pausa" ${status==='pausa'?'selected':''}>En pausa</option>
+              <option value="cerrado" ${status==='cerrado'?'selected':''}>Cerrado</option>
+            </select>
+            ${pendCount ? `<span class="pending-badge">${pendCount} pendiente${pendCount===1?'':'s'}</span>` : ''}
+          </div>
+          <p class="profile-area">${esc(mentee.area)} ${mentee.type==='puntual' ? '· consulta puntual' : '· seguimiento continuo'}</p>
+        </div>
+        <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;">
+          <button class="icon-btn" id="btn-edit-mentee">editar datos</button>
+          <button class="icon-btn" id="btn-del-mentee">eliminar mentee</button>
+        </div>
+      </div>
+      <div class="profile-grid">
+        <div><p class="profile-field-label">Nivel</p><p class="profile-field-value">${esc(mentee.level)}</p></div>
+        <div><p class="profile-field-label">Estilo de aprendizaje</p><p class="profile-field-value">${esc(mentee.learningStyle)}</p></div>
+        ${mentee.phone ? `<div><p class="profile-field-label">Teléfono</p><p class="profile-field-value">${esc(mentee.phone)}</p></div>` : ''}
+        ${mentee.email ? `<div><p class="profile-field-label">Correo</p><p class="profile-field-value">${esc(mentee.email)}</p></div>` : ''}
+        ${mentee.country ? `<div><p class="profile-field-label">País</p><p class="profile-field-value">${esc(mentee.country)}</p></div>` : ''}
+        ${status==='cerrado' && mentee.outcome ? `<div><p class="profile-field-label">Resultado</p><p class="profile-field-value">${RESULTADOS[mentee.outcome] || '—'}</p></div>` : ''}
+        <div style="grid-column:1 / -1;"><p class="profile-field-label">Objetivo</p><p class="profile-field-value">${esc(mentee.goal)}</p></div>
+        ${mentee.progress ? `<div style="grid-column:1 / -1;"><p class="profile-field-label">Progresión</p><p class="profile-field-value">${esc(mentee.progress)}</p></div>` : ''}
+      </div>
+    </div>
+
+    <div class="section-head">
+      <p class="section-title">Historial de sesiones</p>
+      <button class="btn-primary" id="btn-new-session">+ registrar sesión</button>
+    </div>
+    <div id="timeline"></div>
+  `;
+
+  document.getElementById('btn-del-mentee').onclick = ()=> deleteMentee(mentee.id);
+  document.getElementById('btn-edit-mentee').onclick = ()=>{ editingMenteeId = mentee.id; modal='mentee'; render(); renderModal(); };
+  document.getElementById('btn-new-session').onclick = ()=>{ editingSessionId=null; modal='session'; render(); renderModal(); };
+  document.getElementById('status-select').onchange = async (e)=>{
+    const idx = state.mentees.findIndex(m=>m.id===mentee.id);
+    const newStatus = e.target.value;
+    state.mentees[idx].status = newStatus;
+    if(newStatus === 'cerrado' && !state.mentees[idx].closedAt){
+      state.mentees[idx].closedAt = new Date().toISOString();
+    }else if(newStatus !== 'cerrado'){
+      state.mentees[idx].closedAt = '';
+    }
+    await saveData();
+    render();
+    showToast(newStatus === 'cerrado' ? 'Marcado como cerrado. Puedes agregar el resultado en "editar datos".' : 'Estado actualizado.');
+  };
+
+  const timeline = document.getElementById('timeline');
+  if(!sessions.length){
+    timeline.innerHTML = `<p class="empty-sessions">Aún no hay sesiones registradas para ${esc(mentee.name)}.</p>`;
+  }else{
+    timeline.innerHTML = '';
+    sessions.forEach(s=>{
+      const ap = ENFOQUES[s.approach] || ENFOQUES.directivo;
+      const isDraft = s.status === 'draft';
+      const entry = document.createElement('div');
+      entry.className = 'entry';
+      entry.innerHTML = `
+        <div class="entry-dot" style="background:${isDraft ? '#A64B3A' : ap.dot}"></div>
+        <div class="entry-card ${isDraft ? 'draft':''}">
+          <div class="entry-top">
+            <span class="entry-date">${fmtDate(s.date)}</span>
+            <div class="entry-tags">
+              ${isDraft ? '<span class="tag tag-draft">Borrador</span>' : ''}
+              <span class="tag ${ap.tagClass}">${ap.label}</span>
+            </div>
+          </div>
+          <p class="entry-topic">${esc(s.topic) || '(sin tema aún)'}</p>
+          ${s.whatWorked ? `<p class="entry-detail"><b>Qué funcionó:</b> ${esc(s.whatWorked)}</p>` : ''}
+          ${s.whatDidnt ? `<p class="entry-detail"><b>Qué ajustar:</b> ${esc(s.whatDidnt)}</p>` : ''}
+          ${s.nextSteps ? `<p class="entry-detail"><b>Próximos pasos:</b> ${esc(s.nextSteps)}</p>` : ''}
+          ${s.commitment ? `<div class="commit-row ${s.commitmentDone ? 'done':''}"><input type="checkbox" data-commit-id="${s.id}" ${s.commitmentDone?'checked':''}><span><b>Compromiso:</b> ${esc(s.commitment)}</span></div>` : ''}
+          <div class="entry-footer">
+            ${isDraft ? `<button class="icon-btn" data-action="continue">continuar borrador</button>` : ''}
+            <button class="icon-btn" data-action="delete">eliminar</button>
+          </div>
+        </div>
+      `;
+      entry.querySelector('[data-action="delete"]').onclick = ()=> deleteSession(s.id);
+      const contBtn = entry.querySelector('[data-action="continue"]');
+      if(contBtn) contBtn.onclick = ()=>{ editingSessionId = s.id; modal='session'; render(); renderModal(); };
+      const commitBox = entry.querySelector('[data-commit-id]');
+      if(commitBox) commitBox.onchange = async (e)=>{
+        const idx = state.sessions.findIndex(x=>x.id===s.id);
+        state.sessions[idx].commitmentDone = e.target.checked;
+        await saveData();
+        render();
+      };
+      timeline.appendChild(entry);
+    });
+  }
+
+  if(modal) renderModal();
+}
+
+function renderGroupedList(){
+  const groupedContainer = document.getElementById('grouped-list');
+  if(!groupedContainer) return;
+  groupedContainer.innerHTML = '';
+  const q = searchQuery.trim().toLowerCase();
+  let anyResults = false;
+  NIVELES.forEach(nivel=>{
+    const group = state.mentees
+      .filter(m=>m.level===nivel)
+      .filter(m=> !q || m.name.toLowerCase().includes(q))
+      .sort((a,b)=>a.name.localeCompare(b.name));
+    if(!group.length) return;
+    anyResults = true;
+    const wrap = document.createElement('div');
+    wrap.className = 'level-group';
+    wrap.innerHTML = `<p class="level-head">${nivel}</p><ul class="mentee-list"></ul>`;
+    const ul = wrap.querySelector('.mentee-list');
+    group.forEach(m=>{
+      const status = m.status || 'activo';
+      const inactive = isInactive(m);
+      const li = document.createElement('li');
+      li.className = 'mentee-item' + (m.id===selectedMenteeId ? ' active':'');
+      li.innerHTML = `<div class="avatar">${esc(initials(m.name))}<span class="status-dot" style="background:var(--status-${status})"></span></div>
+        <div class="mentee-meta">
+          <div class="mentee-name-row">
+            <p class="mentee-name">${esc(m.name)}</p>
+            ${m.type==='puntual' ? '<span class="pill-puntual">1-2 sesiones</span>' : ''}
+            ${inactive ? '<span class="pill-warn">inactivo</span>' : ''}
+          </div>
+          <p class="mentee-area">${esc(m.area)}</p>
+        </div>`;
+      li.onclick = ()=>{ selectedMenteeId = m.id; renderMentoriaView(document.getElementById('app-body')); };
+      ul.appendChild(li);
+    });
+    groupedContainer.appendChild(wrap);
+  });
+  if(!anyResults){
+    groupedContainer.innerHTML = `<p class="no-results">Sin resultados para "${esc(searchQuery)}".</p>`;
+  }
+}
+
+function renderGroupList(){
+  const list = document.getElementById('group-list');
+  if(!list) return;
+  list.innerHTML = '';
+  const q = groupSearchQuery.trim().toLowerCase();
+  const filtered = state.groups
+    .filter(g => !q || g.name.toLowerCase().includes(q))
+    .sort((a,b)=>a.name.localeCompare(b.name));
+  if(!filtered.length){
+    list.innerHTML = `<p class="no-results">Sin resultados para "${esc(groupSearchQuery)}".</p>`;
+    return;
+  }
+  filtered.forEach(g=>{
+    const inactive = isGroupInactive(g);
+    const li = document.createElement('li');
+    li.className = 'mentee-item' + (g.id===selectedGroupId ? ' active':'');
+    li.innerHTML = `<div class="avatar">${esc(initials(g.name))}</div>
+      <div class="mentee-meta">
+        <div class="mentee-name-row">
+          <p class="mentee-name">${esc(g.name)}</p>
+          ${inactive ? '<span class="pill-warn">inactivo</span>' : ''}
+        </div>
+        <p class="mentee-area">${(g.memberIds||[]).length} integrante${(g.memberIds||[]).length===1?'':'s'}</p>
+      </div>`;
+    li.onclick = ()=>{ selectedGroupId = g.id; renderGroupsView(document.getElementById('app-body')); };
+    list.appendChild(li);
+  });
+}
+
+function renderGroupsView(body){
+  const group = state.groups.find(g => g.id === selectedGroupId);
+  const gSessions = group ? state.groupSessions.filter(s => s.groupId === group.id).sort((a,b)=> b.date.localeCompare(a.date)) : [];
+
+  body.innerHTML = `
+    <div class="app">
+      <div class="sidebar">
+        <div class="search-wrap"><input id="group-search-input" type="text" placeholder="Buscar por nombre de grupo..." value="${esc(groupSearchQuery)}"></div>
+        <p class="brandsub">${state.groups.length} grupo${state.groups.length===1?'':'s'} de mentoría</p>
+        <ul class="mentee-list" id="group-list"></ul>
+        <button class="btn-add-mentee" id="btn-new-group">+ nuevo grupo</button>
+      </div>
+      <div class="main" id="group-main"></div>
+    </div>
+  `;
+
+  document.getElementById('group-search-input').oninput = (e)=>{ groupSearchQuery = e.target.value; renderGroupList(); };
+  renderGroupList();
+  document.getElementById('btn-new-group').onclick = ()=>{ editingGroupId=null; modal='group'; render(); renderModal(); };
+
+  const main = document.getElementById('group-main');
+  if(!group){
+    main.innerHTML = `<div class="empty"><p>Todavía no tienes grupos de mentoría.</p><p>Crea uno cuando trabajes con varias personas a la vez.</p></div>`;
+    if(modal) renderModal();
+    return;
+  }
+
+  const members = state.mentees.filter(m => (group.memberIds||[]).includes(m.id));
+  const groupPendCount = pendingGroupCommitments(group.id);
+  const groupInactive = isGroupInactive(group);
+
+  main.innerHTML = `
+    ${groupInactive ? `<div class="alert-banner">⚠ No tienes una sesión registrada con el grupo "${esc(group.name)}" hace ${daysSinceLastGroupActivity(group)} días.</div>` : ''}
+    <div class="profile-card">
+      <div class="profile-top">
+        <div>
+          <div class="profile-name-row">
+            <p class="profile-name">${esc(group.name)}</p>
+            ${groupPendCount ? `<span class="pending-badge">${groupPendCount} pendiente${groupPendCount===1?'':'s'}</span>` : ''}
+          </div>
+          ${group.description ? `<p class="profile-area">${esc(group.description)}</p>` : ''}
+        </div>
+        <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;">
+          <button class="icon-btn" id="btn-edit-group">editar grupo</button>
+          <button class="icon-btn" id="btn-del-group">eliminar grupo</button>
+        </div>
+      </div>
+      <div class="member-chips">
+        ${members.length ? members.map(m=>`<span class="member-chip">${esc(m.name)}</span>`).join('') : '<p class="member-empty">Sin integrantes asignados todavía.</p>'}
+      </div>
+    </div>
+
+    <div class="section-head">
+      <p class="section-title">Historial de sesiones grupales</p>
+      <button class="btn-primary" id="btn-new-group-session">+ registrar sesión</button>
+    </div>
+    <div id="group-timeline"></div>
+  `;
+
+  document.getElementById('btn-edit-group').onclick = ()=>{ editingGroupId = group.id; modal='group'; render(); renderModal(); };
+  document.getElementById('btn-del-group').onclick = ()=> deleteGroup(group.id);
+  document.getElementById('btn-new-group-session').onclick = ()=>{ editingGroupSessionId=null; modal='groupSession'; render(); renderModal(); };
+
+  const timeline = document.getElementById('group-timeline');
+  if(!gSessions.length){
+    timeline.innerHTML = `<p class="empty-sessions">Aún no hay sesiones registradas para este grupo.</p>`;
+  }else{
+    timeline.innerHTML = '';
+    gSessions.forEach(s=>{
+      const ap = ENFOQUES[s.approach] || ENFOQUES.directivo;
+      const isDraft = s.status === 'draft';
+      const entry = document.createElement('div');
+      entry.className = 'entry';
+      entry.innerHTML = `
+        <div class="entry-dot" style="background:${isDraft ? '#A64B3A' : ap.dot}"></div>
+        <div class="entry-card ${isDraft ? 'draft':''}">
+          <div class="entry-top">
+            <span class="entry-date">${fmtDate(s.date)}</span>
+            <div class="entry-tags">
+              ${isDraft ? '<span class="tag tag-draft">Borrador</span>' : ''}
+              <span class="tag ${ap.tagClass}">${ap.label}</span>
+            </div>
+          </div>
+          <p class="entry-topic">${esc(s.topic) || '(sin tema aún)'}</p>
+          ${s.whatWorked ? `<p class="entry-detail"><b>Qué funcionó:</b> ${esc(s.whatWorked)}</p>` : ''}
+          ${s.whatDidnt ? `<p class="entry-detail"><b>Qué ajustar:</b> ${esc(s.whatDidnt)}</p>` : ''}
+          ${s.nextSteps ? `<p class="entry-detail"><b>Próximos pasos:</b> ${esc(s.nextSteps)}</p>` : ''}
+          ${s.commitment ? `<div class="commit-row ${s.commitmentDone ? 'done':''}"><input type="checkbox" data-gcommit-id="${s.id}" ${s.commitmentDone?'checked':''}><span><b>Compromiso:</b> ${esc(s.commitment)}</span></div>` : ''}
+          <div class="entry-footer">
+            ${isDraft ? `<button class="icon-btn" data-action="continue">continuar borrador</button>` : ''}
+            <button class="icon-btn" data-action="delete">eliminar</button>
+          </div>
+        </div>
+      `;
+      entry.querySelector('[data-action="delete"]').onclick = ()=> deleteGroupSession(s.id);
+      const contBtn = entry.querySelector('[data-action="continue"]');
+      if(contBtn) contBtn.onclick = ()=>{ editingGroupSessionId = s.id; modal='groupSession'; render(); renderModal(); };
+      const gcommitBox = entry.querySelector('[data-gcommit-id]');
+      if(gcommitBox) gcommitBox.onchange = async (e)=>{
+        const idx = state.groupSessions.findIndex(x=>x.id===s.id);
+        state.groupSessions[idx].commitmentDone = e.target.checked;
+        await saveData();
+        render();
+      };
+      timeline.appendChild(entry);
+    });
+  }
+
+  if(modal) renderModal();
+}
+
+function deleteGroup(id){
+  const group = state.groups.find(g=>g.id===id);
+  if(!group) return;
+  askConfirm(`¿Eliminar el grupo "${group.name}" y todo su historial de sesiones grupales?`, ()=> performDeleteGroup(id));
+}
+
+async function performDeleteGroup(id){
+  const group = state.groups.find(g=>g.id===id);
+  if(!group) return;
+  const relatedSessions = state.groupSessions.filter(s=>s.groupId===id);
+  state.groups = state.groups.filter(g=>g.id!==id);
+  state.groupSessions = state.groupSessions.filter(s=>s.groupId!==id);
+  if(selectedGroupId === id) selectedGroupId = state.groups[0]?.id || null;
+  await saveData();
+  render();
+  showUndoToast(`Grupo "${group.name}" eliminado.`, async ()=>{
+    state.groups.push(group);
+    state.groupSessions.push(...relatedSessions);
+    selectedGroupId = group.id;
+    await saveData();
+    render();
+  });
+}
+
+function deleteGroupSession(id){
+  askConfirm('¿Eliminar esta sesión grupal? Podrás deshacerlo por unos segundos.', ()=> performDeleteGroupSession(id));
+}
+
+async function performDeleteGroupSession(id){
+  const session = state.groupSessions.find(s=>s.id===id);
+  if(!session) return;
+  state.groupSessions = state.groupSessions.filter(s=>s.id!==id);
+  await saveData();
+  render();
+  showUndoToast('Sesión grupal eliminada.', async ()=>{
+    state.groupSessions.push(session);
+    await saveData();
+    render();
+  });
+}
+
+function renderDatabaseView(body){
+  body.innerHTML = `
+    <div class="db-wrap">
+      <div class="db-filters">
+        <input id="db-f-name" placeholder="Filtrar por nombre" value="${esc(dbFilters.name)}">
+        <input id="db-f-area" placeholder="Filtrar por área" value="${esc(dbFilters.area)}">
+        <select id="db-f-country">
+          <option value="">Todos los países</option>
+          ${COUNTRIES.map(c=>`<option value="${c}" ${dbFilters.country===c?'selected':''}>${c}</option>`).join('')}
+        </select>
+        <select id="db-f-nivel">
+          <option value="">Todos los niveles</option>
+          ${NIVELES.map(n=>`<option value="${n}" ${dbFilters.nivel===n?'selected':''}>${n}</option>`).join('')}
+        </select>
+        <select id="db-f-tipo">
+          <option value="">Todos los tipos</option>
+          <option value="continuo" ${dbFilters.tipo==='continuo'?'selected':''}>Seguimiento continuo</option>
+          <option value="puntual" ${dbFilters.tipo==='puntual'?'selected':''}>Consulta puntual</option>
+        </select>
+        <select id="db-f-estado">
+          <option value="">Todos los estados</option>
+          ${Object.entries(ESTADOS).map(([k,v])=>`<option value="${k}" ${dbFilters.estado===k?'selected':''}>${v}</option>`).join('')}
+        </select>
+      </div>
+      <p class="db-count" id="db-count"></p>
+      <div class="db-table-wrap">
+        <table class="db-table">
+          <thead>
+            <tr>
+              <th data-col="name">Nombre</th>
+              <th data-col="area">Área</th>
+              <th data-col="country">País</th>
+              <th data-col="level">Nivel</th>
+              <th data-col="type">Tipo</th>
+              <th data-col="status">Estado</th>
+              <th data-col="phone">Teléfono</th>
+              <th data-col="email">Correo</th>
+              <th data-col="sessions">Sesiones</th>
+              <th data-col="pending">Pendientes</th>
+            </tr>
+          </thead>
+          <tbody id="db-tbody"></tbody>
+        </table>
+      </div>
+      <div class="pagination" id="db-pagination"></div>
+    </div>
+  `;
+
+  document.getElementById('db-f-name').oninput = (e)=>{ dbFilters.name = e.target.value; dbPage = 1; renderDbTable(); };
+  document.getElementById('db-f-area').oninput = (e)=>{ dbFilters.area = e.target.value; dbPage = 1; renderDbTable(); };
+  document.getElementById('db-f-country').onchange = (e)=>{ dbFilters.country = e.target.value; dbPage = 1; renderDbTable(); };
+  document.getElementById('db-f-nivel').onchange = (e)=>{ dbFilters.nivel = e.target.value; dbPage = 1; renderDbTable(); };
+  document.getElementById('db-f-tipo').onchange = (e)=>{ dbFilters.tipo = e.target.value; dbPage = 1; renderDbTable(); };
+  document.getElementById('db-f-estado').onchange = (e)=>{ dbFilters.estado = e.target.value; dbPage = 1; renderDbTable(); };
+  document.querySelectorAll('.db-table th').forEach(th=>{
+    th.onclick = ()=>{
+      const col = th.dataset.col;
+      if(dbSort.col === col) dbSort.dir = dbSort.dir==='asc' ? 'desc' : 'asc';
+      else { dbSort.col = col; dbSort.dir = 'asc'; }
+      renderDbTable();
+    };
+  });
+  renderDbTable();
+}
+
+function renderDbTable(){
+  const tbody = document.getElementById('db-tbody');
+  const countEl = document.getElementById('db-count');
+  if(!tbody) return;
+  const qn = dbFilters.name.trim().toLowerCase();
+  const qa = dbFilters.area.trim().toLowerCase();
+  let rows = state.mentees.filter(m=>
+    (!qn || m.name.toLowerCase().includes(qn)) &&
+    (!qa || m.area.toLowerCase().includes(qa)) &&
+    (!dbFilters.country || m.country === dbFilters.country) &&
+    (!dbFilters.nivel || m.level === dbFilters.nivel) &&
+    (!dbFilters.tipo || m.type === dbFilters.tipo) &&
+    (!dbFilters.estado || (m.status||'activo') === dbFilters.estado)
+  );
+  rows.sort((a,b)=>{
+    let av, bv;
+    if(dbSort.col === 'sessions'){ av = sessionCount(a.id); bv = sessionCount(b.id); }
+    else if(dbSort.col === 'pending'){ av = pendingCommitments(a.id); bv = pendingCommitments(b.id); }
+    else if(dbSort.col === 'type'){ av = a.type||''; bv = b.type||''; }
+    else if(dbSort.col === 'status'){ av = a.status||'activo'; bv = b.status||'activo'; }
+    else { av = (a[dbSort.col]||'').toString().toLowerCase(); bv = (b[dbSort.col]||'').toString().toLowerCase(); }
+    if(av < bv) return dbSort.dir==='asc' ? -1 : 1;
+    if(av > bv) return dbSort.dir==='asc' ? 1 : -1;
+    return 0;
+  });
+  countEl.textContent = `${rows.length} mentee${rows.length===1?'':'s'} encontrados`;
+  if(!rows.length){
+    tbody.innerHTML = `<tr><td colspan="10" style="color:var(--muted);text-align:center;padding:24px;">Sin resultados con estos filtros.</td></tr>`;
+    document.getElementById('db-pagination').innerHTML = '';
+    return;
+  }
+  const totalPages = Math.max(1, Math.ceil(rows.length / DB_PAGE_SIZE));
+  if(dbPage > totalPages) dbPage = totalPages;
+  if(dbPage < 1) dbPage = 1;
+  const pageRows = rows.slice((dbPage-1)*DB_PAGE_SIZE, dbPage*DB_PAGE_SIZE);
+
+  tbody.innerHTML = '';
+  pageRows.forEach(m=>{
+    const status = m.status || 'activo';
+    const pend = pendingCommitments(m.id);
+    const tr = document.createElement('tr');
+    tr.className = 'clickable';
+    tr.innerHTML = `
+      <td>${esc(m.name)}</td>
+      <td>${esc(m.area)}</td>
+      <td>${esc(m.country) || '—'}</td>
+      <td>${esc(m.level)}</td>
+      <td>${m.type==='puntual' ? 'Puntual' : 'Continuo'}</td>
+      <td><span class="mini-status ${status}">${ESTADOS[status]}</span></td>
+      <td>${esc(m.phone) || '—'}</td>
+      <td>${esc(m.email) || '—'}</td>
+      <td>${sessionCount(m.id)}</td>
+      <td>${pend || '—'}</td>
+    `;
+    tr.onclick = ()=>{ selectedMenteeId = m.id; currentTab = 'mentoria'; render(); };
+    tbody.appendChild(tr);
+  });
+
+  const pag = document.getElementById('db-pagination');
+  if(totalPages <= 1){
+    pag.innerHTML = '';
+  }else{
+    pag.innerHTML = `
+      <button id="db-prev" ${dbPage<=1?'disabled':''}>‹ Anterior</button>
+      <span class="page-indicator">Página ${dbPage} de ${totalPages}</span>
+      <button id="db-next" ${dbPage>=totalPages?'disabled':''}>Siguiente ›</button>
+    `;
+    const prevBtn = document.getElementById('db-prev');
+    const nextBtn = document.getElementById('db-next');
+    if(prevBtn) prevBtn.onclick = ()=>{ dbPage--; renderDbTable(); };
+    if(nextBtn) nextBtn.onclick = ()=>{ dbPage++; renderDbTable(); };
+  }
+}
+
+function renderReportsView(body){
+  const totalPersonas = state.mentees.length;
+  const totalSesionesIndividuales = state.sessions.length;
+  const totalSesionesGrupales = state.groupSessions.length;
+  const totalSesiones = totalSesionesIndividuales + totalSesionesGrupales;
+  const finalSesiones = state.sessions.filter(s=>s.status!=='draft').length + state.groupSessions.filter(s=>s.status!=='draft').length;
+  const draftSesiones = totalSesiones - finalSesiones;
+  const totalGrupos = state.groups.length;
+
+  const porTipo = { continuo: 0, puntual: 0 };
+  state.mentees.forEach(m=>{ porTipo[m.type==='puntual'?'puntual':'continuo']++; });
+
+  const porNivel = {};
+  NIVELES.forEach(n=> porNivel[n] = 0);
+  state.mentees.forEach(m=>{ if(porNivel[m.level] !== undefined) porNivel[m.level]++; });
+
+  const porEnfoque = { directivo:0, socratico:0, colaborativo:0 };
+  state.sessions.forEach(s=>{ if(porEnfoque[s.approach] !== undefined) porEnfoque[s.approach]++; });
+  state.groupSessions.forEach(s=>{ if(porEnfoque[s.approach] !== undefined) porEnfoque[s.approach]++; });
+
+  const porEstado = { activo:0, pausa:0, cerrado:0 };
+  state.mentees.forEach(m=>{ const st = m.status||'activo'; if(porEstado[st] !== undefined) porEstado[st]++; });
+
+  const porArea = {};
+  state.mentees.forEach(m=>{ const key = m.area || 'Sin especificar'; porArea[key] = (porArea[key]||0)+1; });
+  const areaEntries = Object.entries(porArea).sort((a,b)=>b[1]-a[1]).slice(0,8);
+
+  const cerrados = state.mentees.filter(m=> (m.status||'activo') === 'cerrado');
+  const logrados = cerrados.filter(m=>m.outcome==='logrado').length;
+  const parciales = cerrados.filter(m=>m.outcome==='parcial').length;
+  const noLogrados = cerrados.filter(m=>m.outcome==='no_logrado').length;
+  const tasaLogro = cerrados.length ? Math.round((logrados/cerrados.length)*100) : 0;
+
+  const maxTipo = Math.max(porTipo.continuo, porTipo.puntual, 1);
+  const maxNivel = Math.max(...Object.values(porNivel), 1);
+  const maxEnfoque = Math.max(...Object.values(porEnfoque), 1);
+  const maxEstado = Math.max(...Object.values(porEstado), 1);
+  const maxArea = Math.max(...areaEntries.map(e=>e[1]), 1);
+  const maxResultado = Math.max(logrados, parciales, noLogrados, 1);
+
+  body.innerHTML = `
+    <div class="rep-wrap">
+      <div class="rep-grid">
+        <div class="metric-card">
+          <p class="metric-label">Personas ayudadas en total</p>
+          <p class="metric-value">${totalPersonas}</p>
+        </div>
+        <div class="metric-card">
+          <p class="metric-label">Mentorías registradas en total</p>
+          <p class="metric-value">${totalSesiones}</p>
+          <p class="metric-sub">${totalSesionesIndividuales} individuales · ${totalSesionesGrupales} grupales · ${draftSesiones} borradores</p>
+        </div>
+        <div class="metric-card">
+          <p class="metric-label">Grupos de mentoría</p>
+          <p class="metric-value">${totalGrupos}</p>
+          <p class="metric-sub">${totalSesionesGrupales} sesión${totalSesionesGrupales===1?'':'es'} grupal${totalSesionesGrupales===1?'':'es'} registrada${totalSesionesGrupales===1?'':'s'}</p>
+        </div>
+        <div class="metric-card">
+          <p class="metric-label">Tasa de objetivos logrados</p>
+          <p class="metric-value">${tasaLogro}%</p>
+          <p class="metric-sub">de ${cerrados.length} mentoría${cerrados.length===1?'':'s'} cerrada${cerrados.length===1?'':'s'}</p>
+        </div>
+        <div class="metric-card">
+          <p class="metric-label">Mentees activos ahora</p>
+          <p class="metric-value">${porEstado.activo}</p>
+        </div>
+      </div>
+
+      <div class="rep-section">
+        <h4>Mentees por estado</h4>
+        ${barRow('Activo', porEstado.activo, maxEstado, 'var(--status-activo)')}
+        ${barRow('En pausa', porEstado.pausa, maxEstado, 'var(--status-pausa)')}
+        ${barRow('Cerrado', porEstado.cerrado, maxEstado, 'var(--status-cerrado)')}
+      </div>
+
+      <div class="rep-section">
+        <h4>Resultados de mentorías cerradas</h4>
+        ${cerrados.length ? `
+          ${barRow('Objetivo logrado', logrados, maxResultado, 'var(--status-activo)')}
+          ${barRow('Logrado parcialmente', parciales, maxResultado, 'var(--status-pausa)')}
+          ${barRow('No logrado', noLogrados, maxResultado, 'var(--rust)')}
+        ` : `<p style="font-size:12.5px;color:var(--muted);margin:0;">Aún no tienes mentorías marcadas como cerradas.</p>`}
+      </div>
+
+      <div class="rep-section">
+        <h4>Por área</h4>
+        ${areaEntries.map(([label,val])=> barRow(label, val, maxArea, 'var(--brass)')).join('')}
+      </div>
+
+      <div class="rep-section">
+        <h4>Por tipo de mentoría</h4>
+        ${barRow('Seguimiento continuo', porTipo.continuo, maxTipo, 'var(--sage)')}
+        ${barRow('Consulta puntual (1-2 sesiones)', porTipo.puntual, maxTipo, 'var(--brass)')}
+      </div>
+
+      <div class="rep-section">
+        <h4>Mentees por nivel</h4>
+        ${NIVELES.map(n=> barRow(n, porNivel[n], maxNivel, 'var(--slate)')).join('')}
+      </div>
+
+      <div class="rep-section">
+        <h4>Sesiones por enfoque usado</h4>
+        ${barRow('Directivo', porEnfoque.directivo, maxEnfoque, ENFOQUES.directivo.color)}
+        ${barRow('Socrático', porEnfoque.socratico, maxEnfoque, ENFOQUES.socratico.color)}
+        ${barRow('Colaborativo', porEnfoque.colaborativo, maxEnfoque, ENFOQUES.colaborativo.color)}
+      </div>
+    </div>
+  `;
+}
+
+function barRow(label, value, max, color){
+  const pct = Math.round((value/max)*100);
+  return `
+    <div class="bar-row">
+      <div class="bar-label"><span>${esc(label)}</span><span>${value}</span></div>
+      <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${color};"></div></div>
+    </div>
+  `;
+}
+
+function renderModal(){
+  const existing = document.querySelector('.overlay');
+  if(existing) existing.remove();
+  if(!modal) return;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'overlay';
+  overlay.onclick = (e)=>{ if(e.target === overlay){ modal=null; editingSessionId=null; editingMenteeId=null; editingGroupId=null; editingGroupSessionId=null; confirmContext=null; renderModal(); } };
+
+  if(modal === 'confirm' && confirmContext){
+    overlay.innerHTML = `
+      <div class="modal" style="max-width:360px;">
+        <h3>Confirmar</h3>
+        <p style="font-size:13.5px;color:var(--ink);margin:0 0 20px;">${esc(confirmContext.message)}</p>
+        <div class="modal-actions">
+          <button class="btn-ghost" id="btn-confirm-cancel">Cancelar</button>
+          <button class="btn-danger" id="btn-confirm-ok">Eliminar</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    document.getElementById('btn-confirm-cancel').onclick = ()=>{ modal=null; confirmContext=null; renderModal(); };
+    document.getElementById('btn-confirm-ok').onclick = async ()=>{
+      const cb = confirmContext.onConfirm;
+      modal = null; confirmContext = null;
+      await cb();
+      renderModal();
+    };
+    return;
+  }
+
+  if(modal === 'group'){
+    const existingGroup = editingGroupId ? state.groups.find(g=>g.id===editingGroupId) : null;
+    const memberIds = existingGroup ? (existingGroup.memberIds||[]) : [];
+    const sortedMentees = state.mentees.slice().sort((a,b)=>a.name.localeCompare(b.name));
+    overlay.innerHTML = `
+      <div class="modal">
+        <h3>${existingGroup ? 'Editar grupo' : 'Nuevo grupo de mentoría'}</h3>
+        <div class="field"><label>Nombre del grupo</label><input id="g-name" placeholder="Ej: Cohorte búsqueda de empleo - julio" value="${existingGroup ? esc(existingGroup.name) : ''}"></div>
+        <div class="field"><label>Descripción <span style="color:var(--muted);">(opcional)</span></label><textarea id="g-desc" placeholder="Contexto del grupo">${existingGroup ? esc(existingGroup.description||'') : ''}</textarea></div>
+        <div class="field"><label>Integrantes</label>
+          <div class="member-checklist" id="member-checklist">
+            ${sortedMentees.length ? sortedMentees.map(m=>`
+              <label class="member-check-row">
+                <input type="checkbox" value="${m.id}" ${memberIds.includes(m.id)?'checked':''}>
+                <span>${esc(m.name)}</span>
+              </label>
+            `).join('') : '<p class="member-empty">Primero agrega mentees en la pestaña "Mentoría" para poder incluirlos aquí.</p>'}
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button class="btn-ghost" id="btn-cancel">Cancelar</button>
+          <button class="btn-primary" id="btn-save">${existingGroup ? 'Guardar cambios' : 'Crear grupo'}</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    document.getElementById('btn-cancel').onclick = ()=>{ modal=null; editingGroupId=null; renderModal(); };
+    document.getElementById('btn-save').onclick = async ()=>{
+      const name = document.getElementById('g-name').value.trim();
+      if(!name){ showToast('Ponle un nombre al grupo.'); return; }
+      const checked = Array.from(overlay.querySelectorAll('#member-checklist input:checked')).map(el=>el.value);
+      const groupData = {
+        id: existingGroup ? existingGroup.id : uid(),
+        name,
+        description: document.getElementById('g-desc').value.trim(),
+        memberIds: checked,
+        createdAt: existingGroup ? existingGroup.createdAt : new Date().toISOString()
+      };
+      if(existingGroup){
+        const idx = state.groups.findIndex(g=>g.id===existingGroup.id);
+        state.groups[idx] = groupData;
+      }else{
+        state.groups.push(groupData);
+        selectedGroupId = groupData.id;
+      }
+      modal = null; editingGroupId = null;
+      await saveData();
+      render();
+      renderModal();
+      showToast(existingGroup ? 'Grupo actualizado.' : 'Grupo creado.');
+    };
+  }
+
+  if(modal === 'groupSession'){
+    const today = new Date().toISOString().slice(0,10);
+    const existingSession = editingGroupSessionId ? state.groupSessions.find(s=>s.id===editingGroupSessionId) : null;
+    overlay.innerHTML = `
+      <div class="modal">
+        <h3>${existingSession ? 'Continuar sesión grupal' : 'Registrar sesión grupal'}</h3>
+        <div class="field"><label>Fecha</label><input type="date" id="gs-date" value="${existingSession ? existingSession.date : today}"></div>
+        <div class="field"><label>Enfoque usado</label>
+          <select id="gs-approach">
+            <option value="directivo">Directivo</option>
+            <option value="socratico">Socrático</option>
+            <option value="colaborativo">Colaborativo</option>
+          </select>
+        </div>
+        <div class="field"><label>Tema tratado</label><input id="gs-topic" placeholder="¿De qué trató la sesión?" value="${existingSession ? esc(existingSession.topic) : ''}"></div>
+        <div class="field"><label>Qué funcionó</label><textarea id="gs-worked" placeholder="Opcional">${existingSession ? esc(existingSession.whatWorked) : ''}</textarea></div>
+        <div class="field"><label>Qué ajustar la próxima vez</label><textarea id="gs-didnt" placeholder="Opcional">${existingSession ? esc(existingSession.whatDidnt) : ''}</textarea></div>
+        <div class="field"><label>Próximos pasos</label><textarea id="gs-next" placeholder="Opcional">${existingSession ? esc(existingSession.nextSteps) : ''}</textarea></div>
+        <div class="field"><label>Compromiso / acción pendiente <span style="color:var(--muted);">(opcional, marcable como cumplido después)</span></label><input id="gs-commitment" placeholder="Ej: cada integrante envía su CV" value="${existingSession ? esc(existingSession.commitment) : ''}"></div>
+        <div class="modal-actions">
+          <button class="btn-ghost" id="btn-cancel">Cancelar</button>
+          <button class="btn-secondary" id="btn-draft">Guardar como borrador</button>
+          <button class="btn-primary" id="btn-save">Guardar sesión</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    if(existingSession){
+      overlay.querySelector('#gs-approach').value = existingSession.approach;
+    }
+    document.getElementById('btn-cancel').onclick = ()=>{ modal=null; editingGroupSessionId=null; renderModal(); };
+
+    const collectGroupSession = (status)=>({
+      id: existingSession ? existingSession.id : uid(),
+      groupId: selectedGroupId,
+      date: document.getElementById('gs-date').value || today,
+      approach: document.getElementById('gs-approach').value,
+      topic: document.getElementById('gs-topic').value.trim(),
+      whatWorked: document.getElementById('gs-worked').value.trim(),
+      whatDidnt: document.getElementById('gs-didnt').value.trim(),
+      nextSteps: document.getElementById('gs-next').value.trim(),
+      commitment: document.getElementById('gs-commitment').value.trim(),
+      commitmentDone: existingSession ? !!existingSession.commitmentDone : false,
+      status
+    });
+
+    document.getElementById('btn-draft').onclick = async ()=>{
+      const sess = collectGroupSession('draft');
+      if(existingSession){
+        const idx = state.groupSessions.findIndex(s=>s.id===existingSession.id);
+        state.groupSessions[idx] = sess;
+      }else{
+        state.groupSessions.push(sess);
+      }
+      modal = null; editingGroupSessionId = null;
+      await saveData();
+      render();
+      renderModal();
+      showToast('Guardado como borrador.');
+    };
+
+    document.getElementById('btn-save').onclick = async ()=>{
+      const topic = document.getElementById('gs-topic').value.trim();
+      if(!topic){ showToast('Describe el tema de la sesión.'); return; }
+      const sess = collectGroupSession('final');
+      if(existingSession){
+        const idx = state.groupSessions.findIndex(s=>s.id===existingSession.id);
+        state.groupSessions[idx] = sess;
+      }else{
+        state.groupSessions.push(sess);
+      }
+      modal = null; editingGroupSessionId = null;
+      await saveData();
+      render();
+      renderModal();
+      showToast('Sesión grupal registrada.');
+    };
+  }
+
+  if(modal === 'mentee'){
+    const existingMentee = editingMenteeId ? state.mentees.find(m=>m.id===editingMenteeId) : null;
+    const v = (field)=> existingMentee ? esc(existingMentee[field] ?? '') : '';
+    overlay.innerHTML = `
+      <div class="modal">
+        <h3>${existingMentee ? 'Editar mentee' : 'Nuevo mentee'}</h3>
+        <div class="field"><label>Nombre</label><input id="f-name" placeholder="Nombre del mentee" value="${v('name')}"></div>
+        <div class="field"><label>Área</label><input id="f-area" list="area-options" placeholder="Ej: búsqueda de primer empleo" value="${v('area')}"></div>
+        <div class="field"><label>Nivel</label>
+          <select id="f-level">
+            <option value="Principiante">Principiante</option>
+            <option value="Intermedio">Intermedio</option>
+            <option value="Avanzado">Avanzado</option>
+          </select>
+        </div>
+        <div class="field"><label>Tipo de mentoría</label>
+          <select id="f-type">
+            <option value="continuo">Seguimiento continuo</option>
+            <option value="puntual">Consulta puntual (1-2 sesiones)</option>
+          </select>
+        </div>
+        <div class="field"><label>Estado</label>
+          <select id="f-status">
+            <option value="activo">Activo</option>
+            <option value="pausa">En pausa</option>
+            <option value="cerrado">Cerrado</option>
+          </select>
+        </div>
+        <div class="field"><label>Resultado final <span style="color:var(--muted);">(si está cerrado)</span></label>
+          <select id="f-outcome">
+            <option value="">Sin especificar</option>
+            <option value="logrado">Objetivo logrado</option>
+            <option value="parcial">Logrado parcialmente</option>
+            <option value="no_logrado">No logrado</option>
+          </select>
+        </div>
+        <div class="field"><label>Estilo de aprendizaje</label>
+          <select id="f-style">
+            <option value="Haciendo (práctico)">Haciendo (práctico)</option>
+            <option value="Observando ejemplos">Observando ejemplos</option>
+            <option value="Conversando ideas">Conversando ideas</option>
+            <option value="Mixto">Mixto</option>
+          </select>
+        </div>
+        <div class="field"><label>Objetivo principal</label><textarea id="f-goal" placeholder="¿Qué quiere lograr esta persona?">${v('goal')}</textarea></div>
+        <div class="field"><label>Teléfono <span style="color:var(--muted);">(opcional)</span></label><input id="f-phone" type="tel" placeholder="Ej: 809-555-0123" value="${v('phone')}"></div>
+        <div class="field"><label>Correo <span style="color:var(--muted);">(opcional)</span></label><input id="f-email" type="email" placeholder="nombre@correo.com" value="${v('email')}"></div>
+        <div class="field"><label>País <span style="color:var(--muted);">(opcional)</span></label>
+          <select id="f-country">
+            <option value="">Sin especificar</option>
+            ${COUNTRIES.map(c=>`<option value="${c}">${c}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field"><label>Progresión <span style="color:var(--muted);">(opcional)</span></label><textarea id="f-progress" placeholder="Notas sobre cómo ha avanzado hasta ahora">${v('progress')}</textarea></div>
+        <div class="modal-actions">
+          <button class="btn-ghost" id="btn-cancel">Cancelar</button>
+          <button class="btn-primary" id="btn-save">${existingMentee ? 'Guardar cambios' : 'Guardar mentee'}</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    if(existingMentee){
+      overlay.querySelector('#f-level').value = existingMentee.level;
+      overlay.querySelector('#f-type').value = existingMentee.type || 'continuo';
+      overlay.querySelector('#f-status').value = existingMentee.status || 'activo';
+      overlay.querySelector('#f-outcome').value = existingMentee.outcome || '';
+      overlay.querySelector('#f-style').value = existingMentee.learningStyle;
+      overlay.querySelector('#f-country').value = existingMentee.country || '';
+    }
+    document.getElementById('btn-cancel').onclick = ()=>{ modal=null; editingMenteeId=null; renderModal(); };
+    document.getElementById('btn-save').onclick = async ()=>{
+      const name = document.getElementById('f-name').value.trim();
+      if(!name){ showToast('Ponle un nombre al mentee.'); return; }
+      const newStatus = document.getElementById('f-status').value;
+      const menteeData = {
+        id: existingMentee ? existingMentee.id : uid(),
+        name,
+        area: document.getElementById('f-area').value.trim() || 'Sin especificar',
+        level: document.getElementById('f-level').value,
+        type: document.getElementById('f-type').value,
+        status: newStatus,
+        outcome: document.getElementById('f-outcome').value,
+        learningStyle: document.getElementById('f-style').value,
+        goal: document.getElementById('f-goal').value.trim() || 'Sin especificar',
+        phone: document.getElementById('f-phone').value.trim(),
+        email: document.getElementById('f-email').value.trim(),
+        country: document.getElementById('f-country').value,
+        progress: document.getElementById('f-progress').value.trim(),
+        closedAt: newStatus === 'cerrado' ? (existingMentee?.closedAt || new Date().toISOString()) : '',
+        createdAt: existingMentee ? existingMentee.createdAt : new Date().toISOString()
+      };
+      if(existingMentee){
+        const idx = state.mentees.findIndex(m=>m.id===existingMentee.id);
+        state.mentees[idx] = menteeData;
+      }else{
+        state.mentees.push(menteeData);
+        selectedMenteeId = menteeData.id;
+      }
+      modal = null; editingMenteeId = null;
+      await saveData();
+      render();
+      renderModal();
+      showToast(existingMentee ? 'Datos actualizados.' : 'Mentee agregado.');
+    };
+  }
+
+  if(modal === 'session'){
+    const today = new Date().toISOString().slice(0,10);
+    const existingSession = editingSessionId ? state.sessions.find(s=>s.id===editingSessionId) : null;
+    overlay.innerHTML = `
+      <div class="modal">
+        <h3>${existingSession ? 'Continuar sesión' : 'Registrar sesión'}</h3>
+        <div class="field"><label>Fecha</label><input type="date" id="s-date" value="${existingSession ? existingSession.date : today}"></div>
+        <div class="field"><label>Enfoque usado</label>
+          <select id="s-approach">
+            <option value="directivo">Directivo</option>
+            <option value="socratico">Socrático</option>
+            <option value="colaborativo">Colaborativo</option>
+          </select>
+        </div>
+        <div class="field"><label>Tema tratado</label><input id="s-topic" placeholder="¿De qué trató la sesión?" value="${existingSession ? esc(existingSession.topic) : ''}"></div>
+        <div class="field"><label>Qué funcionó</label><textarea id="s-worked" placeholder="Opcional">${existingSession ? esc(existingSession.whatWorked) : ''}</textarea></div>
+        <div class="field"><label>Qué ajustar la próxima vez</label><textarea id="s-didnt" placeholder="Opcional">${existingSession ? esc(existingSession.whatDidnt) : ''}</textarea></div>
+        <div class="field"><label>Próximos pasos</label><textarea id="s-next" placeholder="Opcional">${existingSession ? esc(existingSession.nextSteps) : ''}</textarea></div>
+        <div class="field"><label>Compromiso / acción pendiente <span style="color:var(--muted);">(opcional, marcable como cumplido después)</span></label><input id="s-commitment" placeholder="Ej: enviar CV actualizado" value="${existingSession ? esc(existingSession.commitment) : ''}"></div>
+        <div class="modal-actions">
+          <button class="btn-ghost" id="btn-cancel">Cancelar</button>
+          <button class="btn-secondary" id="btn-draft">Guardar como borrador</button>
+          <button class="btn-primary" id="btn-save">Guardar sesión</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    if(existingSession){
+      overlay.querySelector('#s-approach').value = existingSession.approach;
+    }
+    document.getElementById('btn-cancel').onclick = ()=>{ modal=null; editingSessionId=null; renderModal(); };
+
+    const collectSession = (status)=>({
+      id: existingSession ? existingSession.id : uid(),
+      menteeId: selectedMenteeId,
+      date: document.getElementById('s-date').value || today,
+      approach: document.getElementById('s-approach').value,
+      topic: document.getElementById('s-topic').value.trim(),
+      whatWorked: document.getElementById('s-worked').value.trim(),
+      whatDidnt: document.getElementById('s-didnt').value.trim(),
+      nextSteps: document.getElementById('s-next').value.trim(),
+      commitment: document.getElementById('s-commitment').value.trim(),
+      commitmentDone: existingSession ? !!existingSession.commitmentDone : false,
+      status
+    });
+
+    document.getElementById('btn-draft').onclick = async ()=>{
+      const sess = collectSession('draft');
+      if(existingSession){
+        const idx = state.sessions.findIndex(s=>s.id===existingSession.id);
+        state.sessions[idx] = sess;
+      }else{
+        state.sessions.push(sess);
+      }
+      modal = null; editingSessionId = null;
+      await saveData();
+      render();
+      renderModal();
+      showToast('Guardado como borrador.');
+    };
+
+    document.getElementById('btn-save').onclick = async ()=>{
+      const topic = document.getElementById('s-topic').value.trim();
+      if(!topic){ showToast('Describe el tema de la sesión.'); return; }
+      const sess = collectSession('final');
+      if(existingSession){
+        const idx = state.sessions.findIndex(s=>s.id===existingSession.id);
+        state.sessions[idx] = sess;
+      }else{
+        state.sessions.push(sess);
+      }
+      modal = null; editingSessionId = null;
+      await saveData();
+      render();
+      renderModal();
+      showToast('Sesión registrada.');
+    };
+  }
+}
+
+function deleteMentee(id){
+  const mentee = state.mentees.find(m=>m.id===id);
+  if(!mentee) return;
+  askConfirm(`¿Eliminar a ${mentee.name} y todo su historial de sesiones? Podrás deshacerlo por unos segundos.`, ()=> performDeleteMentee(id));
+}
+
+async function performDeleteMentee(id){
+  const mentee = state.mentees.find(m=>m.id===id);
+  if(!mentee) return;
+  const relatedSessions = state.sessions.filter(s=>s.menteeId===id);
+  state.mentees = state.mentees.filter(m=>m.id!==id);
+  state.sessions = state.sessions.filter(s=>s.menteeId!==id);
+  if(selectedMenteeId === id) selectedMenteeId = state.mentees[0]?.id || null;
+  await saveData();
+  render();
+  showUndoToast(`${mentee.name} eliminado.`, async ()=>{
+    state.mentees.push(mentee);
+    state.sessions.push(...relatedSessions);
+    selectedMenteeId = mentee.id;
+    await saveData();
+    render();
+  });
+}
+
+function deleteSession(id){
+  askConfirm('¿Eliminar esta sesión? Podrás deshacerlo por unos segundos.', ()=> performDeleteSession(id));
+}
+
+async function performDeleteSession(id){
+  const session = state.sessions.find(s=>s.id===id);
+  if(!session) return;
+  state.sessions = state.sessions.filter(s=>s.id!==id);
+  await saveData();
+  render();
+  showUndoToast('Sesión eliminada.', async ()=>{
+    state.sessions.push(session);
+    await saveData();
+    render();
+  });
+}
+
+function exportBackup(){
+  const blob = new Blob([JSON.stringify(state, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'bitacora-mentor-backup.json';
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+  showToast('Copia de seguridad exportada.');
+}
+
+function importBackup(file){
+  const reader = new FileReader();
+  reader.onload = async (e)=>{
+    try{
+      const parsed = JSON.parse(e.target.result);
+      if(!parsed || !Array.isArray(parsed.mentees) || !Array.isArray(parsed.sessions)){
+        showToast('El archivo no tiene el formato esperado.');
+        return;
+      }
+      state = parsed;
+      if(!state.mentees) state.mentees = [];
+      if(!state.sessions) state.sessions = [];
+      if(!state.groups) state.groups = [];
+      if(!state.groupSessions) state.groupSessions = [];
+      selectedMenteeId = state.mentees[0]?.id || null;
+      selectedGroupId = state.groups[0]?.id || null;
+      await saveData();
+      render();
+      showToast('Copia de seguridad importada.');
+    }catch(err){
+      showToast('No se pudo leer ese archivo JSON.');
+    }
+  };
+  reader.readAsText(file);
+}
+
+function buildExportRows(){
+  const rows = [];
+  state.mentees.forEach(m=>{
+    const sessions = state.sessions.filter(s=>s.menteeId===m.id).sort((a,b)=>a.date.localeCompare(b.date));
+    const baseInfo = {
+      TipoRegistro: 'Individual',
+      Nombre: m.name, Area: m.area, Nivel: m.level,
+      'Tipo de mentoria': m.type==='puntual' ? 'Consulta puntual' : 'Seguimiento continuo',
+      Estado: ESTADOS[m.status||'activo'], Resultado: m.outcome ? (RESULTADOS[m.outcome]||'') : '',
+      'Estilo de aprendizaje': m.learningStyle, Objetivo: m.goal,
+      Telefono: m.phone || '', Correo: m.email || '', Pais: m.country || '', Progresion: m.progress || '',
+      Integrantes: ''
+    };
+    if(!sessions.length){
+      rows.push({ ...baseInfo, Fecha: '', Enfoque: '', EstadoSesion: '', Tema: '', 'Que funciono': '', 'Que ajustar': '', 'Proximos pasos': '', Compromiso: '', CompromisoCumplido: '' });
+    }else{
+      sessions.forEach(s=>{
+        rows.push({
+          ...baseInfo,
+          Fecha: s.date, Enfoque: (ENFOQUES[s.approach]||{}).label || s.approach,
+          EstadoSesion: s.status === 'draft' ? 'Borrador' : 'Final',
+          Tema: s.topic, 'Que funciono': s.whatWorked, 'Que ajustar': s.whatDidnt, 'Proximos pasos': s.nextSteps,
+          Compromiso: s.commitment || '', CompromisoCumplido: s.commitment ? (s.commitmentDone ? 'Sí' : 'No') : ''
+        });
+      });
+    }
+  });
+
+  state.groups.forEach(g=>{
+    const members = state.mentees.filter(m => (g.memberIds||[]).includes(m.id)).map(m=>m.name).join('; ');
+    const gSessions = state.groupSessions.filter(s=>s.groupId===g.id).sort((a,b)=>a.date.localeCompare(b.date));
+    const baseInfo = {
+      TipoRegistro: 'Grupal',
+      Nombre: g.name, Area: '', Nivel: '',
+      'Tipo de mentoria': '', Estado: '', Resultado: '',
+      'Estilo de aprendizaje': '', Objetivo: g.description || '',
+      Telefono: '', Correo: '', Pais: '', Progresion: '',
+      Integrantes: members
+    };
+    if(!gSessions.length){
+      rows.push({ ...baseInfo, Fecha: '', Enfoque: '', EstadoSesion: '', Tema: '', 'Que funciono': '', 'Que ajustar': '', 'Proximos pasos': '', Compromiso: '', CompromisoCumplido: '' });
+    }else{
+      gSessions.forEach(s=>{
+        rows.push({
+          ...baseInfo,
+          Fecha: s.date, Enfoque: (ENFOQUES[s.approach]||{}).label || s.approach,
+          EstadoSesion: s.status === 'draft' ? 'Borrador' : 'Final',
+          Tema: s.topic, 'Que funciono': s.whatWorked, 'Que ajustar': s.whatDidnt, 'Proximos pasos': s.nextSteps,
+          Compromiso: s.commitment || '', CompromisoCumplido: s.commitment ? (s.commitmentDone ? 'Sí' : 'No') : ''
+        });
+      });
+    }
+  });
+
+  return rows;
+}
+
+function exportCSV(){
+  const rows = buildExportRows();
+  if(!rows.length){ showToast('No hay datos para exportar todavia.'); return; }
+  const headers = Object.keys(rows[0]);
+  const csvEscape = (val)=>{
+    const str = String(val ?? '');
+    if(/[",\n]/.test(str)) return '"' + str.replace(/"/g,'""') + '"';
+    return str;
+  };
+  const lines = [headers.join(',')];
+  rows.forEach(r=> lines.push(headers.map(h=>csvEscape(r[h])).join(',')));
+  const csvContent = '\ufeff' + lines.join('\n');
+  const blob = new Blob([csvContent], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'bitacora-mentoria.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+  showToast('CSV exportado.');
+}
+
+function exportExcel(){
+  const rows = buildExportRows();
+  if(!rows.length){ showToast('No hay datos para exportar todavia.'); return; }
+  try{
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws['!cols'] = Object.keys(rows[0]).map(()=>({wch:20}));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Bitacora');
+    XLSX.writeFile(wb, 'bitacora-mentoria.xlsx');
+    showToast('Excel exportado.');
+  }catch(e){
+    showToast('No se pudo generar el Excel.');
+  }
+}
+
+loadData();
+</script>
+</body>
+</html>
