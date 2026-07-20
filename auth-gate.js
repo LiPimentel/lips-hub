@@ -11,7 +11,13 @@
     }
   }
 
+  function removeExistingOverlay() {
+    const existing = document.getElementById("aiapps-auth-gate");
+    if (existing) existing.remove();
+  }
+
   function buildOverlay() {
+    removeExistingOverlay();
     const host = document.createElement("div");
     host.id = "aiapps-auth-gate";
     host.style.cssText = "position:fixed;inset:0;z-index:2147483647;";
@@ -74,16 +80,39 @@
           min-height:1em;
           text-align:center;
         }
+        .ok{
+          margin-top:12px;
+          font-size:0.8rem;
+          color:#4E8B8B;
+          min-height:1em;
+          text-align:center;
+        }
+        .link-row{
+          text-align:center;
+          margin-top:14px;
+        }
+        .link-row a{
+          font-size:0.78rem;
+          color:#8B94A3;
+          cursor:pointer;
+          text-decoration:underline;
+        }
+        .pw-field{ display:block; }
+        .pw-field.hidden{ display:none; }
       </style>
       <div class="cover">
         <form class="card">
-          <h1>Iniciar sesión</h1>
+          <h1 class="title">Iniciar sesión</h1>
           <label for="aiapps-email">Correo</label>
           <input id="aiapps-email" type="email" autocomplete="username" required>
-          <label for="aiapps-password">Contraseña</label>
-          <input id="aiapps-password" type="password" autocomplete="current-password" required>
+          <div class="pw-field">
+            <label for="aiapps-password">Contraseña</label>
+            <input id="aiapps-password" type="password" autocomplete="current-password">
+          </div>
           <button type="submit">Entrar</button>
           <div class="error"></div>
+          <div class="ok"></div>
+          <div class="link-row"><a class="toggle-mode">¿Olvidaste tu contraseña?</a></div>
         </form>
       </div>
     `;
@@ -91,16 +120,61 @@
     document.body.appendChild(host);
 
     const form = shadow.querySelector("form");
+    const titleEl = shadow.querySelector(".title");
     const errorEl = shadow.querySelector(".error");
+    const okEl = shadow.querySelector(".ok");
     const button = shadow.querySelector("button");
+    const toggleModeLink = shadow.querySelector(".toggle-mode");
+    const pwField = shadow.querySelector(".pw-field");
+    const pwInput = shadow.getElementById("aiapps-password");
+    const emailInput = shadow.getElementById("aiapps-email");
+
+    let mode = "login";
+
+    function setMode(newMode) {
+      mode = newMode;
+      errorEl.textContent = "";
+      okEl.textContent = "";
+      if (mode === "login") {
+        titleEl.textContent = "Iniciar sesión";
+        pwField.classList.remove("hidden");
+        pwInput.setAttribute("required", "required");
+        button.textContent = "Entrar";
+        toggleModeLink.textContent = "¿Olvidaste tu contraseña?";
+      } else {
+        titleEl.textContent = "Recuperar contraseña";
+        pwField.classList.add("hidden");
+        pwInput.removeAttribute("required");
+        button.textContent = "Enviar enlace";
+        toggleModeLink.textContent = "Volver a iniciar sesión";
+      }
+    }
+
+    toggleModeLink.addEventListener("click", () => setMode(mode === "login" ? "recover" : "login"));
 
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
       errorEl.textContent = "";
+      okEl.textContent = "";
+      const email = emailInput.value.trim();
+
+      if (mode === "recover") {
+        button.disabled = true;
+        button.textContent = "Enviando...";
+        const { error } = await window.supabaseClient.auth.resetPasswordForEmail(email, { redirectTo: location.href });
+        button.disabled = false;
+        button.textContent = "Enviar enlace";
+        if (error) {
+          errorEl.textContent = error.message;
+          return;
+        }
+        okEl.textContent = "Revisa tu correo para continuar.";
+        return;
+      }
+
       button.disabled = true;
       button.textContent = "Entrando...";
-      const email = shadow.getElementById("aiapps-email").value.trim();
-      const password = shadow.getElementById("aiapps-password").value;
+      const password = pwInput.value;
       const { error } = await window.supabaseClient.auth.signInWithPassword({ email, password });
       if (error) {
         errorEl.textContent = "Correo o contraseña incorrectos.";
@@ -112,6 +186,81 @@
     });
 
     return host;
+  }
+
+  function buildSetNewPasswordOverlay() {
+    removeExistingOverlay();
+    const host = document.createElement("div");
+    host.id = "aiapps-auth-gate";
+    host.style.cssText = "position:fixed;inset:0;z-index:2147483647;";
+    const shadow = host.attachShadow({ mode: "open" });
+
+    shadow.innerHTML = `
+      <style>
+        .cover{
+          position:fixed; inset:0;
+          background:#131B23;
+          display:flex; align-items:center; justify-content:center;
+          font-family:system-ui,-apple-system,'Segoe UI',sans-serif;
+        }
+        .card{
+          width:min(320px, 90vw);
+          background:#EFEADC;
+          border-radius:6px;
+          padding:32px 28px;
+          box-shadow:0 20px 50px rgba(0,0,0,0.5);
+        }
+        h1{ font-size:1.1rem; margin:0 0 18px; color:#1B2430; text-align:center; }
+        label{ display:block; font-size:0.75rem; color:#3E4757; margin:14px 0 4px; }
+        input{
+          width:100%; box-sizing:border-box; padding:9px 10px;
+          border:1px solid #C9C2AC; border-radius:4px; font-size:0.95rem;
+          background:#fff; color:#1B2430;
+        }
+        button{
+          width:100%; margin-top:20px; padding:10px; border:none; border-radius:4px;
+          background:#B8863B; color:#fff; font-size:0.9rem; font-weight:600; cursor:pointer;
+        }
+        button:disabled{ opacity:0.6; cursor:default; }
+        .error{ margin-top:12px; font-size:0.8rem; color:#B8433B; min-height:1em; text-align:center; }
+      </style>
+      <div class="cover">
+        <form class="card">
+          <h1>Elige una contraseña nueva</h1>
+          <label for="aiapps-recovery-password">Nueva contraseña</label>
+          <input id="aiapps-recovery-password" type="password" autocomplete="new-password" minlength="6" required placeholder="mínimo 6 caracteres">
+          <button type="submit">Guardar</button>
+          <div class="error"></div>
+        </form>
+      </div>
+    `;
+
+    document.body.appendChild(host);
+
+    const form = shadow.querySelector("form");
+    const errorEl = shadow.querySelector(".error");
+    const button = shadow.querySelector("button");
+    const pwInput = shadow.getElementById("aiapps-recovery-password");
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      errorEl.textContent = "";
+      const newPassword = pwInput.value;
+      if (newPassword.length < 6) {
+        errorEl.textContent = "Mínimo 6 caracteres.";
+        return;
+      }
+      button.disabled = true;
+      button.textContent = "Guardando...";
+      const { error } = await window.supabaseClient.auth.updateUser({ password: newPassword });
+      if (error) {
+        errorEl.textContent = error.message;
+        button.disabled = false;
+        button.textContent = "Guardar";
+        return;
+      }
+      location.reload();
+    });
   }
 
   function buildAccountWidget() {
@@ -281,7 +430,17 @@
       buildConnectionErrorOverlay();
       return;
     }
+
+    let recoveryInProgress = false;
+    window.supabaseClient.auth.onAuthStateChange((event) => {
+      if (event === "PASSWORD_RECOVERY") {
+        recoveryInProgress = true;
+        buildSetNewPasswordOverlay();
+      }
+    });
+
     const { data: { session } } = await window.supabaseClient.auth.getSession();
+    if (recoveryInProgress) return;
     if (!session) {
       buildOverlay();
       return;
