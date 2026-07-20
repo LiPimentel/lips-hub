@@ -297,12 +297,15 @@
   .tag-socratico{background:var(--sage-light);color:#4A2E7A;}
   .tag-colaborativo{background:var(--slate-light);color:#3D2463;}
   .tag-draft{background:var(--rust-light);color:#7A3527;}
-  .entry-topic{font-size:14.5px;font-weight:500;margin:0 0 8px;}
-  .entry-detail{font-size:13px;color:var(--muted);line-height:1.55;margin:0 0 4px;}
+  .entry-topic{font-size:14.5px;font-weight:500;margin:0 0 8px;white-space:pre-wrap;word-break:break-word;}
+  .entry-topic.clamped{display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;}
+  .entry-detail{font-size:13px;color:var(--muted);line-height:1.55;margin:0 0 4px;white-space:pre-wrap;word-break:break-word;}
+  .entry-detail.clamped{display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;}
   .entry-detail b{color:var(--ink);font-weight:500;}
   .commit-row{display:flex;align-items:flex-start;gap:8px;font-size:13px;color:var(--muted);margin:6px 0;}
   .commit-row input{margin-top:2px;cursor:pointer;}
   .commit-row.done span{text-decoration:line-through;color:var(--muted);}
+  .commit-row span{white-space:pre-wrap;word-break:break-word;}
   .entry-footer{display:flex;justify-content:flex-end;gap:14px;margin-top:8px;}
 
   .empty-sessions{color:var(--muted);font-size:13px;padding:18px 0;}
@@ -586,6 +589,14 @@ function expandableField(label, text, fieldId){
   </div>`;
 }
 
+function clampedEntryField(text, fieldId, opts){
+  opts = opts || {};
+  const cls = opts.cls || 'entry-detail';
+  const isLong = text.length > 240;
+  const prefix = opts.label ? `<b>${esc(opts.label)}:</b> ` : '';
+  return `<p class="${cls}${isLong ? ' clamped' : ''}" id="${fieldId}">${prefix}${esc(text)}</p>${isLong ? `<button class="read-more-btn" data-target="${fieldId}">leer más</button>` : ''}`;
+}
+
 function sessionCount(menteeId){
   return state.sessions.filter(s=>s.menteeId===menteeId).length;
 }
@@ -788,10 +799,10 @@ function renderMentoriaView(body){
               <span class="tag ${ap.tagClass}">${ap.label}</span>
             </div>
           </div>
-          <p class="entry-topic">${esc(s.topic) || '(sin tema aún)'}</p>
-          ${s.whatWorked ? `<p class="entry-detail"><b>Qué funcionó:</b> ${esc(s.whatWorked)}</p>` : ''}
-          ${s.whatDidnt ? `<p class="entry-detail"><b>Qué ajustar:</b> ${esc(s.whatDidnt)}</p>` : ''}
-          ${s.nextSteps ? `<p class="entry-detail"><b>Próximos pasos:</b> ${esc(s.nextSteps)}</p>` : ''}
+          ${s.topic ? clampedEntryField(s.topic, `entry-topic-${s.id}`, {cls:'entry-topic'}) : '<p class="entry-topic">(sin tema aún)</p>'}
+          ${s.whatWorked ? clampedEntryField(s.whatWorked, `entry-ww-${s.id}`, {label:'Qué funcionó'}) : ''}
+          ${s.whatDidnt ? clampedEntryField(s.whatDidnt, `entry-wd-${s.id}`, {label:'Qué ajustar'}) : ''}
+          ${s.nextSteps ? clampedEntryField(s.nextSteps, `entry-ns-${s.id}`, {label:'Próximos pasos'}) : ''}
           ${s.commitment ? `<div class="commit-row ${s.commitmentDone ? 'done':''}"><input type="checkbox" data-commit-id="${s.id}" ${s.commitmentDone?'checked':''}><span><b>Compromiso:</b> ${esc(s.commitment)}</span></div>` : ''}
           <div class="entry-footer">
             ${isDraft ? `<button class="icon-btn" data-action="continue">continuar borrador</button>` : ''}
@@ -799,6 +810,13 @@ function renderMentoriaView(body){
           </div>
         </div>
       `;
+      entry.querySelectorAll('.read-more-btn').forEach(btn=>{
+        btn.onclick = ()=>{
+          const target = document.getElementById(btn.dataset.target);
+          const nowClamped = target.classList.toggle('clamped');
+          btn.textContent = nowClamped ? 'leer más' : 'leer menos';
+        };
+      });
       entry.querySelector('[data-action="delete"]').onclick = ()=> deleteSession(s.id);
       const contBtn = entry.querySelector('[data-action="continue"]');
       if(contBtn) contBtn.onclick = ()=>{ editingSessionId = s.id; modal='session'; render(); renderModal(); };
@@ -969,10 +987,10 @@ function renderGroupsView(body){
               <span class="tag ${ap.tagClass}">${ap.label}</span>
             </div>
           </div>
-          <p class="entry-topic">${esc(s.topic) || '(sin tema aún)'}</p>
-          ${s.whatWorked ? `<p class="entry-detail"><b>Qué funcionó:</b> ${esc(s.whatWorked)}</p>` : ''}
-          ${s.whatDidnt ? `<p class="entry-detail"><b>Qué ajustar:</b> ${esc(s.whatDidnt)}</p>` : ''}
-          ${s.nextSteps ? `<p class="entry-detail"><b>Próximos pasos:</b> ${esc(s.nextSteps)}</p>` : ''}
+          ${s.topic ? clampedEntryField(s.topic, `gentry-topic-${s.id}`, {cls:'entry-topic'}) : '<p class="entry-topic">(sin tema aún)</p>'}
+          ${s.whatWorked ? clampedEntryField(s.whatWorked, `gentry-ww-${s.id}`, {label:'Qué funcionó'}) : ''}
+          ${s.whatDidnt ? clampedEntryField(s.whatDidnt, `gentry-wd-${s.id}`, {label:'Qué ajustar'}) : ''}
+          ${s.nextSteps ? clampedEntryField(s.nextSteps, `gentry-ns-${s.id}`, {label:'Próximos pasos'}) : ''}
           ${s.commitment ? `<div class="commit-row ${s.commitmentDone ? 'done':''}"><input type="checkbox" data-gcommit-id="${s.id}" ${s.commitmentDone?'checked':''}><span><b>Compromiso:</b> ${esc(s.commitment)}</span></div>` : ''}
           <div class="entry-footer">
             ${isDraft ? `<button class="icon-btn" data-action="continue">continuar borrador</button>` : ''}
@@ -980,6 +998,13 @@ function renderGroupsView(body){
           </div>
         </div>
       `;
+      entry.querySelectorAll('.read-more-btn').forEach(btn=>{
+        btn.onclick = ()=>{
+          const target = document.getElementById(btn.dataset.target);
+          const nowClamped = target.classList.toggle('clamped');
+          btn.textContent = nowClamped ? 'leer más' : 'leer menos';
+        };
+      });
       entry.querySelector('[data-action="delete"]').onclick = ()=> deleteGroupSession(s.id);
       const contBtn = entry.querySelector('[data-action="continue"]');
       if(contBtn) contBtn.onclick = ()=>{ editingGroupSessionId = s.id; modal='groupSession'; render(); renderModal(); };
