@@ -965,7 +965,7 @@ function openEdit(id){
   document.getElementById('editCurrency').value=exp.currency;
   document.getElementById('editFrecuency').value=exp.frecuency;
   const sel=document.getElementById('editCategory');sel.innerHTML='';
-  appData.categories.forEach(c=>{sel.innerHTML+=`<option${c===exp.category?' selected':''}>${c}</option>`;});
+  appData.categories.forEach(c=>{sel.innerHTML+=`<option${c===exp.category?' selected':''}>${escHtml(c)}</option>`;});
   document.getElementById('editModal').classList.add('show');
 }
 function saveEdit(){
@@ -1103,7 +1103,7 @@ function render(){
   const catList=document.getElementById('categoriesList');
   catSel.innerHTML='';catList.innerHTML='';
   appData.categories.forEach(cat=>{
-    catSel.innerHTML+=`<option>${cat}</option>`;
+    catSel.innerHTML+=`<option>${escHtml(cat)}</option>`;
     catList.innerHTML+=`<span class="cat-tag">${escHtml(cat)}<button type="button" onclick="removeCategory('${escJs(cat)}')" title="Eliminar">×</button></span>`;
   });
 
@@ -1207,7 +1207,7 @@ function render(){
 
 /* ── UTILS ── */
 function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
-function escJs(s){return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'");}
+function escJs(s){return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;');}
 
 /* ── INIT ── */
 load().then(() => { cloudSyncReady = true; render(); });

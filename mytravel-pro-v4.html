@@ -1110,6 +1110,7 @@ async function buscarCiudad(q,tipo){
   },300);
 }
 function esc(s){return s.replace(/'/g,"\\'").replace(/"/g,'&quot;');}
+function escHtml(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
 function selectItem(tipo,city,country,lat,lon){
   const pre=tipo==='viaje'?'v-':'d-';
   const inp=document.getElementById(pre+'ciudad');
@@ -1146,7 +1147,7 @@ function calcDuracion(){
 function addEscalaField(val=''){
   const div=document.createElement('div');
   div.className='scale-row';
-  div.innerHTML=`<input type="text" class="f-ctrl v-escala-input" value="${val}" placeholder="Ciudad de escala…">
+  div.innerHTML=`<input type="text" class="f-ctrl v-escala-input" value="${escHtml(val)}" placeholder="Ciudad de escala…">
     <button class="btn-rm" onclick="this.parentElement.remove()">✕</button>`;
   document.getElementById('escalas-container').appendChild(div);
 }
@@ -1208,7 +1209,7 @@ async function borrarDeseo(idx){
   if(!await confirmDialog(`¿Eliminar ${d.ciudad}?`,'Se quitará del mapa.','🎯'))return;
   db.deseos.splice(idx,1);
   saveDB();actualizarMarcadores();refreshStats();renderDeseosList();
-  toast(`${d.ciudad} eliminado.`,'warn');
+  toast(`${escHtml(d.ciudad)} eliminado.`,'warn');
 }
 function renderDeseosList(){
   const list=document.getElementById('deseos-list');
@@ -1217,7 +1218,7 @@ function renderDeseosList(){
   empty.style.display='none';
   list.innerHTML=db.deseos.map((d,i)=>`
     <div class="deseo-row">
-      <div><span class="deseo-city">🎯 ${d.ciudad}</span><span class="deseo-country">${d.pais}</span></div>
+      <div><span class="deseo-city">🎯 ${escHtml(d.ciudad)}</span><span class="deseo-country">${escHtml(d.pais)}</span></div>
       <button class="btn-del" onclick="borrarDeseo(${i})">Eliminar</button>
     </div>`).join('');
 }
@@ -1245,9 +1246,9 @@ function filtrar(){
   tbody.innerHTML=filtered.map(v=>{
     const idx=db.viajes.indexOf(v);
     const d=dur(v);
-    const sc=v.escalas?.length?v.escalas.map(e=>`<span class="badge-scale">${e}</span>`).join(''):'<span style="font-size:11px;color:var(--muted)">Directo</span>';
+    const sc=v.escalas?.length?v.escalas.map(e=>`<span class="badge-scale">${escHtml(e)}</span>`).join(''):'<span style="font-size:11px;color:var(--muted)">Directo</span>';
     return `<tr>
-      <td><div class="td-city">${v.ciudad}</div><div class="td-country">📍 ${v.pais}</div></td>
+      <td><div class="td-city">${escHtml(v.ciudad)}</div><div class="td-country">📍 ${escHtml(v.pais)}</div></td>
       <td><div class="td-date">${fmt(v.ini)}<br>${fmt(v.fin)}</div></td>
       <td>${d&&d>0?`<span class="duration-pill">${d}d</span>`:''}</td>
       <td>${sc}</td>
@@ -1261,12 +1262,12 @@ function filtrar(){
   document.getElementById('trip-cards').innerHTML=filtered.map(v=>{
     const idx=db.viajes.indexOf(v);
     const d=dur(v);
-    const sc=v.escalas?.length?v.escalas.map(e=>`<span class="badge-scale">${e}</span>`).join(''):'<span style="font-size:11px;color:var(--muted)">Directo</span>';
+    const sc=v.escalas?.length?v.escalas.map(e=>`<span class="badge-scale">${escHtml(e)}</span>`).join(''):'<span style="font-size:11px;color:var(--muted)">Directo</span>';
     return `<div class="trip-card">
       <div class="tc-header">
         <div>
-          <div class="tc-city">${v.ciudad}</div>
-          <div class="tc-country">📍 ${v.pais}</div>
+          <div class="tc-city">${escHtml(v.ciudad)}</div>
+          <div class="tc-country">📍 ${escHtml(v.pais)}</div>
         </div>
         ${v.fav?'<span class="badge-fav">❤️ Fav</span>':'<span class="badge-reg">✈️ Regular</span>'}
       </div>
@@ -1277,7 +1278,7 @@ function filtrar(){
         <div><div class="tc-row-label">Duración</div><div class="tc-row-val">${d&&d>0?d+'d':'—'}</div></div>
       </div>
       ${v.escalas?.length?`<div class="tc-scales" style="margin-bottom:10px">${sc}</div>`:''}
-      ${v.notas?`<div style="font-size:12px;color:var(--muted);margin-bottom:10px">📝 ${v.notas}</div>`:''}
+      ${v.notas?`<div style="font-size:12px;color:var(--muted);margin-bottom:10px">📝 ${escHtml(v.notas)}</div>`:''}
       <div class="tc-footer"><button class="btn-del" onclick="borrarViaje(${idx})">Eliminar</button></div>
     </div>`;
   }).join('');
@@ -1288,7 +1289,7 @@ async function borrarViaje(index){
   if(!await confirmDialog(`¿Eliminar viaje a ${v.ciudad}?`,'Esta acción no se puede deshacer.'))return;
   db.viajes.splice(index,1);
   saveDB();filtrar();actualizarMarcadores();actualizarSemaforo();refreshStats();
-  toast(`Viaje a ${v.ciudad} eliminado.`,'warn');
+  toast(`Viaje a ${escHtml(v.ciudad)} eliminado.`,'warn');
 }
 
 /* ═══════════════ MAP MARKERS ═══════════════ */
@@ -1300,16 +1301,16 @@ function actualizarMarcadores(){
       ?`<div style="font-size:24px;filter:drop-shadow(0 2px 4px rgba(0,0,0,.3))">🚩❤️</div>`
       :`<div style="font-size:24px;filter:drop-shadow(0 2px 4px rgba(0,0,0,.28))">🚩</div>`;
     const d=v.ini&&v.fin?Math.round((new Date(v.fin)-new Date(v.ini))/864e5):null;
-    const popup=`<div class="popup-title">${v.ciudad}, ${v.pais}</div>
+    const popup=`<div class="popup-title">${escHtml(v.ciudad)}, ${escHtml(v.pais)}</div>
       <div class="popup-row">💰 <span>$${v.pres.toLocaleString()}</span></div>
       ${d&&d>0?`<div class="popup-row">⏱ <span>${d} días</span></div>`:''}
-      ${v.notas?`<div class="popup-row">📝 <span>${v.notas}</span></div>`:''}`;
+      ${v.notas?`<div class="popup-row">📝 <span>${escHtml(v.notas)}</span></div>`:''}`;
     markers.push(L.marker([v.lat,v.lon],{icon:L.divIcon({html,className:'',iconSize:[36,36],iconAnchor:[10,28]})})
       .addTo(map).bindPopup(popup));
   });
   db.deseos.forEach(d=>{
     markers.push(L.marker([d.lat,d.lon],{icon:L.divIcon({html:`<div style="font-size:24px;filter:drop-shadow(0 2px 4px rgba(0,0,0,.22))">🎯</div>`,className:'',iconSize:[32,32],iconAnchor:[16,16]})})
-      .addTo(map).bindPopup(`<div class="popup-title">Deseo: ${d.ciudad}</div><div class="popup-row">🌍 <span>${d.pais}</span></div>`));
+      .addTo(map).bindPopup(`<div class="popup-title">Deseo: ${escHtml(d.ciudad)}</div><div class="popup-row">🌍 <span>${escHtml(d.pais)}</span></div>`));
   });
   const nV=db.viajes.length,nD=db.deseos.length;
   document.getElementById('map-subtitle').textContent=
