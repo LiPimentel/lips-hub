@@ -156,6 +156,7 @@
 pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 
 const COLORS = ["c1","c2","c3","c4","c5","c6","c7","c8"];
+function escHtml(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
 let rows = [];
 const statusEl = document.getElementById('status');
 const tbody = document.getElementById('tbody');
@@ -280,11 +281,11 @@ function renderTable(){
   rows.forEach((r, idx)=>{
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td contenteditable="true" data-k="fase">${r.fase}</td>
+      <td contenteditable="true" data-k="fase">${escHtml(r.fase)}</td>
       <td contenteditable="true" data-k="ini">${r.ini ? fmtDate(r.ini) : ""}</td>
       <td contenteditable="true" data-k="fin">${r.fin ? fmtDate(r.fin) : ""}</td>
-      <td contenteditable="true" data-k="ent">${r.ent}</td>
-      <td contenteditable="true" data-k="dur">${r.dur}</td>
+      <td contenteditable="true" data-k="ent">${escHtml(r.ent)}</td>
+      <td contenteditable="true" data-k="dur">${escHtml(r.dur)}</td>
       <td class="rowactions"><span class="del" data-idx="${idx}">x</span></td>`;
     tbody.appendChild(tr);
   });
@@ -469,10 +470,10 @@ document.getElementById('generate').addEventListener('click', ()=>{
 
   function showDetail(r){
     const detail = document.getElementById('ganttDetail');
-    detail.innerHTML = `<strong>#${r.num} — ${r.fase}</strong><br>
-      ${r.ent || "(sin descripción)"}<br>
+    detail.innerHTML = `<strong>#${r.num} — ${escHtml(r.fase)}</strong><br>
+      ${escHtml(r.ent) || "(sin descripción)"}<br>
       <span style="color:var(--navy);">${fmtDate(r.ini)} – ${fmtDate(r.fin)}</span>
-      ${r.dur ? ` · ${r.dur} días` : ""}`;
+      ${r.dur ? ` · ${escHtml(r.dur)} días` : ""}`;
     detail.style.color = "var(--ink)";
   }
 
@@ -484,7 +485,7 @@ document.getElementById('generate').addEventListener('click', ()=>{
     const lbl = document.createElement('div');
     lbl.className = "lbl";
     lbl.title = r.ent || r.fase;
-    lbl.innerHTML = `<span class="n">#${r.num}</span><span>${r.ent || r.fase}</span>`;
+    lbl.innerHTML = `<span class="n">#${r.num}</span><span>${escHtml(r.ent || r.fase)}</span>`;
     lbl.addEventListener('click', ()=>showDetail(r));
     labelsEl.appendChild(lbl);
 
@@ -512,10 +513,10 @@ document.getElementById('generate').addEventListener('click', ()=>{
   });
 
   const legend = document.getElementById('legend');
-  legend.innerHTML = phases.map(p=>`<span><span class="sw" style="background:var(--${colorOf[p]});"></span>${p}</span>`).join("");
+  legend.innerHTML = phases.map(p=>`<span><span class="sw" style="background:var(--${colorOf[p]});"></span>${escHtml(p)}</span>`).join("");
 
   document.getElementById('ganttIndex').innerHTML = valid.map(r =>
-    `<strong>#${r.num}</strong> ${r.ent ? r.ent.slice(0,60)+(r.ent.length>60?"…":"") : "(sin descripción)"}`
+    `<strong>#${r.num}</strong> ${r.ent ? escHtml(r.ent.slice(0,60))+(r.ent.length>60?"…":"") : "(sin descripción)"}`
   ).join(" &nbsp;·&nbsp; ");
 
   document.getElementById('ganttPanel').style.display = "block";
