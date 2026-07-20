@@ -185,7 +185,7 @@
           position:absolute;
           width:2.3rem;
           height:2.3rem;
-          opacity:0.5;
+          opacity:0.24;
           transition:transform 0.35s ease, opacity 0.35s ease;
           pointer-events:auto;
         }
@@ -198,13 +198,13 @@
           width:100%;
           height:100%;
           fill:none;
-          stroke:rgba(255,255,255,0.85);
-          stroke-width:1.3;
+          stroke:rgba(255,255,255,0.75);
+          stroke-width:1.2;
           stroke-linecap:round;
           stroke-linejoin:round;
         }
         .deco:hover{
-          opacity:1;
+          opacity:0.8;
           transform:scale(1.35) rotate(-8deg);
         }
         @keyframes deco-float{
@@ -214,14 +214,18 @@
       </style>
       <div class="cover">
         ${(window.AIAPPS_LOGIN_DECORATIONS || []).map((iconName, i) => {
-          const cols = [4, 13, 22, 78, 87, 96];
-          const rows = [5, 15, 25, 75, 85, 95];
-          const positions = [];
-          rows.forEach(top => cols.forEach(left => positions.push(`top:${top}%; left:${left}%;`)));
+          const cols = [3, 12, 21, 79, 88, 97];
+          const rows = [4, 14, 24, 76, 86, 96];
+          const cells = [];
+          rows.forEach(top => cols.forEach(left => cells.push({ top, left })));
           const svgPath = ICONS[iconName];
           if (!svgPath) return '';
-          const pos = positions[i % positions.length];
-          const delay = (i % 6) * 0.7;
+          const cell = cells[i % cells.length];
+          const jitterTop = (Math.random() - 0.5) * 12;
+          const jitterLeft = (Math.random() - 0.5) * 8;
+          const size = 1.7 + Math.random() * 1.1;
+          const pos = `top:${(cell.top + jitterTop).toFixed(1)}%; left:${(cell.left + jitterLeft).toFixed(1)}%; width:${size.toFixed(2)}rem; height:${size.toFixed(2)}rem;`;
+          const delay = (i % 8) * 0.55;
           return `<span class="deco" style="${pos}"><span class="deco-float" style="animation-delay:${delay}s"><svg viewBox="0 0 24 24">${svgPath}</svg></span></span>`;
         }).join('')}
         <form class="card">
