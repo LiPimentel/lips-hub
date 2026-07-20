@@ -661,7 +661,6 @@ function renderMentoriaView(body){
       <div class="sidebar">
         <div class="search-wrap"><input id="search-input" type="text" placeholder="Buscar por nombre..." value="${esc(searchQuery)}"></div>
         <p class="brandsub">${state.mentees.length} mentee${state.mentees.length===1?'':'s'} registrados</p>
-        <div id="grouped-list"></div>
         <button class="btn-add-mentee" id="btn-new-mentee">+ nuevo mentee</button>
         <div class="export-block">
           <button class="btn-export" id="btn-export-csv">Exportar CSV</button>
@@ -673,6 +672,7 @@ function renderMentoriaView(body){
           <input type="file" id="import-file-input" accept="application/json" style="display:none;">
         </div>
         <p style="font-size:10.5px;color:var(--muted);margin:10px 2px 0;">${hasClaudeStorage ? 'Guardando en Claude.ai' : 'Guardando en este navegador'}</p>
+        <div id="grouped-list"></div>
       </div>
       <div class="main" id="main"></div>
     </div>
