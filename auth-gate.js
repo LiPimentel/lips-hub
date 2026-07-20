@@ -130,8 +130,29 @@
         }
         .pw-field{ display:block; }
         .pw-field.hidden{ display:none; }
+        .deco{
+          position:absolute;
+          font-size:2.4rem;
+          opacity:0.35;
+          transition:transform 0.35s ease, opacity 0.35s ease;
+          pointer-events:auto;
+          user-select:none;
+          filter:drop-shadow(0 4px 10px rgba(0,0,0,0.4));
+        }
+        .deco:hover{
+          opacity:0.9;
+          transform:scale(1.35) rotate(-8deg);
+        }
       </style>
       <div class="cover">
+        ${(window.AIAPPS_LOGIN_DECORATIONS || []).map((emoji, i) => {
+          const positions = [
+            "top:10%; left:8%;", "top:16%; right:10%;", "bottom:14%; left:10%;",
+            "bottom:10%; right:8%;", "top:46%; left:4%;", "top:44%; right:4%;",
+            "top:6%; left:46%;", "bottom:6%; left:48%;"
+          ];
+          return `<span class="deco" style="${positions[i % positions.length]}">${emoji}</span>`;
+        }).join('')}
         <form class="card">
           ${window.AIAPPS_APP_NAME ? `
           <div class="brand">

@@ -182,7 +182,7 @@
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3E%3Crect width='30' height='30' rx='8' fill='%2323281F'/%3E%3Ctext x='15' y='22' font-size='16' text-anchor='middle'%3E%F0%9F%93%96%3C/text%3E%3C/svg%3E">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-<script>window.AIAPPS_APP_ID = 'mentor'; window.AIAPPS_SHOW_ACCOUNT_WIDGET = true; window.AIAPPS_APP_NAME = 'Bitácora del Mentor'; window.AIAPPS_APP_EMOJI = '📖'; window.AIAPPS_APP_TAGLINE = 'Registro de mentorías'; window.AIAPPS_APP_ACCENT = '#4E8B8B';</script>
+<script>window.AIAPPS_APP_ID = 'mentor'; window.AIAPPS_SHOW_ACCOUNT_WIDGET = true; window.AIAPPS_APP_NAME = 'Bitácora del Mentor'; window.AIAPPS_APP_EMOJI = '📖'; window.AIAPPS_APP_TAGLINE = 'Registro de mentorías'; window.AIAPPS_APP_ACCENT = '#4E8B8B'; window.AIAPPS_LOGIN_DECORATIONS = ['💬','🎓','📖','🤝','💡','🌱','📈','✍️'];</script>
 <script src="./supabase-client-app.js"></script>
 <script src="./auth-gate.js"></script>
 <style>
@@ -321,6 +321,29 @@
   .modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:6px;flex-wrap:wrap;}
   .btn-ghost{background:none;border:1px solid var(--line);padding:9px 16px;border-radius:8px;font-size:13px;cursor:pointer;font-family:'Inter',sans-serif;}
 
+  .templates-wrap{padding:24px 32px;}
+  .templates-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;}
+  .template-card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px;}
+  .template-card-name{font-family:'Fraunces',serif;font-weight:600;font-size:15px;margin:0 0 4px;}
+  .template-card-count{font-size:12px;color:var(--muted);margin:0 0 10px;}
+  .template-card-actions{display:flex;gap:10px;}
+
+  .tpl-item-row{display:flex;gap:8px;align-items:center;margin-bottom:8px;}
+  .tpl-item-row select{flex:0 0 auto;width:auto;padding:8px;border:1px solid var(--line);border-radius:7px;font-size:12.5px;font-family:'Inter',sans-serif;background:var(--bg);color:var(--ink);}
+  .tpl-item-row input{flex:1;padding:8px 10px;border:1px solid var(--line);border-radius:7px;font-size:13px;font-family:'Inter',sans-serif;background:var(--bg);color:var(--ink);}
+  .tpl-item-remove{background:none;border:none;color:var(--rust);cursor:pointer;font-size:14px;padding:4px 6px;flex:0 0 auto;}
+
+  .checklist-box{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin:10px 0;}
+  .checklist-box-title{font-size:11.5px;text-transform:uppercase;letter-spacing:0.04em;color:var(--muted);margin:0 0 8px;}
+  .checklist-row{display:flex;align-items:flex-start;gap:8px;font-size:13px;color:var(--muted);margin:6px 0;}
+  .checklist-row input[type="checkbox"]{margin-top:2px;cursor:pointer;}
+  .checklist-row.done{text-decoration:line-through;color:var(--muted);}
+  .checklist-q label{display:block;font-size:12.5px;color:var(--ink);margin-bottom:4px;font-weight:500;}
+  .checklist-q input{width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:6px;font-size:13px;font-family:'Inter',sans-serif;background:var(--surface);color:var(--ink);}
+  .checklist-q{margin:8px 0;}
+
+  .session-number-tag{background:var(--sage-light);color:#4A2E7A;font-size:11px;padding:2px 8px;border-radius:6px;font-weight:600;}
+
   .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--surface);padding:10px 18px;border-radius:8px;font-size:13px;z-index:60;display:flex;align-items:center;gap:6px;}
   .loading{padding:60px;text-align:center;color:var(--muted);font-size:13px;}
 
@@ -431,6 +454,10 @@ let editingGroupId = null;
 let editingGroupSessionId = null;
 let groupSearchQuery = '';
 
+let editingTemplateId = null;
+let modalChecklist = [];
+let modalTemplateItems = [];
+
 const STORAGE_KEY = 'ledger-data';
 const SUPA_APP_ID = 'bitacora-mentor';
 const hasClaudeStorage = typeof window.storage !== 'undefined' && window.storage !== null;
@@ -516,6 +543,7 @@ async function loadData(){
   if(!state.sessions) state.sessions = [];
   if(!state.groups) state.groups = [];
   if(!state.groupSessions) state.groupSessions = [];
+  if(!state.templates) state.templates = [];
   if(state.mentees.length && !selectedMenteeId) selectedMenteeId = state.mentees[0].id;
   if(state.groups.length && !selectedGroupId) selectedGroupId = state.groups[0].id;
   cloudSyncReady = true;
@@ -597,6 +625,24 @@ function clampedEntryField(text, fieldId, opts){
   return `<p class="${cls}${isLong ? ' clamped' : ''}" id="${fieldId}">${prefix}${esc(text)}</p>${isLong ? `<button class="read-more-btn" data-target="${fieldId}">leer más</button>` : ''}`;
 }
 
+function renderChecklistReadonly(checklist){
+  if(!checklist || !checklist.length) return '';
+  return `<div class="checklist-box">
+    <p class="checklist-box-title">Checklist de la sesión</p>
+    ${checklist.map(item=> item.type==='checkbox' ? `
+      <div class="checklist-row${item.checked?' done':''}">
+        <input type="checkbox" ${item.checked?'checked':''} disabled>
+        <span>${esc(item.text)}</span>
+      </div>
+    ` : `
+      <div class="checklist-q">
+        <label>${esc(item.text)}</label>
+        <p style="margin:0;font-size:13px;color:${item.answer ? 'var(--ink)' : 'var(--muted)'};">${esc(item.answer) || '(sin respuesta)'}</p>
+      </div>
+    `).join('')}
+  </div>`;
+}
+
 function sessionCount(menteeId){
   return state.sessions.filter(s=>s.menteeId===menteeId).length;
 }
@@ -644,6 +690,7 @@ function render(){
         <div class="tabs">
           <button class="tab-btn" data-tab="mentoria">Mentoría</button>
           <button class="tab-btn" data-tab="grupos">Grupos</button>
+          <button class="tab-btn" data-tab="plantillas">Plantillas</button>
           <button class="tab-btn" data-tab="database">Base de datos</button>
           <button class="tab-btn" data-tab="reportes">Reportes</button>
         </div>
@@ -659,6 +706,7 @@ function render(){
   const body = document.getElementById('app-body');
   if(currentTab === 'mentoria') renderMentoriaView(body);
   else if(currentTab === 'grupos') renderGroupsView(body);
+  else if(currentTab === 'plantillas') renderTemplatesView(body);
   else if(currentTab === 'database') renderDatabaseView(body);
   else if(currentTab === 'reportes') renderReportsView(body);
 }
@@ -748,7 +796,7 @@ function renderMentoriaView(body){
     </div>
 
     <div class="section-head">
-      <p class="section-title">Historial de sesiones</p>
+      <p class="section-title">Historial de sesiones ${sessions.length ? `(${sessions.length})` : ''}</p>
       <button class="btn-primary" id="btn-new-session">+ registrar sesión</button>
     </div>
     <div id="timeline"></div>
@@ -784,6 +832,8 @@ function renderMentoriaView(body){
     timeline.innerHTML = `<p class="empty-sessions">Aún no hay sesiones registradas para ${esc(mentee.name)}.</p>`;
   }else{
     timeline.innerHTML = '';
+    const sessionNumbers = {};
+    [...sessions].sort((a,b)=>a.date.localeCompare(b.date)).forEach((s,i)=>{ sessionNumbers[s.id] = i+1; });
     sessions.forEach(s=>{
       const ap = ENFOQUES[s.approach] || ENFOQUES.directivo;
       const isDraft = s.status === 'draft';
@@ -795,6 +845,7 @@ function renderMentoriaView(body){
           <div class="entry-top">
             <span class="entry-date">${fmtDate(s.date)}</span>
             <div class="entry-tags">
+              <span class="session-number-tag">Sesión #${sessionNumbers[s.id]}</span>
               ${isDraft ? '<span class="tag tag-draft">Borrador</span>' : ''}
               <span class="tag ${ap.tagClass}">${ap.label}</span>
             </div>
@@ -804,6 +855,7 @@ function renderMentoriaView(body){
           ${s.whatDidnt ? clampedEntryField(s.whatDidnt, `entry-wd-${s.id}`, {label:'Qué ajustar'}) : ''}
           ${s.nextSteps ? clampedEntryField(s.nextSteps, `entry-ns-${s.id}`, {label:'Próximos pasos'}) : ''}
           ${s.commitment ? `<div class="commit-row ${s.commitmentDone ? 'done':''}"><input type="checkbox" data-commit-id="${s.id}" ${s.commitmentDone?'checked':''}><span><b>Compromiso:</b> ${esc(s.commitment)}</span></div>` : ''}
+          ${renderChecklistReadonly(s.checklist)}
           <div class="entry-footer">
             ${isDraft ? `<button class="icon-btn" data-action="continue">continuar borrador</button>` : ''}
             <button class="icon-btn" data-action="delete">eliminar</button>
@@ -1202,6 +1254,51 @@ function renderDbTable(){
   }
 }
 
+function renderTemplatesView(body){
+  body.innerHTML = `
+    <div class="templates-wrap">
+      <div class="section-head">
+        <p class="section-title">Plantillas de preguntas</p>
+        <button class="btn-primary" id="btn-new-template">+ nueva plantilla</button>
+      </div>
+      <p style="font-size:13px;color:var(--muted);margin:0 0 18px;max-width:640px;">
+        Crea listas reutilizables de preguntas o cosas clave a validar (ej. "Checklist primera sesión").
+        Al registrar una sesión, puedes aplicar una plantilla y llenar las respuestas para esa sesión específica.
+      </p>
+      <div id="templates-list" class="templates-grid"></div>
+    </div>
+  `;
+  document.getElementById('btn-new-template').onclick = ()=>{ editingTemplateId=null; modal='template'; render(); renderModal(); };
+
+  const list = document.getElementById('templates-list');
+  if(!state.templates.length){
+    list.innerHTML = `<p class="empty-sessions">Aún no tienes plantillas. Crea la primera para reutilizarla con cualquier mentee.</p>`;
+  }else{
+    list.innerHTML = state.templates.map(t=>`
+      <div class="template-card" data-id="${t.id}">
+        <p class="template-card-name">${esc(t.name)}</p>
+        <p class="template-card-count">${t.items.length} item${t.items.length===1?'':'s'}</p>
+        <div class="template-card-actions">
+          <button class="icon-btn" data-action="edit">editar</button>
+          <button class="icon-btn" data-action="delete">eliminar</button>
+        </div>
+      </div>
+    `).join('');
+    list.querySelectorAll('.template-card').forEach(card=>{
+      const id = card.dataset.id;
+      card.querySelector('[data-action="edit"]').onclick = ()=>{ editingTemplateId=id; modal='template'; render(); renderModal(); };
+      card.querySelector('[data-action="delete"]').onclick = ()=>{
+        askConfirm('¿Eliminar esta plantilla? Las sesiones que ya la usaron conservan su checklist.', async ()=>{
+          state.templates = state.templates.filter(x=>x.id!==id);
+          await saveData();
+          render();
+        });
+      };
+    });
+  }
+  if(modal) renderModal();
+}
+
 function renderReportsView(body){
   const totalPersonas = state.mentees.length;
   const totalSesionesIndividuales = state.sessions.length;
@@ -1329,7 +1426,7 @@ function renderModal(){
 
   const overlay = document.createElement('div');
   overlay.className = 'overlay';
-  overlay.onclick = (e)=>{ if(e.target === overlay){ modal=null; editingSessionId=null; editingMenteeId=null; editingGroupId=null; editingGroupSessionId=null; confirmContext=null; renderModal(); } };
+  overlay.onclick = (e)=>{ if(e.target === overlay){ modal=null; editingSessionId=null; editingMenteeId=null; editingGroupId=null; editingGroupSessionId=null; editingTemplateId=null; confirmContext=null; renderModal(); } };
 
   if(modal === 'confirm' && confirmContext){
     overlay.innerHTML = `
@@ -1591,9 +1688,85 @@ function renderModal(){
     };
   }
 
+  if(modal === 'template'){
+    const existingTemplate = editingTemplateId ? state.templates.find(t=>t.id===editingTemplateId) : null;
+    modalTemplateItems = existingTemplate
+      ? existingTemplate.items.map(i=>({...i}))
+      : [{id: uid(), type:'checkbox', text:''}];
+
+    overlay.innerHTML = `
+      <div class="modal" style="max-width:520px;">
+        <h3>${existingTemplate ? 'Editar plantilla' : 'Nueva plantilla'}</h3>
+        <div class="field"><label>Nombre de la plantilla</label><input id="tpl-name" placeholder="Ej: Checklist primera sesión" value="${existingTemplate ? esc(existingTemplate.name) : ''}"></div>
+        <div class="field">
+          <label>Preguntas / items</label>
+          <div id="tpl-items-list"></div>
+          <button type="button" class="btn-ghost" id="btn-add-item" style="margin-top:8px;">+ agregar item</button>
+        </div>
+        <div class="modal-actions">
+          <button class="btn-ghost" id="btn-cancel">Cancelar</button>
+          <button class="btn-primary" id="btn-save-template">Guardar plantilla</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    document.getElementById('btn-cancel').onclick = ()=>{ modal=null; editingTemplateId=null; renderModal(); };
+
+    function renderTplItemsList(){
+      const wrap = document.getElementById('tpl-items-list');
+      wrap.innerHTML = modalTemplateItems.map((item, i)=>`
+        <div class="tpl-item-row" data-idx="${i}">
+          <select class="tpl-item-type">
+            <option value="checkbox" ${item.type==='checkbox'?'selected':''}>Casilla (sin respuesta)</option>
+            <option value="question" ${item.type==='question'?'selected':''}>Pregunta con respuesta</option>
+          </select>
+          <input class="tpl-item-text" placeholder="Texto del item" value="${esc(item.text)}">
+          <button type="button" class="tpl-item-remove" title="Quitar item">✕</button>
+        </div>
+      `).join('');
+      wrap.querySelectorAll('.tpl-item-row').forEach(row=>{
+        const i = +row.dataset.idx;
+        row.querySelector('.tpl-item-type').onchange = (e)=>{ modalTemplateItems[i].type = e.target.value; };
+        row.querySelector('.tpl-item-text').oninput = (e)=>{ modalTemplateItems[i].text = e.target.value; };
+        row.querySelector('.tpl-item-remove').onclick = ()=>{
+          modalTemplateItems.splice(i,1);
+          if(!modalTemplateItems.length) modalTemplateItems.push({id: uid(), type:'checkbox', text:''});
+          renderTplItemsList();
+        };
+      });
+    }
+    renderTplItemsList();
+
+    document.getElementById('btn-add-item').onclick = ()=>{
+      modalTemplateItems.push({id: uid(), type:'checkbox', text:''});
+      renderTplItemsList();
+    };
+
+    document.getElementById('btn-save-template').onclick = async ()=>{
+      const name = document.getElementById('tpl-name').value.trim();
+      const items = modalTemplateItems.filter(i=>i.text.trim()).map(i=>({id:i.id, type:i.type, text:i.text.trim()}));
+      if(!name){ showToast('Ponle un nombre a la plantilla.'); return; }
+      if(!items.length){ showToast('Agrega al menos un item con texto.'); return; }
+      if(existingTemplate){
+        const idx = state.templates.findIndex(t=>t.id===existingTemplate.id);
+        state.templates[idx] = { id: existingTemplate.id, name, items };
+      }else{
+        state.templates.push({ id: uid(), name, items });
+      }
+      modal = null; editingTemplateId = null;
+      await saveData();
+      render();
+      showToast(existingTemplate ? 'Plantilla actualizada.' : 'Plantilla creada.');
+    };
+    return;
+  }
+
   if(modal === 'session'){
     const today = new Date().toISOString().slice(0,10);
     const existingSession = editingSessionId ? state.sessions.find(s=>s.id===editingSessionId) : null;
+    modalChecklist = existingSession && existingSession.checklist ? existingSession.checklist.map(i=>({...i})) : [];
+    let sessionTemplateId = existingSession ? (existingSession.templateId || '') : '';
+
     overlay.innerHTML = `
       <div class="modal">
         <h3>${existingSession ? 'Continuar sesión' : 'Registrar sesión'}</h3>
@@ -1610,6 +1783,13 @@ function renderModal(){
         <div class="field"><label>Qué ajustar la próxima vez</label><textarea id="s-didnt" placeholder="Opcional">${existingSession ? esc(existingSession.whatDidnt) : ''}</textarea></div>
         <div class="field"><label>Próximos pasos</label><textarea id="s-next" placeholder="Opcional">${existingSession ? esc(existingSession.nextSteps) : ''}</textarea></div>
         <div class="field"><label>Compromiso / acción pendiente <span style="color:var(--muted);">(opcional, marcable como cumplido después)</span></label><input id="s-commitment" placeholder="Ej: enviar CV actualizado" value="${existingSession ? esc(existingSession.commitment) : ''}"></div>
+        <div class="field"><label>Plantilla de preguntas clave <span style="color:var(--muted);">(opcional)</span></label>
+          <select id="s-template">
+            <option value="">Sin plantilla</option>
+            ${state.templates.map(t=>`<option value="${t.id}" ${sessionTemplateId===t.id?'selected':''}>${esc(t.name)}</option>`).join('')}
+          </select>
+          <div id="s-checklist"></div>
+        </div>
         <div class="modal-actions">
           <button class="btn-ghost" id="btn-cancel">Cancelar</button>
           <button class="btn-secondary" id="btn-draft">Guardar como borrador</button>
@@ -1623,6 +1803,41 @@ function renderModal(){
     }
     document.getElementById('btn-cancel').onclick = ()=>{ modal=null; editingSessionId=null; renderModal(); };
 
+    function renderSessionChecklist(){
+      const box = document.getElementById('s-checklist');
+      if(!modalChecklist.length){ box.innerHTML = ''; return; }
+      box.innerHTML = `<div class="checklist-box">
+        ${modalChecklist.map((item, i)=> item.type === 'checkbox' ? `
+          <div class="checklist-row">
+            <input type="checkbox" data-idx="${i}" ${item.checked?'checked':''}>
+            <span>${esc(item.text)}</span>
+          </div>
+        ` : `
+          <div class="checklist-q">
+            <label>${esc(item.text)}</label>
+            <input data-idx="${i}" value="${esc(item.answer||'')}" placeholder="Respuesta">
+          </div>
+        `).join('')}
+      </div>`;
+      box.querySelectorAll('input[type="checkbox"]').forEach(cb=>{
+        cb.onchange = (e)=>{ modalChecklist[+cb.dataset.idx].checked = e.target.checked; };
+      });
+      box.querySelectorAll('.checklist-q input').forEach(inp=>{
+        inp.oninput = (e)=>{ modalChecklist[+inp.dataset.idx].answer = e.target.value; };
+      });
+    }
+    renderSessionChecklist();
+
+    document.getElementById('s-template').onchange = (e)=>{
+      sessionTemplateId = e.target.value;
+      if(!sessionTemplateId){ modalChecklist = []; }
+      else{
+        const tpl = state.templates.find(t=>t.id===sessionTemplateId);
+        modalChecklist = tpl ? tpl.items.map(i=>({itemId:i.id, type:i.type, text:i.text, checked:false, answer:''})) : [];
+      }
+      renderSessionChecklist();
+    };
+
     const collectSession = (status)=>({
       id: existingSession ? existingSession.id : uid(),
       menteeId: selectedMenteeId,
@@ -1634,6 +1849,8 @@ function renderModal(){
       nextSteps: document.getElementById('s-next').value.trim(),
       commitment: document.getElementById('s-commitment').value.trim(),
       commitmentDone: existingSession ? !!existingSession.commitmentDone : false,
+      templateId: sessionTemplateId || null,
+      checklist: modalChecklist,
       status
     });
 
@@ -1736,6 +1953,7 @@ function importBackup(file){
       if(!state.sessions) state.sessions = [];
       if(!state.groups) state.groups = [];
       if(!state.groupSessions) state.groupSessions = [];
+      if(!state.templates) state.templates = [];
       selectedMenteeId = state.mentees[0]?.id || null;
       selectedGroupId = state.groups[0]?.id || null;
       await saveData();
