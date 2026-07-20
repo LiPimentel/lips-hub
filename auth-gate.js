@@ -61,8 +61,8 @@
         .cover{
           position:fixed; inset:0;
           background:
-            radial-gradient(500px circle at var(--mx, 50%) var(--my, 50%), rgba(184,134,59,0.16), transparent 45%),
-            #131B23;
+            radial-gradient(500px circle at var(--mx, 50%) var(--my, 50%), ${window.AIAPPS_APP_GLOW || 'rgba(184,134,59,0.16)'}, transparent 45%),
+            ${window.AIAPPS_APP_BG || '#131B23'};
           display:flex; align-items:center; justify-content:center;
           font-family:system-ui,-apple-system,'Segoe UI',sans-serif;
         }
@@ -183,11 +183,16 @@
         .pw-field.hidden{ display:none; }
         .deco{
           position:absolute;
-          width:2.6rem;
-          height:2.6rem;
+          width:2.3rem;
+          height:2.3rem;
           opacity:0.5;
           transition:transform 0.35s ease, opacity 0.35s ease;
           pointer-events:auto;
+        }
+        .deco-float{
+          width:100%;
+          height:100%;
+          animation:deco-float 5s ease-in-out infinite;
         }
         .deco svg{
           width:100%;
@@ -202,18 +207,22 @@
           opacity:1;
           transform:scale(1.35) rotate(-8deg);
         }
+        @keyframes deco-float{
+          0%, 100% { transform:translateY(0) rotate(0deg); }
+          50% { transform:translateY(-9px) rotate(5deg); }
+        }
       </style>
       <div class="cover">
         ${(window.AIAPPS_LOGIN_DECORATIONS || []).map((iconName, i) => {
-          const positions = [
-            "top:6%; left:6%;", "top:6%; left:30%;", "top:6%; right:30%;", "top:6%; right:6%;",
-            "top:35%; left:4%;", "top:35%; right:4%;", "bottom:35%; left:4%;", "bottom:35%; right:4%;",
-            "bottom:6%; left:6%;", "bottom:6%; left:30%;", "bottom:6%; right:30%;", "bottom:6%; right:6%;",
-            "top:20%; left:17%;", "top:20%; right:17%;", "bottom:20%; left:17%;", "bottom:20%; right:17%;"
-          ];
+          const cols = [4, 13, 22, 78, 87, 96];
+          const rows = [5, 15, 25, 75, 85, 95];
+          const positions = [];
+          rows.forEach(top => cols.forEach(left => positions.push(`top:${top}%; left:${left}%;`)));
           const svgPath = ICONS[iconName];
           if (!svgPath) return '';
-          return `<span class="deco" style="${positions[i % positions.length]}"><svg viewBox="0 0 24 24">${svgPath}</svg></span>`;
+          const pos = positions[i % positions.length];
+          const delay = (i % 6) * 0.7;
+          return `<span class="deco" style="${pos}"><span class="deco-float" style="animation-delay:${delay}s"><svg viewBox="0 0 24 24">${svgPath}</svg></span></span>`;
         }).join('')}
         <form class="card">
           ${window.AIAPPS_APP_NAME ? `
