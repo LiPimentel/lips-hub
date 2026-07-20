@@ -44,6 +44,24 @@
           color:#1B2430;
           text-align:center;
         }
+        .brand{
+          text-align:center;
+          margin-bottom:18px;
+        }
+        .brand-mark{
+          font-family:Georgia,'Times New Roman',serif;
+          font-size:1.5rem;
+          font-weight:600;
+          letter-spacing:-0.02em;
+          color:#1B2430;
+        }
+        .brand-tagline{
+          font-size:0.68rem;
+          letter-spacing:0.08em;
+          text-transform:uppercase;
+          color:#8B94A3;
+          margin-top:4px;
+        }
         label{
           display:block;
           font-size:0.75rem;
@@ -102,6 +120,12 @@
       </style>
       <div class="cover">
         <form class="card">
+          ${window.AIAPPS_APP_NAME ? `
+          <div class="brand">
+            <div class="brand-mark">${window.AIAPPS_APP_EMOJI || ''} <span style="color:${window.AIAPPS_APP_ACCENT || '#B8863B'}">${window.AIAPPS_APP_NAME}</span></div>
+            ${window.AIAPPS_APP_TAGLINE ? `<p class="brand-tagline">${window.AIAPPS_APP_TAGLINE}</p>` : ''}
+          </div>
+          ` : ''}
           <h1 class="title">Iniciar sesión</h1>
           <label for="aiapps-email">Correo</label>
           <input id="aiapps-email" type="email" autocomplete="username" required>
