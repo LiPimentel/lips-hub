@@ -5,7 +5,7 @@
 /* ===== AI APPs · Folder Bridge (guardado en carpeta local) ===== */
 (function(){
   const APP_ID = "lpbag-presupuesto";
-  const SYNC_KEYS = ["LPBag_auth", "LPBag_db"];
+  const SYNC_KEYS = ["LPBag_db"];
   const DB_NAME = "aiapps-folder-bridge";
   const STORE = "handles";
 
@@ -180,7 +180,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>LP-Bag — Presupuesto Inteligente</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3E%3Crect width='30' height='30' rx='6' fill='%23E7E1CF'/%3E%3Ccircle cx='15' cy='15' r='11' stroke='%231B2430' stroke-width='1.6'/%3E%3Cpath d='M15 9V21' stroke='%23B85C4E' stroke-width='1.6' stroke-linecap='round'/%3E%3Cpath d='M18.5 11.5C18.5 10.1 16.9 9.5 15 9.5C13.1 9.5 11.5 10.2 11.5 11.6C11.5 14.5 18.5 13 18.5 16C18.5 17.4 16.9 18.2 15 18.2C13.1 18.2 11.5 17.5 11.5 16.1' stroke='%23B85C4E' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E">
 <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,300&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<script>window.AIAPPS_APP_ID = 'lpbag'; window.AIAPPS_SHOW_ACCOUNT_WIDGET = true;</script>
+<script src="./supabase-client-app.js"></script>
+<script src="./auth-gate.js"></script>
 <style>
 /* ── TOKENS ── */
 :root{
@@ -209,58 +214,9 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 #root{position:relative;z-index:1;}
 
 /* ═══════════════════════════════════════
-   LOGIN
-═══════════════════════════════════════ */
-#loginScreen{
-  position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
-  background:var(--bg);z-index:100;padding:16px;
-}
-#loginScreen::before{
-  content:'';position:absolute;inset:0;pointer-events:none;
-  background:radial-gradient(ellipse 70% 60% at 50% 40%,rgba(124,58,237,.2) 0%,transparent 70%);
-}
-.login-card{
-  position:relative;background:var(--surface);border:1px solid var(--border2);
-  border-radius:22px;padding:clamp(28px,6vw,48px) clamp(20px,5vw,44px);
-  width:100%;max-width:400px;
-  box-shadow:0 0 80px rgba(124,58,237,.18),0 30px 60px rgba(0,0,0,.45);
-}
-.login-card::before{
-  content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);
-  width:55%;height:2px;
-  background:linear-gradient(90deg,transparent,var(--accent2),transparent);border-radius:100px;
-}
-.login-logo{text-align:center;margin-bottom:28px;}
-.login-logo .mark{font-family:'DM Serif Display',serif;font-size:clamp(28px,7vw,38px);color:var(--text);letter-spacing:-1px;}
-.login-logo .mark span{color:var(--accent2);}
-.login-logo p{font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-top:5px;font-weight:500;}
-.login-alert{display:none;background:var(--rbg);border:1px solid rgba(244,63,94,.3);color:var(--red);
-  font-size:12px;font-weight:500;padding:10px 14px;border-radius:var(--rs);margin-bottom:14px;}
-.login-alert.show{display:block;}
-.field{margin-bottom:14px;}
-.field label{display:block;font-size:10px;font-weight:700;color:var(--text3);letter-spacing:1.2px;text-transform:uppercase;margin-bottom:6px;}
-.field input{
-  width:100%;background:var(--bg);border:1px solid var(--border2);border-radius:var(--rs);
-  color:var(--text);font-size:15px;padding:12px 15px;outline:none;
-  transition:border-color .2s,box-shadow .2s;-webkit-appearance:none;
-}
-.field input::placeholder{color:var(--text3);}
-.field input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--glow);}
-.btn-primary{
-  width:100%;background:linear-gradient(135deg,var(--accent),var(--accent2));
-  border:none;border-radius:var(--rs);color:#fff;font-size:15px;font-weight:600;
-  padding:14px;transition:opacity .2s,transform .1s;margin-top:8px;letter-spacing:.3px;
-  min-height:48px;/* touch target */
-}
-.btn-primary:hover{opacity:.9;}
-.btn-primary:active{transform:scale(.98);}
-.login-hint{text-align:center;margin-top:18px;font-size:11px;color:var(--text3);}
-.login-hint code{background:var(--surface2);color:var(--accent3);padding:2px 7px;border-radius:4px;}
-
-/* ═══════════════════════════════════════
    APP SHELL
 ═══════════════════════════════════════ */
-#appScreen{display:none;min-height:100vh;}
+#appScreen{display:block;min-height:100vh;}
 
 /* ── NAVBAR ── */
 .navbar{
@@ -638,31 +594,6 @@ td.ttl{font-weight:500;color:var(--text);}
 <body>
 <div id="root">
 
-<!-- ════════════ LOGIN ════════════ -->
-<div id="loginScreen">
-  <div class="login-card">
-    <div class="login-logo">
-      <div class="mark">💰 <span>LP</span>Bag</div>
-      <p>Control de Presupuesto</p>
-    </div>
-    <div id="loginAlert" class="login-alert"></div>
-    <form onsubmit="handleLogin(event)">
-      <div class="field">
-        <label>Usuario</label>
-        <input type="text" id="username" placeholder="Tu usuario" autocomplete="username">
-      </div>
-      <div class="field">
-        <label>Contraseña</label>
-        <input type="password" id="password" placeholder="••••••••" autocomplete="current-password">
-      </div>
-      <button type="submit" class="btn-primary">Iniciar Sesión</button>
-    </form>
-    <div id="loginHint" class="login-hint" style="display:none">
-      Primer acceso — usuario: <code>admin</code> · contraseña: <code>1234</code>
-    </div>
-  </div>
-</div>
-
 <!-- ════════════ APP ════════════ -->
 <div id="appScreen">
 
@@ -679,7 +610,7 @@ td.ttl{font-weight:500;color:var(--text);}
       <button class="nav-btn" onclick="exportJSON()" title="Exportar datos">⬇ <span class="label">Export</span></button>
       <button class="nav-btn" onclick="document.getElementById('importFile').click()" title="Importar datos">⬆ <span class="label">Import</span></button>
       <input type="file" id="importFile" accept=".json" onchange="importJSON(event)">
-      <button class="nav-btn danger" onclick="handleLogout()" title="Cerrar sesión">← <span class="label">Salir</span></button>
+      <button class="nav-btn danger" onclick="window.aiAppsSignOut()" title="Cerrar sesión">← <span class="label">Salir</span></button>
     </div>
   </nav>
 
@@ -821,18 +752,14 @@ td.ttl{font-weight:500;color:var(--text);}
     <!-- SECURITY -->
     <div class="sec-title">Seguridad de Acceso</div>
     <div class="card" style="max-width:480px;">
-      <div class="card-title">🔑 Cambiar Credenciales</div>
+      <div class="card-title">🔑 Cambiar Contraseña</div>
       <div id="securityAlert" class="sec-alert"></div>
       <form onsubmit="changeCredentials(event)">
         <div class="form-field" style="margin-bottom:10px;">
-          <label>Nuevo Usuario</label>
-          <input type="text" id="newUsername" class="form-inp" required placeholder="mínimo 4 caracteres">
-        </div>
-        <div class="form-field" style="margin-bottom:10px;">
           <label>Nueva Contraseña</label>
-          <input type="password" id="newPassword" class="form-inp" required placeholder="mínimo 4 caracteres">
+          <input type="password" id="newPassword" class="form-inp" required placeholder="mínimo 6 caracteres">
         </div>
-        <button type="submit" class="btn-sec">Actualizar Credenciales</button>
+        <button type="submit" class="btn-sec">Actualizar Contraseña</button>
       </form>
     </div>
 
@@ -895,51 +822,88 @@ td.ttl{font-weight:500;color:var(--text);}
 
 </div><!-- /root -->
 <script>
-/* ── DEFAULTS ── */
-const _DU="YWRtaW4=",_DP="MTIzNA==";
-
 /* ── STATE ── */
-let appData=JSON.parse(localStorage.getItem('LPBag_db'))||{rate:59,rateDate:'',categories:['Vivienda','Servicios','Suscripciones','Transporte','Otros'],expenses:[]};
-let authData=(()=>{
-  const s=localStorage.getItem('LPBag_auth');
-  if(!s){const d={u:_DU,p:_DP};localStorage.setItem('LPBag_auth',JSON.stringify(d));document.getElementById('loginHint').style.display='block';return d;}
-  return JSON.parse(s);
-})();
+let appData={rate:59,rateDate:'',categories:['Vivienda','Servicios','Suscripciones','Transporte','Otros'],expenses:[]};
 let currentFilter='todos',sortKey='title',sortDir=1,pendingDelId=null,editingId=null;
 
-/* ── PERSIST ── */
-function save(){localStorage.setItem('LPBag_db',JSON.stringify(appData));}
+const SUPA_APP_ID='lpbag';
+// Evita que un guardado disparado antes de que termine la carga inicial
+// sobrescriba la nube con un estado vacío/desactualizado.
+let cloudSyncReady=false;
 
-/* ── AUTH ── */
-function checkSession(){
-  const ok=sessionStorage.getItem('LPBag_session')==='ok';
-  document.getElementById('loginScreen').style.display=ok?'none':'flex';
-  document.getElementById('appScreen').style.display=ok?'block':'none';
-  if(ok)render();
+async function getSupabaseSession(){
+  if(!window.supabaseClient) return null;
+  const { data } = await window.supabaseClient.auth.getSession();
+  return data && data.session ? data.session : null;
 }
-function handleLogin(e){
-  e.preventDefault();
-  const u=btoa(document.getElementById('username').value.trim());
-  const p=btoa(document.getElementById('password').value);
-  const al=document.getElementById('loginAlert');
-  if(u===authData.u&&p===authData.p){
-    sessionStorage.setItem('LPBag_session','ok');
-    document.getElementById('username').value='';
-    document.getElementById('password').value='';
-    al.classList.remove('show');checkSession();
-  }else{al.textContent='Usuario o contraseña incorrectos.';al.classList.add('show');}
+
+/* ── PERSIST ── */
+function save(){
+  localStorage.setItem('LPBag_db',JSON.stringify(appData));
+  syncToCloud();
 }
-function handleLogout(){sessionStorage.removeItem('LPBag_session');checkSession();}
-function changeCredentials(e){
+
+async function syncToCloud(){
+  const session=await getSupabaseSession();
+  if(!session)return;
+  if(!cloudSyncReady)return;
+  try{
+    const { error } = await window.supabaseClient
+      .from('app_data')
+      .upsert(
+        { user_id: session.user.id, app_id: SUPA_APP_ID, data: appData, updated_at: new Date().toISOString() },
+        { onConflict: 'user_id,app_id' }
+      );
+    if(error) throw error;
+  }catch(e){
+    console.warn('[LPBag] Guardado local OK, pero falló la sincronización con la nube:', e);
+  }
+}
+
+function loadFromLocalStorage(){
+  appData=JSON.parse(localStorage.getItem('LPBag_db'))||{rate:59,rateDate:'',categories:['Vivienda','Servicios','Suscripciones','Transporte','Otros'],expenses:[]};
+}
+
+async function load(){
+  const session=await getSupabaseSession();
+  if(session){
+    try{
+      const { data, error } = await window.supabaseClient
+        .from('app_data')
+        .select('data')
+        .eq('app_id', SUPA_APP_ID)
+        .eq('user_id', session.user.id)
+        .maybeSingle();
+      if(error) throw error;
+      if(data && data.data){
+        appData=data.data;
+        localStorage.setItem('LPBag_db', JSON.stringify(appData));
+        return;
+      }
+      loadFromLocalStorage();
+      return;
+    }catch(e){
+      console.warn('[LPBag] No se pudo leer de la nube, usando caché local:', e);
+      loadFromLocalStorage();
+      return;
+    }
+  }
+  // Sin sesión confirmada: no cargar datos reales en memoria/DOM, aunque
+  // existan en caché local de una sesión anterior (el candado solo tapa
+  // visualmente, no debe haber datos reales detrás mientras no hay sesión).
+}
+
+/* ── CAMBIAR CONTRASEÑA ── */
+async function changeCredentials(e){
   e.preventDefault();
-  const u=document.getElementById('newUsername').value.trim();
   const p=document.getElementById('newPassword').value;
   const el=document.getElementById('securityAlert');
-  if(u.length<4||p.length<4){el.textContent='Mínimo 4 caracteres.';el.className='sec-alert err';return;}
-  authData={u:btoa(u),p:btoa(p)};localStorage.setItem('LPBag_auth',JSON.stringify(authData));
-  el.textContent='¡Credenciales actualizadas!';el.className='sec-alert ok';
+  if(p.length<6){el.textContent='Mínimo 6 caracteres.';el.className='sec-alert err';return;}
+  const { error } = await window.supabaseClient.auth.updateUser({ password: p });
+  if(error){el.textContent=error.message;el.className='sec-alert err';return;}
+  el.textContent='¡Contraseña actualizada!';el.className='sec-alert ok';
   e.target.reset();setTimeout(()=>{el.className='sec-alert';},4000);
-  toast('Credenciales actualizadas','success');
+  toast('Contraseña actualizada','success');
 }
 
 /* ── DATA OPS ── */
@@ -1127,7 +1091,6 @@ function toast(msg,type=''){
 
 /* ── RENDER ── */
 function render(){
-  if(sessionStorage.getItem('LPBag_session')!=='ok')return;
   const tgt=document.getElementById('globalCurrency').value;
   const sym=tgt==='USD'?'$':'RD$';
 
@@ -1247,7 +1210,7 @@ function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').
 function escJs(s){return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'");}
 
 /* ── INIT ── */
-checkSession();
+load().then(() => { cloudSyncReady = true; render(); });
 </script>
 </body>
 </html>

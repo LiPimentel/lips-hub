@@ -180,7 +180,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>StaffGate · Entrevistas Técnicas</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3E%3Crect width='30' height='30' rx='6' fill='%23E7E1CF'/%3E%3Crect x='6' y='4' width='18' height='24' rx='2' stroke='%231B2430' stroke-width='1.6'/%3E%3Crect x='11' y='2.5' width='8' height='4' rx='1' fill='%238C6BAE'/%3E%3Cpath d='M10 14L13 17L20 10' stroke='%234E8B8B' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M10 22H20' stroke='%231B2430' stroke-width='1.4' stroke-linecap='round' opacity='0.5'/%3E%3C/svg%3E">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,400;0,500;1,400&family=Syne:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<script>window.AIAPPS_APP_ID = 'staffgate'; window.AIAPPS_SHOW_ACCOUNT_WIDGET = true;</script>
+<script src="./supabase-client-app.js"></script>
+<script src="./auth-gate.js"></script>
 <style>
 :root {
   --bg: #0D1220;
@@ -958,12 +963,42 @@ let currentTab = 'candidates';
 let currentCandId = null;
 let currentTplId  = null;
 
+const SUPA_APP_ID = 'staffgate';
+// Evita que un guardado disparado antes de que termine la carga inicial
+// sobrescriba la nube con un estado vacío/desactualizado.
+let cloudSyncReady = false;
+
+async function getSupabaseSession(){
+  if(!window.supabaseClient) return null;
+  const { data } = await window.supabaseClient.auth.getSession();
+  return data && data.session ? data.session : null;
+}
+
 function save() {
   localStorage.setItem('staffgate_cands_v1', JSON.stringify(candidates));
   localStorage.setItem('staffgate_tpls_v1', JSON.stringify(templates));
+  syncToCloud();
 }
 
-function load() {
+async function syncToCloud(){
+  const session = await getSupabaseSession();
+  if(!session) return;
+  if(!cloudSyncReady) return;
+  try{
+    const payload = { cands: candidates, tpls: templates };
+    const { error } = await window.supabaseClient
+      .from('app_data')
+      .upsert(
+        { user_id: session.user.id, app_id: SUPA_APP_ID, data: payload, updated_at: new Date().toISOString() },
+        { onConflict: 'user_id,app_id' }
+      );
+    if(error) throw error;
+  }catch(e){
+    console.warn('[StaffGate] Guardado local OK, pero falló la sincronización con la nube:', e);
+  }
+}
+
+function loadFromLocalStorage() {
   const rc = localStorage.getItem('staffgate_cands_v1');
   const rt = localStorage.getItem('staffgate_tpls_v1');
   candidates = rc ? JSON.parse(rc) : [];
@@ -973,6 +1008,39 @@ function load() {
   } else {
     templates = [DEFAULT_TPL];
   }
+}
+
+async function load() {
+  const session = await getSupabaseSession();
+  if(session){
+    try{
+      const { data, error } = await window.supabaseClient
+        .from('app_data')
+        .select('data')
+        .eq('app_id', SUPA_APP_ID)
+        .eq('user_id', session.user.id)
+        .maybeSingle();
+      if(error) throw error;
+      if(data && data.data){
+        candidates = data.data.cands || [];
+        templates = data.data.tpls || [];
+        if (!templates.find(t => t.id === DEFAULT_TPL.id)) templates.unshift(DEFAULT_TPL);
+        localStorage.setItem('staffgate_cands_v1', JSON.stringify(candidates));
+        localStorage.setItem('staffgate_tpls_v1', JSON.stringify(templates));
+        return;
+      }
+      // Sin fila en la nube todavía (cuenta nueva) - usar caché local si existe.
+      loadFromLocalStorage();
+      return;
+    }catch(e){
+      console.warn('[StaffGate] No se pudo leer de la nube, usando caché local:', e);
+      loadFromLocalStorage();
+      return;
+    }
+  }
+  // Sin sesión confirmada: no cargar datos reales en memoria/DOM, aunque
+  // existan en caché local de una sesión anterior (el candado solo tapa
+  // visualmente, no debe haber datos reales detrás mientras no hay sesión).
 }
 
 function genId(p) { return (p||'id')+'_'+Date.now()+'_'+Math.random().toString(36).slice(2,6); }
@@ -2344,7 +2412,7 @@ function toast(msg) {
 }
 
 // ── INIT ──
-load(); renderSidebar();
+load().then(() => { cloudSyncReady = true; renderSidebar(); });
 </script>
 </body>
 </html>

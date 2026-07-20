@@ -114,13 +114,179 @@
     return host;
   }
 
+  function buildAccountWidget() {
+    const host = document.createElement("div");
+    host.id = "aiapps-account-widget";
+    host.style.cssText = "position:fixed;top:14px;right:14px;z-index:2147483646;";
+    const shadow = host.attachShadow({ mode: "open" });
+
+    shadow.innerHTML = `
+      <style>
+        :host{ font-family:system-ui,-apple-system,'Segoe UI',sans-serif; }
+        .toggle{
+          background:#1B2430;
+          color:#F1EDE4;
+          border:1px solid rgba(255,255,255,0.12);
+          border-radius:999px;
+          padding:8px 14px;
+          font-size:12.5px;
+          cursor:pointer;
+          box-shadow:0 6px 20px rgba(0,0,0,0.35);
+        }
+        .panel{
+          display:none;
+          margin-top:8px;
+          width:230px;
+          background:#EFEADC;
+          border-radius:8px;
+          padding:16px;
+          box-shadow:0 14px 34px rgba(0,0,0,0.4);
+        }
+        .panel.open{ display:block; }
+        label{
+          display:block;
+          font-size:0.72rem;
+          color:#3E4757;
+          margin:0 0 4px;
+        }
+        input{
+          width:100%;
+          box-sizing:border-box;
+          padding:7px 9px;
+          border:1px solid #C9C2AC;
+          border-radius:4px;
+          font-size:0.85rem;
+          background:#fff;
+          color:#1B2430;
+        }
+        .save-btn{
+          width:100%;
+          margin-top:10px;
+          padding:8px;
+          border:none;
+          border-radius:4px;
+          background:#B8863B;
+          color:#fff;
+          font-size:0.82rem;
+          font-weight:600;
+          cursor:pointer;
+        }
+        .save-btn:disabled{ opacity:0.6; cursor:default; }
+        .logout-btn{
+          width:100%;
+          margin-top:8px;
+          padding:8px;
+          border:1px solid #C9C2AC;
+          border-radius:4px;
+          background:transparent;
+          color:#1B2430;
+          font-size:0.82rem;
+          cursor:pointer;
+        }
+        .msg{
+          margin-top:8px;
+          font-size:0.72rem;
+          min-height:1em;
+          text-align:center;
+        }
+        .msg.error{ color:#B8433B; }
+        .msg.ok{ color:#4E8B8B; }
+      </style>
+      <button class="toggle">👤 Cuenta</button>
+      <div class="panel">
+        <label for="aiapps-new-password">Nueva contraseña</label>
+        <input id="aiapps-new-password" type="password" autocomplete="new-password" minlength="6" placeholder="mínimo 6 caracteres">
+        <button class="save-btn">Cambiar contraseña</button>
+        <button class="logout-btn">Cerrar sesión</button>
+        <div class="msg"></div>
+      </div>
+    `;
+
+    document.body.appendChild(host);
+
+    const toggle = shadow.querySelector(".toggle");
+    const panel = shadow.querySelector(".panel");
+    const saveBtn = shadow.querySelector(".save-btn");
+    const logoutBtn = shadow.querySelector(".logout-btn");
+    const msgEl = shadow.querySelector(".msg");
+    const pwInput = shadow.getElementById("aiapps-new-password");
+
+    toggle.addEventListener("click", () => panel.classList.toggle("open"));
+
+    saveBtn.addEventListener("click", async () => {
+      const newPassword = pwInput.value;
+      msgEl.textContent = "";
+      msgEl.className = "msg";
+      if (newPassword.length < 6) {
+        msgEl.textContent = "Mínimo 6 caracteres.";
+        msgEl.className = "msg error";
+        return;
+      }
+      saveBtn.disabled = true;
+      saveBtn.textContent = "Guardando...";
+      const { error } = await window.supabaseClient.auth.updateUser({ password: newPassword });
+      saveBtn.disabled = false;
+      saveBtn.textContent = "Cambiar contraseña";
+      if (error) {
+        msgEl.textContent = error.message;
+        msgEl.className = "msg error";
+        return;
+      }
+      pwInput.value = "";
+      msgEl.textContent = "Contraseña actualizada.";
+      msgEl.className = "msg ok";
+    });
+
+    logoutBtn.addEventListener("click", () => window.aiAppsSignOut());
+  }
+
+  function buildConnectionErrorOverlay() {
+    const host = document.createElement("div");
+    host.id = "aiapps-auth-gate";
+    host.style.cssText = "position:fixed;inset:0;z-index:2147483647;";
+    const shadow = host.attachShadow({ mode: "open" });
+    shadow.innerHTML = `
+      <style>
+        .cover{
+          position:fixed; inset:0;
+          background:#131B23;
+          display:flex; align-items:center; justify-content:center;
+          font-family:system-ui,-apple-system,'Segoe UI',sans-serif;
+        }
+        .card{
+          width:min(320px, 90vw);
+          background:#EFEADC;
+          border-radius:6px;
+          padding:32px 28px;
+          box-shadow:0 20px 50px rgba(0,0,0,0.5);
+          text-align:center;
+          color:#1B2430;
+        }
+        h1{ font-size:1.05rem; margin:0 0 10px; }
+        p{ font-size:0.85rem; color:#3E4757; margin:0; line-height:1.4; }
+      </style>
+      <div class="cover">
+        <div class="card">
+          <h1>No se pudo conectar</h1>
+          <p>No se pudo cargar el sistema de acceso. Verifica tu conexión a internet y recarga la página.</p>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(host);
+  }
+
   async function guard() {
     if (!window.supabaseClient) {
-      console.warn("[AI APPs] auth-gate.js: supabaseClient no está configurado todavía; se omite el candado.");
+      console.warn("[AI APPs] auth-gate.js: supabaseClient no está configurado todavía.");
+      buildConnectionErrorOverlay();
       return;
     }
     const { data: { session } } = await window.supabaseClient.auth.getSession();
-    if (!session) buildOverlay();
+    if (!session) {
+      buildOverlay();
+      return;
+    }
+    if (window.AIAPPS_SHOW_ACCOUNT_WIDGET) buildAccountWidget();
   }
 
   window.aiAppsSignOut = async function () {

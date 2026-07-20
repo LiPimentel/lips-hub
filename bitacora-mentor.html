@@ -179,9 +179,11 @@
 
 <meta charset="UTF-8">
 <title>Bitácora del Mentor</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3E%3Crect width='30' height='30' rx='6' fill='%23E7E1CF'/%3E%3Cpath d='M6 4H21C22.6569 4 24 5.34315 24 7V26L20 23L16 26L12 23L8 26L6 24V4Z' stroke='%231B2430' stroke-width='1.6' stroke-linejoin='round'/%3E%3Cpath d='M10 10H20' stroke='%234E8B8B' stroke-width='1.6' stroke-linecap='round'/%3E%3Cpath d='M10 14.5H17' stroke='%234E8B8B' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-<script src="./supabase-client.js"></script>
+<script>window.AIAPPS_APP_ID = 'mentor'; window.AIAPPS_SHOW_ACCOUNT_WIDGET = true;</script>
+<script src="./supabase-client-app.js"></script>
 <script src="./auth-gate.js"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
@@ -267,7 +269,10 @@
   .profile-area{font-size:13px;color:var(--brass);font-weight:500;margin:4px 0 0;}
   .profile-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin-top:16px;padding-top:16px;border-top:1px solid var(--line);}
   .profile-field-label{font-size:10.5px;text-transform:uppercase;letter-spacing:0.04em;color:var(--muted);margin:0 0 3px;}
-  .profile-field-value{font-size:13.5px;margin:0;}
+  .profile-field-value{font-size:13.5px;margin:0;white-space:pre-wrap;word-break:break-word;}
+  .profile-field-value.clamped{display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;}
+  .read-more-btn{background:none;border:none;padding:6px 0 0;margin:0;font-size:12px;font-family:'Inter',sans-serif;color:var(--slate);cursor:pointer;font-weight:500;}
+  .read-more-btn:hover{text-decoration:underline;}
   .icon-btn{background:none;border:none;cursor:pointer;color:var(--muted);font-size:12px;font-family:'Inter',sans-serif;}
   .icon-btn:hover{color:var(--rust);}
 
@@ -426,6 +431,9 @@ let groupSearchQuery = '';
 const STORAGE_KEY = 'ledger-data';
 const SUPA_APP_ID = 'bitacora-mentor';
 const hasClaudeStorage = typeof window.storage !== 'undefined' && window.storage !== null;
+// Evita que un guardado disparado antes de que termine la carga inicial
+// sobrescriba la nube con un estado vacío/desactualizado.
+let cloudSyncReady = false;
 
 async function getSupabaseSession(){
   if(!window.supabaseClient) return null;
@@ -442,6 +450,7 @@ const storageAdapter = {
           .from('app_data')
           .select('data')
           .eq('app_id', SUPA_APP_ID)
+          .eq('user_id', session.user.id)
           .maybeSingle();
         if(error) throw error;
         if(data && data.data){
@@ -449,7 +458,10 @@ const storageAdapter = {
           localStorage.setItem(key, value);
           return { key, value };
         }
-        return null;
+        // No hay fila en la nube todavía (cuenta nueva) - usar caché local si existe,
+        // para no confundir "sin datos en la nube" con "borrar mis datos locales".
+        const raw = localStorage.getItem(key);
+        return raw ? { key, value: raw } : null;
       }catch(e){
         console.warn('[Bitácora] No se pudo leer de la nube, usando caché local:', e);
         const raw = localStorage.getItem(key);
@@ -457,13 +469,20 @@ const storageAdapter = {
       }
     }
     if(hasClaudeStorage) return await window.storage.get(key);
-    const raw = localStorage.getItem(key);
-    return raw ? { key, value: raw } : null;
+    // Sin sesión confirmada: no cargar datos reales en memoria/DOM, aunque
+    // existan en caché local de una sesión anterior (el candado solo tapa
+    // visualmente, no debe haber datos reales detrás mientras no hay sesión).
+    return null;
   },
   async set(key, value){
     const session = await getSupabaseSession();
     if(session){
       localStorage.setItem(key, value);
+      if(!cloudSyncReady){
+        // Todavía no terminó la carga inicial - no subir a la nube para no
+        // pisar datos reales con un estado vacío/desactualizado.
+        return { key, value };
+      }
       try{
         const { error } = await window.supabaseClient
           .from('app_data')
@@ -496,6 +515,7 @@ async function loadData(){
   if(!state.groupSessions) state.groupSessions = [];
   if(state.mentees.length && !selectedMenteeId) selectedMenteeId = state.mentees[0].id;
   if(state.groups.length && !selectedGroupId) selectedGroupId = state.groups[0].id;
+  cloudSyncReady = true;
   render();
 }
 
@@ -554,6 +574,16 @@ function esc(s){
   const d = document.createElement('div');
   d.textContent = s == null ? '' : s;
   return d.innerHTML;
+}
+
+function expandableField(label, text, fieldId){
+  if(!text) return '';
+  const isLong = text.length > 240;
+  return `<div style="grid-column:1 / -1;">
+    <p class="profile-field-label">${label}</p>
+    <p class="profile-field-value${isLong ? ' clamped' : ''}" id="field-${fieldId}">${esc(text)}</p>
+    ${isLong ? `<button class="read-more-btn" data-target="field-${fieldId}">leer más</button>` : ''}
+  </div>`;
 }
 
 function sessionCount(menteeId){
@@ -701,8 +731,8 @@ function renderMentoriaView(body){
         ${mentee.email ? `<div><p class="profile-field-label">Correo</p><p class="profile-field-value">${esc(mentee.email)}</p></div>` : ''}
         ${mentee.country ? `<div><p class="profile-field-label">País</p><p class="profile-field-value">${esc(mentee.country)}</p></div>` : ''}
         ${status==='cerrado' && mentee.outcome ? `<div><p class="profile-field-label">Resultado</p><p class="profile-field-value">${RESULTADOS[mentee.outcome] || '—'}</p></div>` : ''}
-        <div style="grid-column:1 / -1;"><p class="profile-field-label">Objetivo</p><p class="profile-field-value">${esc(mentee.goal)}</p></div>
-        ${mentee.progress ? `<div style="grid-column:1 / -1;"><p class="profile-field-label">Progresión</p><p class="profile-field-value">${esc(mentee.progress)}</p></div>` : ''}
+        ${expandableField('Objetivo', mentee.goal, 'goal')}
+        ${mentee.progress ? expandableField('Progresión', mentee.progress, 'progress') : ''}
       </div>
     </div>
 
@@ -712,6 +742,14 @@ function renderMentoriaView(body){
     </div>
     <div id="timeline"></div>
   `;
+
+  main.querySelectorAll('.read-more-btn').forEach(btn=>{
+    btn.onclick = ()=>{
+      const target = document.getElementById(btn.dataset.target);
+      const nowClamped = target.classList.toggle('clamped');
+      btn.textContent = nowClamped ? 'leer más' : 'leer menos';
+    };
+  });
 
   document.getElementById('btn-del-mentee').onclick = ()=> deleteMentee(mentee.id);
   document.getElementById('btn-edit-mentee').onclick = ()=>{ editingMenteeId = mentee.id; modal='mentee'; render(); renderModal(); };

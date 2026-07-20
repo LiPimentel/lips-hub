@@ -5,7 +5,7 @@
 /* ===== AI APPs · Folder Bridge (guardado en carpeta local) ===== */
 (function(){
   const APP_ID = "mytravel-pro";
-  const SYNC_KEYS = ["isLogged", "mytravel_v4"];
+  const SYNC_KEYS = ["mytravel_v4"];
   const DB_NAME = "aiapps-folder-bridge";
   const STORE = "handles";
 
@@ -180,9 +180,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>MyTravel Agent Pro</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3E%3Crect width='30' height='30' rx='6' fill='%23E7E1CF'/%3E%3Cpath d='M15 27C15 27 23 19.4 23 12.5C23 7.8 19.4 4 15 4C10.6 4 7 7.8 7 12.5C7 19.4 15 27 15 27Z' stroke='%231B2430' stroke-width='1.6' stroke-linejoin='round'/%3E%3Ccircle cx='15' cy='12.5' r='3.5' fill='%234E7A8B'/%3E%3C/svg%3E">
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<script>window.AIAPPS_APP_ID = 'mytravel'; window.AIAPPS_SHOW_ACCOUNT_WIDGET = true;</script>
+<script src="./supabase-client-app.js"></script>
+<script src="./auth-gate.js"></script>
 <style>
 /* ════════════════════════════════════════════
    TOKENS
@@ -264,40 +269,6 @@ body{overflow:hidden}
 #confirm-yes{background:var(--danger);color:#fff}
 #confirm-no{background:var(--surface);color:var(--text);border:1.5px solid var(--border)}
 
-/* ════════════════════════════════════════════
-   LOGIN
-════════════════════════════════════════════ */
-#login-screen{
-  position:fixed;inset:0;
-  background:linear-gradient(145deg,#0d1b2a 0%,#162436 50%,#0e4f4f 100%);
-  z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px;
-}
-.login-card{
-  background:rgba(255,255,255,.98);border-radius:24px;
-  padding:40px 36px;width:100%;max-width:400px;text-align:center;
-  box-shadow:0 32px 64px rgba(0,0,0,.4);
-}
-.login-logo{width:88px;border-radius:18px;margin-bottom:18px;box-shadow:0 6px 18px rgba(0,0,0,.14)}
-.login-title{font-size:20px;font-weight:800;color:var(--navy);letter-spacing:-.3px;margin-bottom:4px}
-.login-sub{font-size:12px;color:var(--muted);margin-bottom:28px}
-.l-field{margin-bottom:14px;text-align:left}
-.l-field label{font-size:10px;font-weight:700;letter-spacing:1.2px;color:var(--muted);text-transform:uppercase;display:block;margin-bottom:5px}
-.l-field input{
-  width:100%;padding:13px 15px;border:1.5px solid var(--border);border-radius:11px;
-  font-size:15px;font-family:var(--font);outline:none;
-  transition:border-color .2s,box-shadow .2s;
-  /* prevent iOS zoom on focus */
-  -webkit-text-size-adjust:100%;
-}
-.l-field input:focus{border-color:var(--teal);box-shadow:0 0 0 3px rgba(14,124,123,.12)}
-.btn-login{
-  width:100%;padding:14px;margin-top:6px;border:none;border-radius:12px;
-  background:linear-gradient(135deg,var(--teal),var(--teal-lt));
-  color:#fff;font-size:15px;font-weight:700;font-family:var(--font);
-  cursor:pointer;transition:transform .15s,box-shadow .2s;
-}
-.btn-login:hover{transform:translateY(-2px);box-shadow:0 10px 24px rgba(14,124,123,.4)}
-#login-err{color:var(--danger);font-size:12px;margin-top:10px;min-height:18px;font-weight:500}
 
 /* ════════════════════════════════════════════
    APP SHELL
@@ -720,10 +691,6 @@ table.trips td{padding:12px 14px;font-size:13px;vertical-align:middle}
   /* modal grid: 1 col on mobile */
   .f-grid{grid-template-columns:1fr}
   .f-full{grid-column:1}
-
-  /* login */
-  .login-card{padding:32px 24px}
-  .login-title{font-size:18px}
 }
 
 /* ════════════════════════════════════════════
@@ -760,29 +727,8 @@ table.trips td{padding:12px 14px;font-size:13px;vertical-align:middle}
   </div>
 </div>
 
-<!-- LOGIN -->
-<div id="login-screen">
-  <div class="login-card">
-    <img class="login-logo" src="https://i.ibb.co/v4m0f5f/Gemini-Generated-Image-6ousu46ousu46ous.jpg" alt="Logo">
-    <div class="login-title">MyTravel Agent Pro</div>
-    <div class="login-sub">Gestiona tus itinerarios y destinos</div>
-    <div class="l-field">
-      <label>Usuario</label>
-      <input type="text" id="user-in" placeholder="admin" autocomplete="off"
-             onkeydown="if(event.key==='Enter')document.getElementById('pass-in').focus()">
-    </div>
-    <div class="l-field">
-      <label>Contraseña</label>
-      <input type="password" id="pass-in" placeholder="••••••"
-             onkeydown="if(event.key==='Enter')login()">
-    </div>
-    <button class="btn-login" onclick="login()">Iniciar sesión →</button>
-    <div id="login-err"></div>
-  </div>
-</div>
-
 <!-- APP -->
-<div class="wrapper" id="app-content" style="display:none">
+<div class="wrapper" id="app-content">
 
   <!-- DESKTOP SIDEBAR -->
   <div class="sidebar">
@@ -814,7 +760,7 @@ table.trips td{padding:12px 14px;font-size:13px;vertical-align:middle}
     </div>
     <div class="sidebar-bottom">
       <button class="sb-btn sb-btn-csv" onclick="exportData()">📥 Exportar CSV</button>
-      <button class="sb-btn sb-btn-out" onclick="logout()">↩ Cerrar sesión</button>
+      <button class="sb-btn sb-btn-out" onclick="window.aiAppsSignOut()">↩ Cerrar sesión</button>
     </div>
   </div>
 
@@ -826,7 +772,7 @@ table.trips td{padding:12px 14px;font-size:13px;vertical-align:middle}
     </div>
     <div class="tb-actions">
       <button class="tb-icon-btn" onclick="exportData()" title="Exportar CSV">📥</button>
-      <button class="tb-icon-btn" onclick="logout()" title="Cerrar sesión">↩</button>
+      <button class="tb-icon-btn" onclick="window.aiAppsSignOut()" title="Cerrar sesión">↩</button>
     </div>
   </div>
 
@@ -1026,19 +972,61 @@ table.trips td{padding:12px 14px;font-size:13px;vertical-align:middle}
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 /* ═══════════════ STATE ═══════════════ */
-let db = JSON.parse(localStorage.getItem('mytravel_v4')) || {viajes:[],deseos:[]};
+let db = {viajes:[],deseos:[]};
 let map=null, markers=[], sugTimers={}, confirmCallback=null;
 const SECTIONS = ['dash','viajes','deseos'];
 const SECTION_TITLES = {dash:'Mapa de Rutas',viajes:'Gestionar Viajes',deseos:'Mis Deseos'};
 
-/* ═══════════════ BOOT ═══════════════ */
-window.onload = () => {
-  if(localStorage.getItem('isLogged')==='true'){
-    document.getElementById('login-screen').style.display='none';
-    document.getElementById('app-content').style.display='flex';
-    setTimeout(initMap,150);
-    refreshStats();
+const SUPA_APP_ID='mytravel';
+// Evita que un guardado disparado antes de que termine la carga inicial
+// sobrescriba la nube con un estado vacío/desactualizado.
+let cloudSyncReady=false;
+
+async function getSupabaseSession(){
+  if(!window.supabaseClient) return null;
+  const { data } = await window.supabaseClient.auth.getSession();
+  return data && data.session ? data.session : null;
+}
+
+function loadFromLocalStorage(){
+  db=JSON.parse(localStorage.getItem('mytravel_v4'))||{viajes:[],deseos:[]};
+}
+
+async function loadDB(){
+  const session=await getSupabaseSession();
+  if(session){
+    try{
+      const { data, error } = await window.supabaseClient
+        .from('app_data')
+        .select('data')
+        .eq('app_id', SUPA_APP_ID)
+        .eq('user_id', session.user.id)
+        .maybeSingle();
+      if(error) throw error;
+      if(data && data.data){
+        db=data.data;
+        localStorage.setItem('mytravel_v4', JSON.stringify(db));
+        return;
+      }
+      loadFromLocalStorage();
+      return;
+    }catch(e){
+      console.warn('[MyTravel] No se pudo leer de la nube, usando caché local:', e);
+      loadFromLocalStorage();
+      return;
+    }
   }
+  // Sin sesión confirmada: no cargar datos reales en memoria/DOM, aunque
+  // existan en caché local de una sesión anterior (el candado solo tapa
+  // visualmente, no debe haber datos reales detrás mientras no hay sesión).
+}
+
+/* ═══════════════ BOOT ═══════════════ */
+window.onload = async () => {
+  await loadDB();
+  cloudSyncReady = true;
+  setTimeout(initMap,150);
+  refreshStats();
 };
 
 /* ═══════════════ TOAST ═══════════════ */
@@ -1065,18 +1053,6 @@ function confirmResolve(val){
   if(confirmCallback){confirmCallback(val);confirmCallback=null;}
 }
 
-/* ═══════════════ AUTH ═══════════════ */
-function login(){
-  const u=document.getElementById('user-in').value.trim();
-  const p=document.getElementById('pass-in').value.trim();
-  if(u==='admin'&&p==='123'){localStorage.setItem('isLogged','true');location.reload();}
-  else{
-    document.getElementById('login-err').textContent='Usuario o contraseña incorrectos.';
-    document.getElementById('pass-in').value='';
-    document.getElementById('pass-in').focus();
-  }
-}
-function logout(){localStorage.setItem('isLogged','false');location.reload();}
 
 /* ═══════════════ MAP ═══════════════ */
 function initMap(){
@@ -1388,7 +1364,26 @@ function exportData(){
 }
 
 /* ═══════════════ PERSIST ═══════════════ */
-function saveDB(){localStorage.setItem('mytravel_v4',JSON.stringify(db));}
+function saveDB(){
+  localStorage.setItem('mytravel_v4',JSON.stringify(db));
+  syncToCloud();
+}
+
+async function syncToCloud(){
+  const session=await getSupabaseSession();
+  if(!session)return;
+  try{
+    const { error } = await window.supabaseClient
+      .from('app_data')
+      .upsert(
+        { user_id: session.user.id, app_id: SUPA_APP_ID, data: db, updated_at: new Date().toISOString() },
+        { onConflict: 'user_id,app_id' }
+      );
+    if(error) throw error;
+  }catch(e){
+    console.warn('[MyTravel] Guardado local OK, pero falló la sincronización con la nube:', e);
+  }
+}
 </script>
 </body>
 </html>
