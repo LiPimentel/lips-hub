@@ -75,6 +75,24 @@
           color:#8B94A3;
           margin-top:4px;
         }
+        .emoji-wrap{ position:relative; display:inline-block; }
+        .coin{
+          position:absolute;
+          left:50%;
+          bottom:2px;
+          font-size:0.85rem;
+          opacity:0;
+          animation:coin-pop 1.6s ease-in infinite;
+          pointer-events:none;
+        }
+        .coin:nth-child(1){ --cx:24px; animation-delay:0s; }
+        .coin:nth-child(2){ --cx:-20px; animation-delay:0.5s; }
+        .coin:nth-child(3){ --cx:6px; animation-delay:1s; }
+        @keyframes coin-pop{
+          0%{ opacity:0; transform:translate(-50%,0) scale(0.4) rotate(0deg); }
+          18%{ opacity:1; transform:translate(-50%,-16px) scale(0.9) rotate(70deg); }
+          100%{ opacity:0; transform:translate(calc(-50% + var(--cx,20px)),28px) scale(0.6) rotate(320deg); }
+        }
         label{
           display:block;
           font-size:0.75rem;
@@ -157,7 +175,16 @@
           ${window.AIAPPS_APP_NAME ? `
           <div class="brand">
             ${window.AIAPPS_APP_LOGO_URL ? `<img class="brand-logo-img" src="${window.AIAPPS_APP_LOGO_URL}" alt="" onerror="this.style.display='none';this.nextElementSibling.querySelector('.brand-fallback-emoji').style.display='inline';">` : ''}
-            <div class="brand-mark">${window.AIAPPS_APP_LOGO_URL && window.AIAPPS_APP_EMOJI ? `<span class="brand-fallback-emoji" style="display:none">${window.AIAPPS_APP_EMOJI} </span>` : (window.AIAPPS_APP_EMOJI ? window.AIAPPS_APP_EMOJI + ' ' : '')}<span style="color:${window.AIAPPS_APP_ACCENT || '#B8863B'}">${window.AIAPPS_APP_NAME}</span></div>
+            <div class="brand-mark">${(() => {
+              if (window.AIAPPS_APP_LOGO_URL && window.AIAPPS_APP_EMOJI) {
+                return `<span class="brand-fallback-emoji" style="display:none">${window.AIAPPS_APP_EMOJI} </span>`;
+              }
+              if (!window.AIAPPS_APP_EMOJI) return '';
+              if (window.AIAPPS_LOGO_COINS) {
+                return `<span class="emoji-wrap">${window.AIAPPS_APP_EMOJI}<span class="coin">🪙</span><span class="coin">🪙</span><span class="coin">🪙</span></span> `;
+              }
+              return window.AIAPPS_APP_EMOJI + ' ';
+            })()}<span style="color:${window.AIAPPS_APP_ACCENT || '#B8863B'}">${window.AIAPPS_APP_NAME}</span></div>
             ${window.AIAPPS_APP_TAGLINE ? `<p class="brand-tagline">${window.AIAPPS_APP_TAGLINE}</p>` : ''}
           </div>
           ` : ''}
