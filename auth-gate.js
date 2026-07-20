@@ -27,7 +27,9 @@
       <style>
         .cover{
           position:fixed; inset:0;
-          background:#131B23;
+          background:
+            radial-gradient(500px circle at var(--mx, 50%) var(--my, 50%), rgba(184,134,59,0.16), transparent 45%),
+            #131B23;
           display:flex; align-items:center; justify-content:center;
           font-family:system-ui,-apple-system,'Segoe UI',sans-serif;
         }
@@ -37,12 +39,23 @@
           border-radius:6px;
           padding:32px 28px;
           box-shadow:0 20px 50px rgba(0,0,0,0.5);
+          transform:perspective(800px) rotateX(0deg) rotateY(0deg);
+          transition:transform 0.15s ease-out;
+          will-change:transform;
         }
         h1{
           font-size:1.1rem;
           margin:0 0 18px;
           color:#1B2430;
           text-align:center;
+        }
+        .brand-logo-img{
+          display:block;
+          width:56px;
+          height:56px;
+          border-radius:12px;
+          object-fit:cover;
+          margin:0 auto 10px;
         }
         .brand{
           text-align:center;
@@ -122,7 +135,8 @@
         <form class="card">
           ${window.AIAPPS_APP_NAME ? `
           <div class="brand">
-            <div class="brand-mark">${window.AIAPPS_APP_EMOJI || ''} <span style="color:${window.AIAPPS_APP_ACCENT || '#B8863B'}">${window.AIAPPS_APP_NAME}</span></div>
+            ${window.AIAPPS_APP_LOGO_URL ? `<img class="brand-logo-img" src="${window.AIAPPS_APP_LOGO_URL}" alt="" onerror="this.style.display='none';this.nextElementSibling.querySelector('.brand-fallback-emoji').style.display='inline';">` : ''}
+            <div class="brand-mark">${window.AIAPPS_APP_LOGO_URL && window.AIAPPS_APP_EMOJI ? `<span class="brand-fallback-emoji" style="display:none">${window.AIAPPS_APP_EMOJI} </span>` : (window.AIAPPS_APP_EMOJI ? window.AIAPPS_APP_EMOJI + ' ' : '')}<span style="color:${window.AIAPPS_APP_ACCENT || '#B8863B'}">${window.AIAPPS_APP_NAME}</span></div>
             ${window.AIAPPS_APP_TAGLINE ? `<p class="brand-tagline">${window.AIAPPS_APP_TAGLINE}</p>` : ''}
           </div>
           ` : ''}
@@ -142,6 +156,23 @@
     `;
 
     document.body.appendChild(host);
+
+    const coverEl = shadow.querySelector(".cover");
+    const cardEl = shadow.querySelector(".card");
+    coverEl.addEventListener("mousemove", (e) => {
+      const rect = coverEl.getBoundingClientRect();
+      coverEl.style.setProperty("--mx", ((e.clientX - rect.left) / rect.width) * 100 + "%");
+      coverEl.style.setProperty("--my", ((e.clientY - rect.top) / rect.height) * 100 + "%");
+
+      const cardRect = cardEl.getBoundingClientRect();
+      const dx = (e.clientX - (cardRect.left + cardRect.width / 2)) / (cardRect.width / 2);
+      const dy = (e.clientY - (cardRect.top + cardRect.height / 2)) / (cardRect.height / 2);
+      const maxTilt = 6;
+      cardEl.style.transform = `perspective(800px) rotateX(${(-dy * maxTilt).toFixed(2)}deg) rotateY(${(dx * maxTilt).toFixed(2)}deg)`;
+    });
+    coverEl.addEventListener("mouseleave", () => {
+      cardEl.style.transform = "perspective(800px) rotateX(0deg) rotateY(0deg)";
+    });
 
     const form = shadow.querySelector("form");
     const titleEl = shadow.querySelector(".title");
