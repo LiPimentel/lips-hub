@@ -11,6 +11,39 @@
     }
   }
 
+  const ICONS = {
+    book: '<path d="M4 5c0-.6.4-1 1-1h6a3 3 0 0 1 3 3v13a2.5 2.5 0 0 0-2.5-1.5H4z"/><path d="M20 5c0-.6-.4-1-1-1h-6a3 3 0 0 0-3 3v13a2.5 2.5 0 0 1 2.5-1.5H20z"/>',
+    "graduation-cap": '<path d="M2 9l10-5 10 5-10 5-10-5z"/><path d="M6 11.5v4.5c0 1.4 2.7 3 6 3s6-1.6 6-3v-4.5"/><path d="M22 9v6"/>',
+    "chat-bubble": '<path d="M4 4h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H9l-5 4V5a1 1 0 0 1 1-1z"/>',
+    lightbulb: '<circle cx="12" cy="9" r="6"/><path d="M9.5 21h5"/><path d="M10 18h4"/><path d="M12 3V1.5"/>',
+    pencil: '<path d="M4 20l1-4.2L15.8 5 19 8.2 8.2 19 4 20z"/><path d="M13.5 6.5l4 4"/>',
+    target: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="0.8"/>',
+    compass: '<circle cx="12" cy="12" r="9"/><path d="M15 9l-2.2 5.8L9 17l2.2-5.8z"/>',
+    "trending-up": '<path d="M3 19h18"/><path d="M5 15l4.5-5 3.5 3 6-6.5"/><path d="M14.5 6h4.5v4.5"/>',
+    people: '<circle cx="8.5" cy="8" r="3"/><circle cx="16" cy="9" r="2.5"/><path d="M2.5 20c0-3.9 2.7-6.5 6-6.5s6 2.6 6 6.5"/><path d="M14.5 20c0-2.8 1.6-5 3.7-5.6"/>',
+    star: '<path d="M12 3l2.6 5.6 6.1.7-4.5 4.2 1.2 6-5.4-3-5.4 3 1.2-6-4.5-4.2 6.1-.7z"/>',
+    coin: '<circle cx="12" cy="12" r="9"/><path d="M12 7.5v9"/><path d="M15 9.8c0-1.3-1.3-2.1-3-2.1s-3 .9-3 2.1c0 3 6 1.3 6 4.1 0 1.3-1.3 2.1-3 2.1s-3-.8-3-2.1"/>',
+    wallet: '<path d="M3 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M15 12a1.6 1.6 0 0 0 0 3.2H20V12z"/>',
+    "piggy-bank": '<path d="M4 12a6.5 6.5 0 0 1 12.8-1.6L19 9v3.5l-2 .6c-.3 1-.9 1.8-1.7 2.4V18H13v-1.2a6.9 6.9 0 0 1-2 0V18H8.5v-1.6A6.5 6.5 0 0 1 4 12z"/><path d="M8 11.2h.01"/><path d="M4.5 12.3L2 13"/>',
+    calculator: '<rect x="5" y="3" width="14" height="18" rx="1.5"/><path d="M8 7h8"/><path d="M8 12h0"/><path d="M12 12h0"/><path d="M16 12v6"/><path d="M8 16h0"/><path d="M12 16h0"/><path d="M8 12v0"/>',
+    "dollar-sign": '<path d="M12 2v20"/><path d="M16.5 6.5c0-1.9-2-3-4.5-3s-4.5 1.2-4.5 3.2c0 4.3 9 2 9 6.3 0 2-2 3.2-4.5 3.2s-4.5-1.1-4.5-3"/>',
+    "credit-card": '<rect x="3" y="5.5" width="18" height="13" rx="1.5"/><path d="M3 9.5h18"/><path d="M6.5 14.5h4"/>',
+    safe: '<rect x="3.5" y="3.5" width="17" height="17" rx="1.5"/><circle cx="12" cy="12" r="3.5"/><path d="M12 8.5V6"/><path d="M12 18v-2.5"/>',
+    "bar-chart": '<path d="M4 20V10"/><path d="M11 20V4"/><path d="M18 20v-7"/><path d="M2 20h20"/>',
+    clipboard: '<rect x="5.5" y="4" width="13" height="17" rx="1.5"/><rect x="9" y="2" width="6" height="3.5" rx="1"/><path d="M8.5 11l2 2 4-4.5"/>',
+    magnifier: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-4.8-4.8"/>',
+    briefcase: '<rect x="2.5" y="7" width="19" height="12" rx="1.5"/><path d="M8 7V5.5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2V7"/><path d="M2.5 12.5h19"/>',
+    gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2.5 12h3M18.5 12h3M4.9 19.1L7 17M17 7l2.1-2.1"/>',
+    airplane: '<path d="M12 2l1.5 6.5L21 12l-7.5 2L12 22l-1.5-8L3 12l7.5-3.5z"/>',
+    "map-pin": '<path d="M12 21s7-6.8 7-12a7 7 0 0 0-14 0c0 5.2 7 12 7 12z"/><circle cx="12" cy="9" r="2.4"/>',
+    suitcase: '<rect x="3" y="7.5" width="18" height="11.5" rx="1.5"/><path d="M9 7.5V6a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v1.5"/><path d="M3 13h18"/>',
+    globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.8 2.6 2.8 15.4 0 18M12 3c-2.8 2.6-2.8 15.4 0 18"/>',
+    mountain: '<path d="M2 19l6-10 4 5.5 2.5-3.5L22 19z"/>',
+    calendar: '<rect x="4" y="5" width="16" height="15.5" rx="1.5"/><path d="M4 9.5h16"/><path d="M8 3v3.5M16 3v3.5"/><path d="M8 13h0M12 13h0M16 13h0M8 17h0M12 17h0"/>',
+    clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>',
+    flag: '<path d="M5 21V4"/><path d="M5 4.5h13l-3 4 3 4H5"/>'
+  };
+
   function removeExistingOverlay() {
     const existing = document.getElementById("aiapps-auth-gate");
     if (existing) existing.remove();
@@ -150,26 +183,37 @@
         .pw-field.hidden{ display:none; }
         .deco{
           position:absolute;
-          font-size:2.4rem;
-          opacity:0.35;
+          width:2.6rem;
+          height:2.6rem;
+          opacity:0.5;
           transition:transform 0.35s ease, opacity 0.35s ease;
           pointer-events:auto;
-          user-select:none;
-          filter:drop-shadow(0 4px 10px rgba(0,0,0,0.4));
+        }
+        .deco svg{
+          width:100%;
+          height:100%;
+          fill:none;
+          stroke:rgba(255,255,255,0.85);
+          stroke-width:1.3;
+          stroke-linecap:round;
+          stroke-linejoin:round;
         }
         .deco:hover{
-          opacity:0.9;
+          opacity:1;
           transform:scale(1.35) rotate(-8deg);
         }
       </style>
       <div class="cover">
-        ${(window.AIAPPS_LOGIN_DECORATIONS || []).map((emoji, i) => {
+        ${(window.AIAPPS_LOGIN_DECORATIONS || []).map((iconName, i) => {
           const positions = [
-            "top:10%; left:8%;", "top:16%; right:10%;", "bottom:14%; left:10%;",
-            "bottom:10%; right:8%;", "top:46%; left:4%;", "top:44%; right:4%;",
-            "top:6%; left:46%;", "bottom:6%; left:48%;"
+            "top:6%; left:6%;", "top:6%; left:30%;", "top:6%; right:30%;", "top:6%; right:6%;",
+            "top:35%; left:4%;", "top:35%; right:4%;", "bottom:35%; left:4%;", "bottom:35%; right:4%;",
+            "bottom:6%; left:6%;", "bottom:6%; left:30%;", "bottom:6%; right:30%;", "bottom:6%; right:6%;",
+            "top:20%; left:17%;", "top:20%; right:17%;", "bottom:20%; left:17%;", "bottom:20%; right:17%;"
           ];
-          return `<span class="deco" style="${positions[i % positions.length]}">${emoji}</span>`;
+          const svgPath = ICONS[iconName];
+          if (!svgPath) return '';
+          return `<span class="deco" style="${positions[i % positions.length]}"><svg viewBox="0 0 24 24">${svgPath}</svg></span>`;
         }).join('')}
         <form class="card">
           ${window.AIAPPS_APP_NAME ? `
