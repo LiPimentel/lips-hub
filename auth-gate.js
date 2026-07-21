@@ -246,28 +246,88 @@
           100%{ transform:translate(72vw,33vh) rotate(-40deg); opacity:0; }
         }
         .mentor-scene{
-          position:absolute; left:5%; top:20%; width:min(40%,460px); height:62%;
-          display:flex; align-items:flex-end; justify-content:space-around;
-          pointer-events:none; opacity:0.75;
+          position:absolute; left:5%; top:22%; width:min(40%,460px); height:56%;
+          display:flex; align-items:center; justify-content:space-around;
+          pointer-events:none; opacity:0.9;
         }
-        .person{ width:22%; max-width:74px; }
-        .person svg{ width:100%; height:auto; overflow:visible; }
-        .person-figure{ fill:none; stroke:rgba(255,255,255,0.85); stroke-width:2.2; stroke-linecap:round; stroke-linejoin:round; }
-        .arm-l{ animation:arm-gesture-l 3.6s ease-in-out infinite; }
-        .arm-r{ animation:arm-gesture-r 3.6s ease-in-out infinite; }
-        @keyframes arm-gesture-l{
-          0%, 100%{ transform:rotate(0deg); }
-          50%{ transform:rotate(-16deg); }
+        .growth-scene{
+          position:absolute; left:3%; top:9%; width:min(72%,420px); height:82%;
+          pointer-events:none;
         }
-        @keyframes arm-gesture-r{
-          0%, 100%{ transform:rotate(0deg); }
-          50%{ transform:rotate(16deg); }
+        .growth-path{
+          position:absolute; inset:0; width:100%; height:100%; overflow:visible;
+        }
+        .growth-line{
+          fill:none;
+          stroke:rgba(255,255,255,0.38);
+          stroke-width:1.8;
+          stroke-dasharray:3.4 3.4;
+        }
+        .milestone{
+          fill:#7ecfc0;
+          opacity:0;
+          animation:milestone-light 7s ease-in-out infinite;
+        }
+        .milestone.m1{ animation-delay:0s; }
+        .milestone.m2{ animation-delay:0.98s; }
+        .milestone.m3{ animation-delay:1.96s; }
+        .milestone.m4{ animation-delay:2.94s; }
+        @keyframes milestone-light{
+          0%, 6%{ opacity:0; r:2.8; }
+          14%, 80%{ opacity:1; r:3.4; }
+          92%, 100%{ opacity:0; r:2.8; }
+        }
+        .growth-flag{
+          position:absolute; width:30px; height:30px;
+          transform-origin:22% 86%;
+          animation:flag-cycle 7s ease-in-out infinite, flag-flutter 0.9s ease-in-out infinite;
+        }
+        .growth-flag svg{ width:100%; height:100%; fill:none; stroke:#D8AE6E; stroke-width:1.4; stroke-linecap:round; stroke-linejoin:round; }
+        @keyframes flag-cycle{
+          0%, 60%{ opacity:0; scale:0.55; translate:0 6px; }
+          67%{ opacity:0.95; scale:1.05; translate:0 -1px; }
+          74%, 100%{ opacity:0.95; scale:1; translate:0 0; }
+        }
+        @keyframes flag-flutter{
+          0%, 100%{ rotate:-10deg; }
+          50%{ rotate:-17deg; }
+        }
+        .hop-figure{
+          position:absolute; width:21px; height:28px;
+          margin:-28px 0 0 -10.5px;
+          animation:hop-move 7s ease-in-out infinite, hop-squash 7s ease-in-out infinite;
+        }
+        .hop-figure svg{ width:100%; height:100%; }
+        @keyframes hop-move{
+          0%, 12%{ opacity:0; left:8%; top:92%; }
+          14%, 19%{ opacity:1; left:8%; top:90%; }
+          23%{ left:18%; top:70%; }
+          27%, 33%{ left:28%; top:58%; }
+          37%{ left:37%; top:38%; }
+          41%, 47%{ left:46%; top:26%; }
+          51%{ left:60%; top:14%; }
+          55%, 59%{ left:74%; top:8%; }
+          60%, 100%{ opacity:0; left:74%; top:8%; }
+        }
+        @keyframes hop-squash{
+          0%, 12%{ scale:0.5; }
+          14%{ scale:0.85 1.15; }
+          17%, 19%{ scale:1; }
+          23%{ scale:1.1 0.9; }
+          27%{ scale:0.85 1.15; }
+          30%, 33%{ scale:1; }
+          37%{ scale:1.1 0.9; }
+          41%{ scale:0.85 1.15; }
+          44%, 47%{ scale:1; }
+          51%{ scale:1.1 0.9; }
+          55%{ scale:0.85 1.2; }
+          59%{ scale:1; }
+          60%, 100%{ scale:0.5; }
         }
         .interview-side{
-          position:absolute; top:22%; height:58%; width:110px;
-          pointer-events:none; opacity:0.75;
+          position:absolute; top:20%; height:46%; width:130px;
+          pointer-events:none; opacity:0.9;
         }
-        .interview-side svg{ width:100%; height:100%; overflow:visible; }
         .word-float{
           position:absolute;
           font-size:0.68rem;
@@ -444,53 +504,27 @@
           ${[0].map((_, i) => `<span class="plane plane-land" style="animation-duration:16s; animation-delay:${i * 5}s;">✈️</span>`).join('')}
           ${[0.1, 0.3, 0.65].map((top, i) => `<span class="cloud" style="top:${top * 100}%; animation-duration:${28 + i * 8}s; animation-delay:${i * 6}s;">☁️</span>`).join('')}
         ` : ''}
-        ${window.AIAPPS_LOGIN_SCENE === 'mentor-people' ? (() => {
-          const person = (hair, armDelay) => `
-            <div class="person">
-              <svg viewBox="0 0 60 140" class="person-figure">
-                ${hair ? '<path d="M17 15 Q30 -1 43 15"/>' : ''}
-                <circle cx="30" cy="18" r="12"/>
-                <path d="M30 30 L30 85"/>
-                <path class="arm-l" d="M30 45 L12 66" style="transform-origin:30px 45px; animation-delay:${armDelay}s;"/>
-                <path class="arm-r" d="M30 45 L48 66" style="transform-origin:30px 45px; animation-delay:${armDelay}s;"/>
-                <path d="M30 85 L18 135"/>
-                <path d="M30 85 L42 135"/>
+        ${window.AIAPPS_LOGIN_SCENE === 'mentor-people' ? `
+          <div class="growth-scene">
+            <svg class="growth-path" viewBox="0 0 100 100" preserveAspectRatio="none">
+              <path class="growth-line" d="M3 96 C 20 82, 14 60, 34 50 C 54 40, 44 18, 80 4" vector-effect="non-scaling-stroke"/>
+              <circle class="milestone m1" cx="8" cy="90"/>
+              <circle class="milestone m2" cx="28" cy="58"/>
+              <circle class="milestone m3" cx="46" cy="26"/>
+              <circle class="milestone m4" cx="74" cy="8"/>
+            </svg>
+            <div class="growth-flag" style="left:70%; top:-8%;">
+              <svg viewBox="0 0 24 24"><path d="M5 21V4"/><path d="M5 4.5h13l-3 4 3 4H5"/></svg>
+            </div>
+            <div class="hop-figure">
+              <svg viewBox="0 0 24 32">
+                <path d="M12 2.5 C16 2.5 16.6 6 15.4 9.4 C19.2 11.2 19.6 17 18 21.2 C16.8 26.6 14.2 29.5 12 29.5 C9.8 29.5 7.2 26.6 6 21.2 C4.4 17 4.8 11.2 8.6 9.4 C7.4 6 8 2.5 12 2.5 Z" fill="#fff9e6"/>
+                <ellipse cx="10.2" cy="5.6" rx="1.3" ry="0.9" fill="rgba(255,255,255,0.55)"/>
               </svg>
             </div>
-          `;
-          return `<div class="mentor-scene">${person(true, 0)}${person(true, 0.6)}${person(false, 1.1)}</div>`;
-        })() : ''}
-        ${window.AIAPPS_LOGIN_SCENE === 'interview' ? `
-          <div class="interview-side" style="left:5%;">
-            <svg viewBox="0 0 100 100" class="person-figure">
-              <path d="M8 68 L80 68"/>
-              <path d="M14 68 L14 92"/>
-              <path d="M74 68 L74 92"/>
-              <rect x="38" y="46" width="26" height="18" rx="1"/>
-              <path d="M51 64 L51 68"/>
-              <circle cx="25" cy="30" r="10"/>
-              <path d="M25 40 L25 60"/>
-              <path class="arm-l" d="M25 48 L10 58" style="transform-origin:25px 48px;"/>
-              <path class="arm-r" d="M25 48 L38 60" style="transform-origin:25px 48px; animation-delay:0.4s;"/>
-            </svg>
           </div>
-          <div class="interview-side" style="right:5%;">
-            <svg viewBox="0 0 60 140" class="person-figure">
-              <circle cx="30" cy="18" r="12"/>
-              <path d="M30 30 L30 85"/>
-              <path d="M30 34 L26 52 L30 47 L34 52 Z"/>
-              <path class="arm-l" d="M30 45 L12 66" style="transform-origin:30px 45px; animation-delay:0.7s;"/>
-              <path class="arm-r" d="M30 45 L48 66" style="transform-origin:30px 45px; animation-delay:1.1s;"/>
-              <path d="M30 85 L18 135"/>
-              <path d="M30 85 L42 135"/>
-            </svg>
-          </div>
-          ${[
-            { text: 'Calendarios', top: 14, left: 32, dur: 6 },
-            { text: 'Técnicos', top: 30, left: 58, dur: 7.5 },
-            { text: 'Lógica', top: 70, left: 40, dur: 6.8 }
-          ].map(w => `<span class="word-float" style="top:${w.top}%; left:${w.left}%; animation-duration:${w.dur}s;">${w.text}</span>`).join('')}
         ` : ''}
+        ${window.AIAPPS_LOGIN_SCENE === 'interview' ? '' : ''}
         ${!window.AIAPPS_LOGIN_SCENE ? (window.AIAPPS_LOGIN_DECORATIONS || []).map((iconName, i) => {
           const cols = [3, 12, 21, 79, 88, 97];
           const rows = [4, 14, 24, 76, 86, 96];
