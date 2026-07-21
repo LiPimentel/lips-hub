@@ -343,21 +343,18 @@
         .interview-icon-float{
           width:100%;
           height:100%;
-          animation:interview-bounce 1.9s infinite;
+          animation:interview-bounce 2.6s infinite;
         }
         .interview-icon:hover{
           opacity:0.9;
           transform:scale(1.3) rotate(-8deg);
         }
         @keyframes interview-bounce{
-          0% { transform:translateY(-42px); animation-timing-function:cubic-bezier(0.5,0,1,0.5); }
-          45% { transform:translateY(0); animation-timing-function:cubic-bezier(0,0.5,0.5,1); }
-          58% { transform:translateY(-16px); animation-timing-function:cubic-bezier(0.5,0,1,0.5); }
-          70% { transform:translateY(0); animation-timing-function:cubic-bezier(0,0.5,0.5,1); }
-          80% { transform:translateY(-7px); animation-timing-function:cubic-bezier(0.5,0,1,0.5); }
-          88% { transform:translateY(0); animation-timing-function:cubic-bezier(0,0.5,0.5,1); }
-          93% { transform:translateY(-3px); }
-          96%, 100% { transform:translateY(0); }
+          0% { transform:translateY(-36px); animation-timing-function:cubic-bezier(0.45,0,0.9,0.55); }
+          52% { transform:translateY(0); animation-timing-function:cubic-bezier(0.1,0.45,0.55,1); }
+          72% { transform:translateY(-12px); animation-timing-function:cubic-bezier(0.45,0,0.9,0.55); }
+          88% { transform:translateY(0); animation-timing-function:cubic-bezier(0.1,0.45,0.55,1); }
+          100% { transform:translateY(0); }
         }
         .interview-side{
           position:absolute; top:20%; height:46%; width:130px;
