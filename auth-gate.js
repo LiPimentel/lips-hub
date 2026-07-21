@@ -343,15 +343,21 @@
         .interview-icon-float{
           width:100%;
           height:100%;
-          animation:interview-float 4.2s ease-in-out infinite;
+          animation:interview-bounce 1.9s infinite;
         }
         .interview-icon:hover{
           opacity:0.9;
           transform:scale(1.3) rotate(-8deg);
         }
-        @keyframes interview-float{
-          0%, 100% { transform:translateY(0) rotate(0deg); }
-          50% { transform:translateY(-14px) rotate(6deg); }
+        @keyframes interview-bounce{
+          0% { transform:translateY(-42px); animation-timing-function:cubic-bezier(0.5,0,1,0.5); }
+          45% { transform:translateY(0); animation-timing-function:cubic-bezier(0,0.5,0.5,1); }
+          58% { transform:translateY(-16px); animation-timing-function:cubic-bezier(0.5,0,1,0.5); }
+          70% { transform:translateY(0); animation-timing-function:cubic-bezier(0,0.5,0.5,1); }
+          80% { transform:translateY(-7px); animation-timing-function:cubic-bezier(0.5,0,1,0.5); }
+          88% { transform:translateY(0); animation-timing-function:cubic-bezier(0,0.5,0.5,1); }
+          93% { transform:translateY(-3px); }
+          96%, 100% { transform:translateY(0); }
         }
         .interview-side{
           position:absolute; top:20%; height:46%; width:130px;
@@ -569,8 +575,8 @@
             const jitterLeft = (Math.random() - 0.5) * 7;
             const size = 1.7 + Math.random() * 1.0;
             const pos = `top:${(cell.top + jitterTop).toFixed(1)}%; left:${(cell.left + jitterLeft).toFixed(1)}%; width:${size.toFixed(2)}rem; height:${size.toFixed(2)}rem;`;
-            const delay = (i % 10) * 0.42;
-            return `<span class="interview-icon" style="${pos}"><span class="interview-icon-float" style="animation-delay:${delay}s"><svg viewBox="0 0 24 24" style="stroke:${color}">${svgPath}</svg></span></span>`;
+            const delay = (i % 14) * 0.14 + Math.random() * 0.3;
+            return `<span class="interview-icon" style="${pos}"><span class="interview-icon-float" style="animation-delay:-${delay.toFixed(2)}s"><svg viewBox="0 0 24 24" style="stroke:${color}">${svgPath}</svg></span></span>`;
           }).join('');
         })() : ''}
         ${!window.AIAPPS_LOGIN_SCENE ? (window.AIAPPS_LOGIN_DECORATIONS || []).map((iconName, i) => {
