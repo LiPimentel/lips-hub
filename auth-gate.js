@@ -96,7 +96,7 @@
         }
         .brand-mark{
           font-family:Georgia,'Times New Roman',serif;
-          font-size:1.5rem;
+          font-size:${window.AIAPPS_APP_LOGO_SIZE || '1.5rem'};
           font-weight:600;
           letter-spacing:-0.02em;
           color:#1B2430;
@@ -112,27 +112,28 @@
         .coin{
           position:absolute;
           left:50%;
-          bottom:2px;
-          font-size:0.85rem;
+          bottom:0.15em;
+          font-size:0.55em;
           opacity:0;
           animation:coin-pop 1.6s ease-in infinite;
           pointer-events:none;
         }
-        .coin:nth-child(1){ --cx:24px; animation-delay:0s; }
-        .coin:nth-child(2){ --cx:-20px; animation-delay:0.5s; }
-        .coin:nth-child(3){ --cx:6px; animation-delay:1s; }
+        .coin:nth-child(1){ --cx:1.76em; animation-delay:0s; }
+        .coin:nth-child(2){ --cx:-1.47em; animation-delay:0.5s; }
+        .coin:nth-child(3){ --cx:0.44em; animation-delay:1s; }
         @keyframes coin-pop{
           0%{ opacity:0; transform:translate(-50%,0) scale(0.4) rotate(0deg); }
-          18%{ opacity:1; transform:translate(-50%,-16px) scale(0.9) rotate(70deg); }
-          100%{ opacity:0; transform:translate(calc(-50% + var(--cx,20px)),28px) scale(0.6) rotate(320deg); }
+          18%{ opacity:1; transform:translate(-50%,-1.18em) scale(0.9) rotate(70deg); }
+          100%{ opacity:0; transform:translate(calc(-50% + var(--cx,1.5em)),2.06em) scale(0.6) rotate(320deg); }
         }
         .coin-rain{
           position:absolute;
           top:38%;
           font-size:1.5rem;
-          animation:coin-fall linear infinite;
+          animation:coin-fall var(--dur,7s) linear infinite;
+          animation-delay:var(--delay,0s);
           pointer-events:none;
-          filter:drop-shadow(0 2px 4px rgba(0,0,0,0.35));
+          filter:drop-shadow(0 2px 4px rgba(0,0,0,0.35)) saturate(1.5) sepia(0.15);
         }
         @keyframes coin-fall{
           0%{ transform:translateY(0) rotate(0deg); opacity:0; }
@@ -140,16 +141,36 @@
           92%{ opacity:0.95; }
           100%{ transform:translateY(58vh) rotate(360deg); opacity:0; }
         }
-        .coin-pile{
-          position:absolute; left:0; right:0; bottom:0; height:50px;
-          background:linear-gradient(180deg, rgba(216,174,110,0) 0%, rgba(216,174,110,0.85) 55%, #B8863B 100%);
+        .sparkle-glint{
+          position:absolute;
+          width:18px; height:18px;
+          opacity:0;
+          animation:sparkle-flash 1.7s ease-in-out infinite;
+          pointer-events:none;
+          filter:drop-shadow(0 0 4px rgba(255,249,230,0.9));
+        }
+        .sparkle-glint svg{ width:100%; height:100%; fill:#fff9e6; }
+        @keyframes sparkle-flash{
+          0%, 65%, 100%{ opacity:0; transform:scale(0.2) rotate(0deg); }
+          75%{ opacity:1; transform:scale(1.15) rotate(20deg); }
+          85%{ opacity:0.8; transform:scale(0.8) rotate(20deg); }
+          93%{ opacity:0; transform:scale(0.3) rotate(20deg); }
+        }
+        .coin-floor{
+          position:absolute; left:0; right:0; bottom:0; height:56px;
           pointer-events:none;
         }
-        .coin-pile::before{
-          content:'';
-          position:absolute; left:0; right:0; top:-9px; height:18px;
-          background-image:radial-gradient(circle at 12px 9px, #D8AE6E 0 8px, transparent 9px);
-          background-size:24px 18px;
+        .coin-floor-bg{
+          position:absolute; left:0; right:0; bottom:0; height:34px;
+          background:linear-gradient(180deg, rgba(184,134,59,0) 0%, rgba(184,134,59,0.4) 100%);
+        }
+        .coin-floor svg{ position:absolute; left:0; right:0; bottom:0; width:100%; height:100%; }
+        .floor-sparkle{
+          transform-box:fill-box; transform-origin:center;
+          fill:#fff9e6;
+          opacity:0;
+          animation:sparkle-flash 2.4s ease-in-out infinite;
+          filter:drop-shadow(0 0 3px rgba(255,249,230,0.9));
         }
         .cover.align-right{ justify-content:flex-end; padding-right:8vw; }
         .gantt-scene{
@@ -347,15 +368,53 @@
         }
       </style>
       <div class="cover ${window.AIAPPS_LOGIN_LAYOUT === 'right' ? 'align-right' : ''}">
-        ${window.AIAPPS_LOGIN_SCENE === 'coins-rain' ? `
-          <div class="coin-pile"></div>
-          ${Array.from({ length: 16 }).map(() => {
+        ${window.AIAPPS_LOGIN_SCENE === 'coins-rain' ? (() => {
+          const STAR = 'M12 2 L14 10 L22 12 L14 14 L12 22 L10 14 L2 12 L10 10 Z';
+          const floorCoins = Array.from({ length: 170 }).map((_, i) => {
+            const cx = (i * 0.6 + Math.random() * 0.7).toFixed(1);
+            const rx = (0.55 + Math.random() * 0.6).toFixed(2);
+            const ry = (rx * 0.46).toFixed(2);
+            const cy = (13 + Math.random() * 5).toFixed(1);
+            const rot = (Math.random() * 16 - 8).toFixed(1);
+            const isGlint = Math.random() < 0.045;
+            const glintDelay = (Math.random() * 3.5).toFixed(2);
+            const sparkleX = (parseFloat(rx) * 0.3).toFixed(1);
+            const sparkleY = (-parseFloat(ry) * 0.5).toFixed(1);
+            return { cx, rx, ry, cy: parseFloat(cy), rot, isGlint, glintDelay, sparkleX, sparkleY };
+          }).sort((a, b) => a.cy - b.cy);
+          const floorEllipses = floorCoins.map(c => {
+            return `<g transform="translate(${c.cx},${c.cy}) rotate(${c.rot})">
+              <ellipse cx="0" cy="0" rx="${c.rx}" ry="${c.ry}" fill="url(#coinGrad)" stroke="#5c4009" stroke-width="0.09"/>
+              <ellipse cx="0" cy="${(-c.ry * 0.32).toFixed(2)}" rx="${(c.rx * 0.55).toFixed(2)}" ry="${(c.ry * 0.32).toFixed(2)}" fill="rgba(255,255,255,0.4)"/>
+              ${c.isGlint ? `<g transform="translate(${c.sparkleX},${c.sparkleY}) scale(0.05)"><g class="floor-sparkle" style="animation-delay:${c.glintDelay}s"><path d="${STAR}"/></g></g>` : ''}
+            </g>`;
+          }).join('');
+          const coins = Array.from({ length: 16 }).map(() => {
             const left = (Math.random() * 94 + 2).toFixed(1);
             const duration = (5 + Math.random() * 4).toFixed(1);
             const delay = (Math.random() * 8).toFixed(1);
-            return `<span class="coin-rain" style="left:${left}%; animation-duration:${duration}s; animation-delay:${delay}s;">🪙</span>`;
-          }).join('')}
-        ` : ''}
+            const isSparkle = Math.random() < 0.4;
+            const glintDelay = (Math.random() * 1.7).toFixed(2);
+            const sparkle = isSparkle ? `<span class="sparkle-glint" style="top:-3px; right:-3px; animation-delay:${glintDelay}s;"><svg viewBox="0 0 24 24"><path d="${STAR}"/></svg></span>` : '';
+            return `<span class="coin-rain" style="left:${left}%; --dur:${duration}s; --delay:${delay}s;">🪙${sparkle}</span>`;
+          }).join('');
+          return `
+          <div class="coin-floor">
+            <div class="coin-floor-bg"></div>
+            <svg viewBox="0 0 100 20" preserveAspectRatio="none">
+              <defs>
+                <radialGradient id="coinGrad" cx="35%" cy="30%" r="75%">
+                  <stop offset="0%" stop-color="#FFF3B0"/>
+                  <stop offset="35%" stop-color="#FFD700"/>
+                  <stop offset="75%" stop-color="#D4A017"/>
+                  <stop offset="100%" stop-color="#8a6414"/>
+                </radialGradient>
+              </defs>
+              ${floorEllipses}
+            </svg>
+          </div>
+          ${coins}`;
+        })() : ''}
         ${window.AIAPPS_LOGIN_SCENE === 'gantt-build' ? `
           <div class="gantt-scene">
             ${Array.from({ length: 6 }).map((_, i) => {
