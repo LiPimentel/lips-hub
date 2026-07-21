@@ -181,15 +181,28 @@
         .gantt-row{ position:relative; height:12px; background:rgba(255,255,255,0.1); border-radius:4px; }
         .gantt-bar{
           position:absolute; left:0; top:0; height:100%; border-radius:4px;
-          background:linear-gradient(90deg, #B8863B, #D8AE6E);
           width:0%;
           animation:gantt-grow 6s ease-in-out infinite;
         }
-        .gantt-check{
-          position:absolute; top:50%; margin-top:-9px; font-size:0.85rem; color:#7ecfc0;
+        .gantt-bar.c-brass{ background:linear-gradient(90deg, #B8863B, #D8AE6E); }
+        .gantt-bar.c-teal{ background:linear-gradient(90deg, #3E6E6E, #7ecfc0); }
+        .gantt-dot{
+          position:absolute; top:50%; width:9px; height:9px; border-radius:50%;
+          margin:-4.5px 0 0 -4.5px;
+          box-shadow:0 0 6px 1px rgba(255,255,255,0.5);
           opacity:0;
-          animation:gantt-check-show 6s ease-in-out infinite;
+          animation:gantt-dot-move 6s ease-in-out infinite;
         }
+        .gantt-dot.c-brass{ background:#F3D9A8; }
+        .gantt-dot.c-teal{ background:#bdf0e4; }
+        .gantt-flag{
+          position:absolute; bottom:2px; width:26px; height:26px;
+          margin-left:-3px;
+          opacity:0;
+          transform-origin:12% 100%;
+          animation:gantt-flag-show 6s ease-in-out infinite;
+        }
+        .gantt-flag svg{ width:100%; height:100%; fill:none; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
         .gantt-date{
           position:absolute; top:-22px; font-size:0.6rem; color:rgba(255,255,255,0.6);
           transform:translateY(-10px); opacity:0;
@@ -200,10 +213,17 @@
           55%, 85%{ width:var(--w,70%); }
           100%{ width:0%; }
         }
-        @keyframes gantt-check-show{
-          0%, 56%{ opacity:0; }
-          62%, 85%{ opacity:1; }
-          92%, 100%{ opacity:0; }
+        @keyframes gantt-dot-move{
+          0%, 8%{ opacity:0; left:0%; }
+          10%{ opacity:1; }
+          55%, 85%{ opacity:1; left:var(--w,70%); }
+          92%, 100%{ opacity:0; left:var(--w,70%); }
+        }
+        @keyframes gantt-flag-show{
+          0%, 56%{ opacity:0; transform:scale(0.4) rotate(0deg); }
+          64%{ opacity:1; transform:scale(1.15) rotate(-6deg); }
+          72%, 85%{ opacity:1; transform:scale(1) rotate(-4deg); }
+          92%, 100%{ opacity:0; transform:scale(0.4) rotate(0deg); }
         }
         @keyframes gantt-date-fall{
           0%, 8%{ opacity:0; transform:translateY(-10px); }
@@ -507,20 +527,23 @@
           </div>
           ${coins}`;
         })() : ''}
-        ${window.AIAPPS_LOGIN_SCENE === 'gantt-build' ? `
-          <div class="gantt-scene">
-            ${Array.from({ length: 6 }).map((_, i) => {
-              const w = (52 + Math.random() * 38).toFixed(0);
-              const delay = (i * 0.95).toFixed(2);
-              const day = Math.floor(Math.random() * 28) + 1;
-              return `<div class="gantt-row">
-                <div class="gantt-bar" style="--w:${w}%; animation-delay:${delay}s;"></div>
+        ${window.AIAPPS_LOGIN_SCENE === 'gantt-build' ? (() => {
+          const flagColors = ['#E03B2E', '#D8AE6E', '#4E8B8B', '#8C6BAE', '#E8935C', '#5C9BD8', '#7ecfc0'];
+          const rows = Array.from({ length: 9 }).map((_, i) => {
+            const w = (48 + Math.random() * 42).toFixed(0);
+            const delay = (i * 0.68).toFixed(2);
+            const day = Math.floor(Math.random() * 28) + 1;
+            const cls = i % 2 === 0 ? 'c-brass' : 'c-teal';
+            const flagColor = flagColors[i % flagColors.length];
+            return `<div class="gantt-row">
+                <div class="gantt-bar ${cls}" style="--w:${w}%; animation-delay:${delay}s;"></div>
+                <span class="gantt-dot ${cls}" style="--w:${w}%; animation-delay:${delay}s;"></span>
                 <span class="gantt-date" style="left:${w}%; animation-delay:${delay}s;">${day}</span>
-                <span class="gantt-check" style="left:${w}%; animation-delay:${delay}s;">✓</span>
+                <span class="gantt-flag" style="left:${w}%; animation-delay:${delay}s;"><svg viewBox="0 0 24 24" style="stroke:${flagColor}"><path d="M5 21V4"/><path d="M5 4.5h13l-3 4 3 4H5"/></svg></span>
               </div>`;
-            }).join('')}
-          </div>
-        ` : ''}
+          }).join('');
+          return `<div class="gantt-scene">${rows}</div>`;
+        })() : ''}
         ${window.AIAPPS_LOGIN_SCENE === 'travel-sky' ? `
           <div class="travel-skyline">
             <svg viewBox="0 0 400 100" preserveAspectRatio="none">
