@@ -96,7 +96,7 @@
         }
         .brand-mark{
           font-family:Georgia,'Times New Roman',serif;
-          font-size:1.5rem;
+          font-size:${window.AIAPPS_APP_LOGO_SIZE || '1.5rem'};
           font-weight:600;
           letter-spacing:-0.02em;
           color:#1B2430;
@@ -112,19 +112,174 @@
         .coin{
           position:absolute;
           left:50%;
-          bottom:2px;
-          font-size:0.85rem;
+          bottom:0.15em;
+          font-size:0.55em;
           opacity:0;
           animation:coin-pop 1.6s ease-in infinite;
           pointer-events:none;
         }
-        .coin:nth-child(1){ --cx:24px; animation-delay:0s; }
-        .coin:nth-child(2){ --cx:-20px; animation-delay:0.5s; }
-        .coin:nth-child(3){ --cx:6px; animation-delay:1s; }
+        .coin:nth-child(1){ --cx:1.76em; animation-delay:0s; }
+        .coin:nth-child(2){ --cx:-1.47em; animation-delay:0.5s; }
+        .coin:nth-child(3){ --cx:0.44em; animation-delay:1s; }
         @keyframes coin-pop{
           0%{ opacity:0; transform:translate(-50%,0) scale(0.4) rotate(0deg); }
-          18%{ opacity:1; transform:translate(-50%,-16px) scale(0.9) rotate(70deg); }
-          100%{ opacity:0; transform:translate(calc(-50% + var(--cx,20px)),28px) scale(0.6) rotate(320deg); }
+          18%{ opacity:1; transform:translate(-50%,-1.18em) scale(0.9) rotate(70deg); }
+          100%{ opacity:0; transform:translate(calc(-50% + var(--cx,1.5em)),2.06em) scale(0.6) rotate(320deg); }
+        }
+        .coin-rain{
+          position:absolute;
+          top:38%;
+          font-size:1.5rem;
+          animation:coin-fall var(--dur,7s) linear infinite;
+          animation-delay:var(--delay,0s);
+          pointer-events:none;
+          filter:drop-shadow(0 2px 4px rgba(0,0,0,0.35)) saturate(1.5) sepia(0.15);
+        }
+        @keyframes coin-fall{
+          0%{ transform:translateY(0) rotate(0deg); opacity:0; }
+          8%{ opacity:0.95; }
+          92%{ opacity:0.95; }
+          100%{ transform:translateY(58vh) rotate(360deg); opacity:0; }
+        }
+        .sparkle-glint{
+          position:absolute;
+          width:18px; height:18px;
+          opacity:0;
+          animation:sparkle-flash 1.7s ease-in-out infinite;
+          pointer-events:none;
+          filter:drop-shadow(0 0 4px rgba(255,249,230,0.9));
+        }
+        .sparkle-glint svg{ width:100%; height:100%; fill:#fff9e6; }
+        @keyframes sparkle-flash{
+          0%, 65%, 100%{ opacity:0; transform:scale(0.2) rotate(0deg); }
+          75%{ opacity:1; transform:scale(1.15) rotate(20deg); }
+          85%{ opacity:0.8; transform:scale(0.8) rotate(20deg); }
+          93%{ opacity:0; transform:scale(0.3) rotate(20deg); }
+        }
+        .coin-floor{
+          position:absolute; left:0; right:0; bottom:0; height:56px;
+          pointer-events:none;
+        }
+        .coin-floor-bg{
+          position:absolute; left:0; right:0; bottom:0; height:34px;
+          background:linear-gradient(180deg, rgba(184,134,59,0) 0%, rgba(184,134,59,0.4) 100%);
+        }
+        .coin-floor svg{ position:absolute; left:0; right:0; bottom:0; width:100%; height:100%; }
+        .floor-sparkle{
+          transform-box:fill-box; transform-origin:center;
+          fill:#fff9e6;
+          opacity:0;
+          animation:sparkle-flash 2.4s ease-in-out infinite;
+          filter:drop-shadow(0 0 3px rgba(255,249,230,0.9));
+        }
+        .cover.align-right{ justify-content:flex-end; padding-right:8vw; }
+        .gantt-scene{
+          position:absolute; left:6%; top:20%; width:min(38%, 420px); height:60%;
+          display:flex; flex-direction:column; justify-content:space-between;
+          pointer-events:none;
+        }
+        .gantt-row{ position:relative; height:12px; background:rgba(255,255,255,0.1); border-radius:4px; }
+        .gantt-bar{
+          position:absolute; left:0; top:0; height:100%; border-radius:4px;
+          background:linear-gradient(90deg, #B8863B, #D8AE6E);
+          width:0%;
+          animation:gantt-grow 6s ease-in-out infinite;
+        }
+        .gantt-check{
+          position:absolute; top:50%; margin-top:-9px; font-size:0.85rem; color:#7ecfc0;
+          opacity:0;
+          animation:gantt-check-show 6s ease-in-out infinite;
+        }
+        .gantt-date{
+          position:absolute; top:-22px; font-size:0.6rem; color:rgba(255,255,255,0.6);
+          transform:translateY(-10px); opacity:0;
+          animation:gantt-date-fall 6s ease-in-out infinite;
+        }
+        @keyframes gantt-grow{
+          0%, 8%{ width:0%; }
+          55%, 85%{ width:var(--w,70%); }
+          100%{ width:0%; }
+        }
+        @keyframes gantt-check-show{
+          0%, 56%{ opacity:0; }
+          62%, 85%{ opacity:1; }
+          92%, 100%{ opacity:0; }
+        }
+        @keyframes gantt-date-fall{
+          0%, 8%{ opacity:0; transform:translateY(-10px); }
+          16%, 50%{ opacity:0.85; transform:translateY(0px); }
+          58%, 100%{ opacity:0; }
+        }
+        .travel-skyline{
+          position:absolute; left:0; right:0; bottom:0; height:32%;
+          filter:blur(3px); opacity:0.4; pointer-events:none;
+        }
+        .travel-skyline svg{ width:100%; height:100%; display:block; }
+        .cloud{
+          position:absolute; font-size:2.1rem; color:#fff; opacity:0.45;
+          animation:cloud-drift linear infinite;
+          pointer-events:none;
+        }
+        @keyframes cloud-drift{
+          0%{ transform:translateX(-15vw); }
+          100%{ transform:translateX(115vw); }
+        }
+        .plane{
+          position:absolute; font-size:1.6rem;
+          animation-timing-function:linear;
+          animation-iteration-count:infinite;
+          pointer-events:none;
+          filter:drop-shadow(0 2px 4px rgba(0,0,0,0.3));
+        }
+        .plane-fly{ animation-name:plane-fly; }
+        @keyframes plane-fly{
+          0%{ transform:translateX(-10vw) translateY(0) rotate(-45deg); opacity:0; }
+          8%{ opacity:0.9; }
+          92%{ opacity:0.9; }
+          100%{ transform:translateX(115vw) translateY(-14px) rotate(-45deg); opacity:0; }
+        }
+        .plane-land{ animation-name:plane-land; }
+        @keyframes plane-land{
+          0%{ transform:translate(-8vw,-18vh) rotate(15deg); opacity:0; }
+          12%{ opacity:0.9; }
+          80%{ opacity:0.9; transform:translate(60vw,30vh) rotate(-30deg); }
+          100%{ transform:translate(72vw,33vh) rotate(-40deg); opacity:0; }
+        }
+        .mentor-scene{
+          position:absolute; left:5%; top:20%; width:min(40%,460px); height:62%;
+          display:flex; align-items:flex-end; justify-content:space-around;
+          pointer-events:none; opacity:0.75;
+        }
+        .person{ width:22%; max-width:74px; }
+        .person svg{ width:100%; height:auto; overflow:visible; }
+        .person-figure{ fill:none; stroke:rgba(255,255,255,0.85); stroke-width:2.2; stroke-linecap:round; stroke-linejoin:round; }
+        .arm-l{ animation:arm-gesture-l 3.6s ease-in-out infinite; }
+        .arm-r{ animation:arm-gesture-r 3.6s ease-in-out infinite; }
+        @keyframes arm-gesture-l{
+          0%, 100%{ transform:rotate(0deg); }
+          50%{ transform:rotate(-16deg); }
+        }
+        @keyframes arm-gesture-r{
+          0%, 100%{ transform:rotate(0deg); }
+          50%{ transform:rotate(16deg); }
+        }
+        .interview-side{
+          position:absolute; top:22%; height:58%; width:110px;
+          pointer-events:none; opacity:0.75;
+        }
+        .interview-side svg{ width:100%; height:100%; overflow:visible; }
+        .word-float{
+          position:absolute;
+          font-size:0.68rem;
+          color:rgba(255,255,255,0.55);
+          letter-spacing:0.06em;
+          text-transform:uppercase;
+          animation:word-drift ease-in-out infinite;
+          pointer-events:none;
+        }
+        @keyframes word-drift{
+          0%, 100%{ transform:translateY(0); opacity:0.35; }
+          50%{ transform:translateY(-14px); opacity:0.8; }
         }
         label{
           display:block;
@@ -212,8 +367,131 @@
           50% { transform:translateY(-9px) rotate(5deg); }
         }
       </style>
-      <div class="cover">
-        ${(window.AIAPPS_LOGIN_DECORATIONS || []).map((iconName, i) => {
+      <div class="cover ${window.AIAPPS_LOGIN_LAYOUT === 'right' ? 'align-right' : ''}">
+        ${window.AIAPPS_LOGIN_SCENE === 'coins-rain' ? (() => {
+          const STAR = 'M12 2 L14 10 L22 12 L14 14 L12 22 L10 14 L2 12 L10 10 Z';
+          const floorCoins = Array.from({ length: 170 }).map((_, i) => {
+            const cx = (i * 0.6 + Math.random() * 0.7).toFixed(1);
+            const rx = (0.55 + Math.random() * 0.6).toFixed(2);
+            const ry = (rx * 0.46).toFixed(2);
+            const cy = (13 + Math.random() * 5).toFixed(1);
+            const rot = (Math.random() * 16 - 8).toFixed(1);
+            const isGlint = Math.random() < 0.045;
+            const glintDelay = (Math.random() * 3.5).toFixed(2);
+            const sparkleX = (parseFloat(rx) * 0.3).toFixed(1);
+            const sparkleY = (-parseFloat(ry) * 0.5).toFixed(1);
+            return { cx, rx, ry, cy: parseFloat(cy), rot, isGlint, glintDelay, sparkleX, sparkleY };
+          }).sort((a, b) => a.cy - b.cy);
+          const floorEllipses = floorCoins.map(c => {
+            return `<g transform="translate(${c.cx},${c.cy}) rotate(${c.rot})">
+              <ellipse cx="0" cy="0" rx="${c.rx}" ry="${c.ry}" fill="url(#coinGrad)" stroke="#5c4009" stroke-width="0.09"/>
+              <ellipse cx="0" cy="${(-c.ry * 0.32).toFixed(2)}" rx="${(c.rx * 0.55).toFixed(2)}" ry="${(c.ry * 0.32).toFixed(2)}" fill="rgba(255,255,255,0.4)"/>
+              ${c.isGlint ? `<g transform="translate(${c.sparkleX},${c.sparkleY}) scale(0.05)"><g class="floor-sparkle" style="animation-delay:${c.glintDelay}s"><path d="${STAR}"/></g></g>` : ''}
+            </g>`;
+          }).join('');
+          const coins = Array.from({ length: 16 }).map(() => {
+            const left = (Math.random() * 94 + 2).toFixed(1);
+            const duration = (5 + Math.random() * 4).toFixed(1);
+            const delay = (Math.random() * 8).toFixed(1);
+            const isSparkle = Math.random() < 0.4;
+            const glintDelay = (Math.random() * 1.7).toFixed(2);
+            const sparkle = isSparkle ? `<span class="sparkle-glint" style="top:-3px; right:-3px; animation-delay:${glintDelay}s;"><svg viewBox="0 0 24 24"><path d="${STAR}"/></svg></span>` : '';
+            return `<span class="coin-rain" style="left:${left}%; --dur:${duration}s; --delay:${delay}s;">🪙${sparkle}</span>`;
+          }).join('');
+          return `
+          <div class="coin-floor">
+            <div class="coin-floor-bg"></div>
+            <svg viewBox="0 0 100 20" preserveAspectRatio="none">
+              <defs>
+                <radialGradient id="coinGrad" cx="35%" cy="30%" r="75%">
+                  <stop offset="0%" stop-color="#FFF3B0"/>
+                  <stop offset="35%" stop-color="#FFD700"/>
+                  <stop offset="75%" stop-color="#D4A017"/>
+                  <stop offset="100%" stop-color="#8a6414"/>
+                </radialGradient>
+              </defs>
+              ${floorEllipses}
+            </svg>
+          </div>
+          ${coins}`;
+        })() : ''}
+        ${window.AIAPPS_LOGIN_SCENE === 'gantt-build' ? `
+          <div class="gantt-scene">
+            ${Array.from({ length: 6 }).map((_, i) => {
+              const w = (52 + Math.random() * 38).toFixed(0);
+              const delay = (i * 0.95).toFixed(2);
+              const day = Math.floor(Math.random() * 28) + 1;
+              return `<div class="gantt-row">
+                <div class="gantt-bar" style="--w:${w}%; animation-delay:${delay}s;"></div>
+                <span class="gantt-date" style="left:${w}%; animation-delay:${delay}s;">${day}</span>
+                <span class="gantt-check" style="left:${w}%; animation-delay:${delay}s;">✓</span>
+              </div>`;
+            }).join('')}
+          </div>
+        ` : ''}
+        ${window.AIAPPS_LOGIN_SCENE === 'travel-sky' ? `
+          <div class="travel-skyline">
+            <svg viewBox="0 0 400 100" preserveAspectRatio="none">
+              <path d="M0 100 L0 60 L40 20 L70 55 L100 15 L130 50 L160 60 L160 100Z" fill="#0e7c7b"/>
+              <rect x="180" y="40" width="18" height="60" fill="#0e7c7b"/>
+              <rect x="205" y="25" width="14" height="75" fill="#0e7c7b"/>
+              <rect x="225" y="50" width="20" height="50" fill="#0e7c7b"/>
+              <rect x="250" y="35" width="16" height="65" fill="#0e7c7b"/>
+              <path d="M280 100 L280 45 L320 10 L350 45 L380 25 L400 55 L400 100Z" fill="#0e7c7b"/>
+            </svg>
+          </div>
+          ${[0.18, 0.55].map((top, i) => `<span class="plane plane-fly" style="top:${top * 100}%; animation-duration:${13 + i * 3}s; animation-delay:${i * 4}s;">✈️</span>`).join('')}
+          ${[0].map((_, i) => `<span class="plane plane-land" style="animation-duration:16s; animation-delay:${i * 5}s;">✈️</span>`).join('')}
+          ${[0.1, 0.3, 0.65].map((top, i) => `<span class="cloud" style="top:${top * 100}%; animation-duration:${28 + i * 8}s; animation-delay:${i * 6}s;">☁️</span>`).join('')}
+        ` : ''}
+        ${window.AIAPPS_LOGIN_SCENE === 'mentor-people' ? (() => {
+          const person = (hair, armDelay) => `
+            <div class="person">
+              <svg viewBox="0 0 60 140" class="person-figure">
+                ${hair ? '<path d="M17 15 Q30 -1 43 15"/>' : ''}
+                <circle cx="30" cy="18" r="12"/>
+                <path d="M30 30 L30 85"/>
+                <path class="arm-l" d="M30 45 L12 66" style="transform-origin:30px 45px; animation-delay:${armDelay}s;"/>
+                <path class="arm-r" d="M30 45 L48 66" style="transform-origin:30px 45px; animation-delay:${armDelay}s;"/>
+                <path d="M30 85 L18 135"/>
+                <path d="M30 85 L42 135"/>
+              </svg>
+            </div>
+          `;
+          return `<div class="mentor-scene">${person(true, 0)}${person(true, 0.6)}${person(false, 1.1)}</div>`;
+        })() : ''}
+        ${window.AIAPPS_LOGIN_SCENE === 'interview' ? `
+          <div class="interview-side" style="left:5%;">
+            <svg viewBox="0 0 100 100" class="person-figure">
+              <path d="M8 68 L80 68"/>
+              <path d="M14 68 L14 92"/>
+              <path d="M74 68 L74 92"/>
+              <rect x="38" y="46" width="26" height="18" rx="1"/>
+              <path d="M51 64 L51 68"/>
+              <circle cx="25" cy="30" r="10"/>
+              <path d="M25 40 L25 60"/>
+              <path class="arm-l" d="M25 48 L10 58" style="transform-origin:25px 48px;"/>
+              <path class="arm-r" d="M25 48 L38 60" style="transform-origin:25px 48px; animation-delay:0.4s;"/>
+            </svg>
+          </div>
+          <div class="interview-side" style="right:5%;">
+            <svg viewBox="0 0 60 140" class="person-figure">
+              <circle cx="30" cy="18" r="12"/>
+              <path d="M30 30 L30 85"/>
+              <path d="M30 34 L26 52 L30 47 L34 52 Z"/>
+              <path class="arm-l" d="M30 45 L12 66" style="transform-origin:30px 45px; animation-delay:0.7s;"/>
+              <path class="arm-r" d="M30 45 L48 66" style="transform-origin:30px 45px; animation-delay:1.1s;"/>
+              <path d="M30 85 L18 135"/>
+              <path d="M30 85 L42 135"/>
+            </svg>
+          </div>
+          ${[
+            { text: 'Calendarios', top: 14, left: 32, dur: 6 },
+            { text: 'Técnicos', top: 30, left: 58, dur: 7.5 },
+            { text: 'Lógica', top: 70, left: 40, dur: 6.8 }
+          ].map(w => `<span class="word-float" style="top:${w.top}%; left:${w.left}%; animation-duration:${w.dur}s;">${w.text}</span>`).join('')}
+        ` : ''}
+        ${!window.AIAPPS_LOGIN_SCENE ? (window.AIAPPS_LOGIN_DECORATIONS || []).map((iconName, i) => {
           const cols = [3, 12, 21, 79, 88, 97];
           const rows = [4, 14, 24, 76, 86, 96];
           const cells = [];
@@ -227,7 +505,7 @@
           const pos = `top:${(cell.top + jitterTop).toFixed(1)}%; left:${(cell.left + jitterLeft).toFixed(1)}%; width:${size.toFixed(2)}rem; height:${size.toFixed(2)}rem;`;
           const delay = (i % 8) * 0.55;
           return `<span class="deco" style="${pos}"><span class="deco-float" style="animation-delay:${delay}s"><svg viewBox="0 0 24 24">${svgPath}</svg></span></span>`;
-        }).join('')}
+        }).join('') : ''}
         <form class="card">
           ${window.AIAPPS_APP_NAME ? `
           <div class="brand">
