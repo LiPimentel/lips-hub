@@ -67,6 +67,8 @@
           font-family:system-ui,-apple-system,'Segoe UI',sans-serif;
         }
         .card{
+          position:relative;
+          z-index:4;
           width:min(320px, 90vw);
           background:#EFEADC;
           border-radius:6px;
@@ -231,39 +233,72 @@
           58%, 100%{ opacity:0; }
         }
         .travel-skyline{
-          position:absolute; left:0; right:0; bottom:0; height:32%;
-          filter:blur(3px); opacity:0.4; pointer-events:none;
+          position:absolute; left:0; right:0; bottom:0; height:46%;
+          filter:blur(2px); opacity:0.6; pointer-events:none;
         }
         .travel-skyline svg{ width:100%; height:100%; display:block; }
-        .cloud{
-          position:absolute; font-size:2.1rem; color:#fff; opacity:0.45;
-          animation:cloud-drift linear infinite;
-          pointer-events:none;
+        .travel-cloud-drift{
+          animation:cloud-drift-back linear infinite;
         }
-        @keyframes cloud-drift{
-          0%{ transform:translateX(-15vw); }
-          100%{ transform:translateX(115vw); }
+        @keyframes cloud-drift-back{
+          0%{ transform:translateX(-6%); }
+          100%{ transform:translateX(6%); }
+        }
+        .cloud-el{
+          position:absolute;
+          opacity:0.55;
+          z-index:1;
+          pointer-events:none;
+          animation:cloud-drift-screen linear infinite alternate;
+        }
+        .cloud-el svg{ width:100%; height:100%; }
+        @keyframes cloud-drift-screen{
+          0%{ transform:translateX(-6%); }
+          100%{ transform:translateX(6%); }
         }
         .plane{
-          position:absolute; font-size:1.6rem;
-          animation-timing-function:linear;
-          animation-iteration-count:infinite;
-          pointer-events:none;
-          filter:drop-shadow(0 2px 4px rgba(0,0,0,0.3));
+          position:absolute; width:26px; height:26px;
+          opacity:0;
+          filter:drop-shadow(0 2px 3px rgba(0,0,0,0.35));
         }
-        .plane-fly{ animation-name:plane-fly; }
-        @keyframes plane-fly{
-          0%{ transform:translateX(-10vw) translateY(0) rotate(-45deg); opacity:0; }
+        .plane svg{ width:100%; height:100%; fill:none; stroke:#f1f6f5; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round; }
+        .plane-behind{ z-index:1; }
+        .plane-front{ z-index:3; }
+        @keyframes fly-1{
+          0%{ left:-10%; top:90%; transform:rotate(55deg); opacity:0; }
+          8%{ opacity:0.95; }
+          90%{ opacity:0.95; }
+          100%{ left:110%; top:5%; transform:rotate(55deg); opacity:0; }
+        }
+        @keyframes fly-2{
+          0%{ left:105%; top:15%; transform:rotate(243deg); opacity:0; }
           8%{ opacity:0.9; }
-          92%{ opacity:0.9; }
-          100%{ transform:translateX(115vw) translateY(-14px) rotate(-45deg); opacity:0; }
+          90%{ opacity:0.9; }
+          100%{ left:-15%; top:75%; transform:rotate(243deg); opacity:0; }
         }
-        .plane-land{ animation-name:plane-land; }
-        @keyframes plane-land{
-          0%{ transform:translate(-8vw,-18vh) rotate(15deg); opacity:0; }
-          12%{ opacity:0.9; }
-          80%{ opacity:0.9; transform:translate(60vw,30vh) rotate(-30deg); }
-          100%{ transform:translate(72vw,33vh) rotate(-40deg); opacity:0; }
+        @keyframes fly-3{
+          0%{ left:-10%; top:55%; transform:rotate(78deg); opacity:0; }
+          8%{ opacity:0.85; }
+          90%{ opacity:0.85; }
+          100%{ left:110%; top:30%; transform:rotate(78deg); opacity:0; }
+        }
+        @keyframes fly-4{
+          0%{ left:15%; top:100%; transform:rotate(31deg); opacity:0; }
+          10%{ opacity:0.9; }
+          88%{ opacity:0.9; }
+          100%{ left:85%; top:-15%; transform:rotate(31deg); opacity:0; }
+        }
+        @keyframes fly-5{
+          0%{ left:105%; top:45%; transform:rotate(286deg); opacity:0; }
+          8%{ opacity:0.9; }
+          90%{ opacity:0.9; }
+          100%{ left:-15%; top:10%; transform:rotate(286deg); opacity:0; }
+        }
+        @keyframes fly-6{
+          0%{ left:90%; top:95%; transform:rotate(323deg); opacity:0; }
+          10%{ opacity:0.85; }
+          88%{ opacity:0.85; }
+          100%{ left:10%; top:-10%; transform:rotate(323deg); opacity:0; }
         }
         .mentor-scene{
           position:absolute; left:5%; top:22%; width:min(40%,460px); height:56%;
@@ -546,18 +581,57 @@
         })() : ''}
         ${window.AIAPPS_LOGIN_SCENE === 'travel-sky' ? `
           <div class="travel-skyline">
-            <svg viewBox="0 0 400 100" preserveAspectRatio="none">
-              <path d="M0 100 L0 60 L40 20 L70 55 L100 15 L130 50 L160 60 L160 100Z" fill="#0e7c7b"/>
-              <rect x="180" y="40" width="18" height="60" fill="#0e7c7b"/>
-              <rect x="205" y="25" width="14" height="75" fill="#0e7c7b"/>
-              <rect x="225" y="50" width="20" height="50" fill="#0e7c7b"/>
-              <rect x="250" y="35" width="16" height="65" fill="#0e7c7b"/>
-              <path d="M280 100 L280 45 L320 10 L350 45 L380 25 L400 55 L400 100Z" fill="#0e7c7b"/>
+            <svg viewBox="0 0 400 140" preserveAspectRatio="none">
+              <g opacity="0.22" fill="#0e7c7b">
+                <path d="M0 140 L0 100 L18 82 L30 90 L42 60 L52 72 L64 25 L74 42 L84 33 L96 58 L112 40 L124 56 L136 15 L146 32 L158 46 L175 70 L192 48 L206 64 L220 30 L232 50 L248 42 L262 60 L280 22 L294 44 L308 36 L322 58 L340 20 L352 40 L368 55 L384 38 L400 52 L400 140Z"/>
+              </g>
+              <g opacity="0.32" fill="#0e7c7b">
+                <path d="M0 140 L0 108 L14 96 L24 100 L36 75 L46 84 L58 45 L68 58 L80 50 L94 72 L108 55 L120 70 L134 38 L144 52 L158 64 L172 82 L190 62 L204 76 L220 48 L234 66 L250 58 L266 74 L284 42 L298 60 L312 52 L328 72 L346 40 L358 58 L374 68 L390 55 L400 66 L400 140Z"/>
+              </g>
+              <g class="travel-cloud-drift" style="transform-origin:60px 30px;" opacity="0.5" fill="#e8f4f2">
+                <ellipse cx="55" cy="30" rx="22" ry="9"/>
+                <ellipse cx="68" cy="24" rx="14" ry="8"/>
+                <ellipse cx="40" cy="26" rx="12" ry="7"/>
+              </g>
+              <g class="travel-cloud-drift" style="transform-origin:300px 20px; animation-delay:-4s;" opacity="0.4" fill="#e8f4f2">
+                <ellipse cx="300" cy="20" rx="18" ry="7"/>
+                <ellipse cx="312" cy="16" rx="11" ry="6"/>
+              </g>
+              <g fill="#08121c">
+                <path d="M0 140 L0 105 L20 105 L20 88 L36 88 L36 105 L52 105 L52 70 L70 70 L70 105 L88 105 L88 95 L106 95 L106 105 L124 105 L124 80 L142 80 L142 105 L160 105 L160 92 L178 92 L178 105 L400 105 L400 140Z"/>
+              </g>
+              <g fill="#F4C060">
+                <circle cx="24" cy="94" r="1.1"/><circle cx="30" cy="94" r="1.1"/><circle cx="24" cy="99" r="1.1"/><circle cx="30" cy="99" r="1.1"/>
+                <circle cx="58" cy="78" r="1.1"/><circle cx="64" cy="78" r="1.1"/><circle cx="58" cy="84" r="1.1"/><circle cx="64" cy="84" r="1.1"/><circle cx="58" cy="90" r="1.1"/><circle cx="64" cy="90" r="1.1"/><circle cx="58" cy="96" r="1.1"/><circle cx="64" cy="96" r="1.1"/>
+                <circle cx="76" cy="99" r="1.1"/><circle cx="82" cy="99" r="1.1"/>
+                <circle cx="110" cy="99" r="1.1"/><circle cx="116" cy="99" r="1.1"/>
+                <circle cx="128" cy="84" r="1.1"/><circle cx="134" cy="84" r="1.1"/><circle cx="128" cy="90" r="1.1"/><circle cx="134" cy="90" r="1.1"/><circle cx="128" cy="96" r="1.1"/><circle cx="134" cy="96" r="1.1"/>
+                <circle cx="164" cy="96" r="1.1"/><circle cx="170" cy="96" r="1.1"/>
+              </g>
             </svg>
           </div>
-          ${[0.18, 0.55].map((top, i) => `<span class="plane plane-fly" style="top:${top * 100}%; animation-duration:${13 + i * 3}s; animation-delay:${i * 4}s;">✈️</span>`).join('')}
-          ${[0].map((_, i) => `<span class="plane plane-land" style="animation-duration:16s; animation-delay:${i * 5}s;">✈️</span>`).join('')}
-          ${[0.1, 0.3, 0.65].map((top, i) => `<span class="cloud" style="top:${top * 100}%; animation-duration:${28 + i * 8}s; animation-delay:${i * 6}s;">☁️</span>`).join('')}
+          ${(() => {
+            const planeIcon = '<path d="M22 16v-2l-8.5-5V3.5c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5V9L2 14v2l8.5-2.5V19L8 20.5V22l4-1 4 1v-1.5L13.5 19v-5.5L22 16z"/>';
+            const planes = [
+              { anim: 'fly-1', dur: 15, delay: 0, layer: 'plane-behind' },
+              { anim: 'fly-2', dur: 18, delay: 3, layer: 'plane-front' },
+              { anim: 'fly-3', dur: 13, delay: 7, layer: 'plane-front' },
+              { anim: 'fly-4', dur: 20, delay: 1, layer: 'plane-behind' },
+              { anim: 'fly-5', dur: 17, delay: 5, layer: 'plane-front' },
+              { anim: 'fly-6', dur: 22, delay: 9, layer: 'plane-front' }
+            ];
+            return planes.map(p => `<span class="plane ${p.layer}" style="animation:${p.anim} ${p.dur}s linear infinite; animation-delay:${p.delay}s;"><svg viewBox="0 0 24 24">${planeIcon}</svg></span>`).join('');
+          })()}
+          ${(() => {
+            const cloudSvg = '<svg viewBox="0 0 40 20"><ellipse cx="16" cy="12" rx="15" ry="7" fill="#e8f4f2"/><ellipse cx="26" cy="9" rx="10" ry="6" fill="#e8f4f2"/></svg>';
+            const clouds = [
+              { left: 8, top: 8, w: 34, h: 16, dur: 22, delay: 0, op: 0.55 },
+              { left: 45, top: 5, w: 26, h: 13, dur: 18, delay: -3, op: 0.4 },
+              { left: 68, top: 14, w: 40, h: 19, dur: 26, delay: -9, op: 0.55 },
+              { left: 20, top: 24, w: 22, h: 11, dur: 16, delay: -6, op: 0.35 }
+            ];
+            return clouds.map(c => `<span class="cloud-el" style="left:${c.left}%; top:${c.top}%; width:${c.w}px; height:${c.h}px; animation-duration:${c.dur}s; animation-delay:${c.delay}s; opacity:${c.op};">${cloudSvg}</span>`).join('');
+          })()}
         ` : ''}
         ${window.AIAPPS_LOGIN_SCENE === 'mentor-people' ? `
           <div class="growth-scene">
