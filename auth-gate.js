@@ -67,6 +67,8 @@
           font-family:system-ui,-apple-system,'Segoe UI',sans-serif;
         }
         .card{
+          position:relative;
+          z-index:4;
           width:min(320px, 90vw);
           background:#EFEADC;
           border-radius:6px;
@@ -181,15 +183,28 @@
         .gantt-row{ position:relative; height:12px; background:rgba(255,255,255,0.1); border-radius:4px; }
         .gantt-bar{
           position:absolute; left:0; top:0; height:100%; border-radius:4px;
-          background:linear-gradient(90deg, #B8863B, #D8AE6E);
           width:0%;
           animation:gantt-grow 6s ease-in-out infinite;
         }
-        .gantt-check{
-          position:absolute; top:50%; margin-top:-9px; font-size:0.85rem; color:#7ecfc0;
+        .gantt-bar.c-brass{ background:linear-gradient(90deg, #B8863B, #D8AE6E); }
+        .gantt-bar.c-teal{ background:linear-gradient(90deg, #3E6E6E, #7ecfc0); }
+        .gantt-dot{
+          position:absolute; top:50%; width:9px; height:9px; border-radius:50%;
+          margin:-4.5px 0 0 -4.5px;
+          box-shadow:0 0 6px 1px rgba(255,255,255,0.5);
           opacity:0;
-          animation:gantt-check-show 6s ease-in-out infinite;
+          animation:gantt-dot-move 6s ease-in-out infinite;
         }
+        .gantt-dot.c-brass{ background:#F3D9A8; }
+        .gantt-dot.c-teal{ background:#bdf0e4; }
+        .gantt-flag{
+          position:absolute; bottom:2px; width:26px; height:26px;
+          margin-left:-3px;
+          opacity:0;
+          transform-origin:12% 100%;
+          animation:gantt-flag-show 6s ease-in-out infinite;
+        }
+        .gantt-flag svg{ width:100%; height:100%; fill:none; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
         .gantt-date{
           position:absolute; top:-22px; font-size:0.6rem; color:rgba(255,255,255,0.6);
           transform:translateY(-10px); opacity:0;
@@ -200,10 +215,17 @@
           55%, 85%{ width:var(--w,70%); }
           100%{ width:0%; }
         }
-        @keyframes gantt-check-show{
-          0%, 56%{ opacity:0; }
-          62%, 85%{ opacity:1; }
-          92%, 100%{ opacity:0; }
+        @keyframes gantt-dot-move{
+          0%, 8%{ opacity:0; left:0%; }
+          10%{ opacity:1; }
+          55%, 85%{ opacity:1; left:var(--w,70%); }
+          92%, 100%{ opacity:0; left:var(--w,70%); }
+        }
+        @keyframes gantt-flag-show{
+          0%, 56%{ opacity:0; transform:scale(0.4) rotate(0deg); }
+          64%{ opacity:1; transform:scale(1.15) rotate(-6deg); }
+          72%, 85%{ opacity:1; transform:scale(1) rotate(-4deg); }
+          92%, 100%{ opacity:0; transform:scale(0.4) rotate(0deg); }
         }
         @keyframes gantt-date-fall{
           0%, 8%{ opacity:0; transform:translateY(-10px); }
@@ -211,63 +233,188 @@
           58%, 100%{ opacity:0; }
         }
         .travel-skyline{
-          position:absolute; left:0; right:0; bottom:0; height:32%;
-          filter:blur(3px); opacity:0.4; pointer-events:none;
+          position:absolute; left:0; right:0; bottom:0; height:46%;
+          filter:blur(2px); opacity:0.6; pointer-events:none;
         }
         .travel-skyline svg{ width:100%; height:100%; display:block; }
-        .cloud{
-          position:absolute; font-size:2.1rem; color:#fff; opacity:0.45;
-          animation:cloud-drift linear infinite;
-          pointer-events:none;
+        .travel-cloud-drift{
+          animation:cloud-drift-back linear infinite;
         }
-        @keyframes cloud-drift{
-          0%{ transform:translateX(-15vw); }
-          100%{ transform:translateX(115vw); }
+        @keyframes cloud-drift-back{
+          0%{ transform:translateX(-6%); }
+          100%{ transform:translateX(6%); }
+        }
+        .cloud-el{
+          position:absolute;
+          opacity:0.55;
+          z-index:1;
+          pointer-events:none;
+          animation:cloud-drift-screen linear infinite alternate;
+        }
+        .cloud-el svg{ width:100%; height:100%; }
+        @keyframes cloud-drift-screen{
+          0%{ transform:translateX(-6%); }
+          100%{ transform:translateX(6%); }
         }
         .plane{
-          position:absolute; font-size:1.6rem;
-          animation-timing-function:linear;
-          animation-iteration-count:infinite;
-          pointer-events:none;
-          filter:drop-shadow(0 2px 4px rgba(0,0,0,0.3));
+          position:absolute; width:26px; height:26px;
+          opacity:0;
+          filter:drop-shadow(0 2px 3px rgba(0,0,0,0.35));
         }
-        .plane-fly{ animation-name:plane-fly; }
-        @keyframes plane-fly{
-          0%{ transform:translateX(-10vw) translateY(0) rotate(-45deg); opacity:0; }
+        .plane svg{ width:100%; height:100%; fill:none; stroke:#f1f6f5; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round; }
+        .plane-behind{ z-index:1; }
+        .plane-front{ z-index:3; }
+        @keyframes fly-1{
+          0%{ left:-10%; top:90%; transform:rotate(55deg); opacity:0; }
+          8%{ opacity:0.95; }
+          90%{ opacity:0.95; }
+          100%{ left:110%; top:5%; transform:rotate(55deg); opacity:0; }
+        }
+        @keyframes fly-2{
+          0%{ left:105%; top:15%; transform:rotate(243deg); opacity:0; }
           8%{ opacity:0.9; }
-          92%{ opacity:0.9; }
-          100%{ transform:translateX(115vw) translateY(-14px) rotate(-45deg); opacity:0; }
+          90%{ opacity:0.9; }
+          100%{ left:-15%; top:75%; transform:rotate(243deg); opacity:0; }
         }
-        .plane-land{ animation-name:plane-land; }
-        @keyframes plane-land{
-          0%{ transform:translate(-8vw,-18vh) rotate(15deg); opacity:0; }
-          12%{ opacity:0.9; }
-          80%{ opacity:0.9; transform:translate(60vw,30vh) rotate(-30deg); }
-          100%{ transform:translate(72vw,33vh) rotate(-40deg); opacity:0; }
+        @keyframes fly-3{
+          0%{ left:-10%; top:55%; transform:rotate(78deg); opacity:0; }
+          8%{ opacity:0.85; }
+          90%{ opacity:0.85; }
+          100%{ left:110%; top:30%; transform:rotate(78deg); opacity:0; }
+        }
+        @keyframes fly-4{
+          0%{ left:15%; top:100%; transform:rotate(31deg); opacity:0; }
+          10%{ opacity:0.9; }
+          88%{ opacity:0.9; }
+          100%{ left:85%; top:-15%; transform:rotate(31deg); opacity:0; }
+        }
+        @keyframes fly-5{
+          0%{ left:105%; top:45%; transform:rotate(286deg); opacity:0; }
+          8%{ opacity:0.9; }
+          90%{ opacity:0.9; }
+          100%{ left:-15%; top:10%; transform:rotate(286deg); opacity:0; }
+        }
+        @keyframes fly-6{
+          0%{ left:90%; top:95%; transform:rotate(323deg); opacity:0; }
+          10%{ opacity:0.85; }
+          88%{ opacity:0.85; }
+          100%{ left:10%; top:-10%; transform:rotate(323deg); opacity:0; }
         }
         .mentor-scene{
-          position:absolute; left:5%; top:20%; width:min(40%,460px); height:62%;
-          display:flex; align-items:flex-end; justify-content:space-around;
-          pointer-events:none; opacity:0.75;
+          position:absolute; left:5%; top:22%; width:min(40%,460px); height:56%;
+          display:flex; align-items:center; justify-content:space-around;
+          pointer-events:none; opacity:0.9;
         }
-        .person{ width:22%; max-width:74px; }
-        .person svg{ width:100%; height:auto; overflow:visible; }
-        .person-figure{ fill:none; stroke:rgba(255,255,255,0.85); stroke-width:2.2; stroke-linecap:round; stroke-linejoin:round; }
-        .arm-l{ animation:arm-gesture-l 3.6s ease-in-out infinite; }
-        .arm-r{ animation:arm-gesture-r 3.6s ease-in-out infinite; }
-        @keyframes arm-gesture-l{
-          0%, 100%{ transform:rotate(0deg); }
-          50%{ transform:rotate(-16deg); }
+        .growth-scene{
+          position:absolute; left:3%; top:9%; width:min(72%,420px); height:82%;
+          pointer-events:none;
         }
-        @keyframes arm-gesture-r{
-          0%, 100%{ transform:rotate(0deg); }
-          50%{ transform:rotate(16deg); }
+        .growth-path{
+          position:absolute; inset:0; width:100%; height:100%; overflow:visible;
+        }
+        .growth-line{
+          fill:none;
+          stroke:rgba(255,255,255,0.38);
+          stroke-width:1.8;
+          stroke-dasharray:3.4 3.4;
+        }
+        .milestone{
+          fill:#7ecfc0;
+          opacity:0;
+          animation:milestone-light 7s ease-in-out infinite;
+        }
+        .milestone.m1{ animation-delay:0s; }
+        .milestone.m2{ animation-delay:0.98s; }
+        .milestone.m3{ animation-delay:1.96s; }
+        .milestone.m4{ animation-delay:2.94s; }
+        @keyframes milestone-light{
+          0%, 6%{ opacity:0; r:2.8; }
+          14%, 80%{ opacity:1; r:3.4; }
+          92%, 100%{ opacity:0; r:2.8; }
+        }
+        .growth-flag{
+          position:absolute; width:30px; height:30px;
+          transform-origin:22% 86%;
+          animation:flag-cycle 7s ease-in-out infinite, flag-flutter 0.9s ease-in-out infinite;
+        }
+        .growth-flag svg{ width:100%; height:100%; fill:none; stroke:#D8AE6E; stroke-width:1.4; stroke-linecap:round; stroke-linejoin:round; }
+        @keyframes flag-cycle{
+          0%, 60%{ opacity:0; scale:0.55; translate:0 6px; }
+          67%{ opacity:0.95; scale:1.05; translate:0 -1px; }
+          74%, 100%{ opacity:0.95; scale:1; translate:0 0; }
+        }
+        @keyframes flag-flutter{
+          0%, 100%{ rotate:-10deg; }
+          50%{ rotate:-17deg; }
+        }
+        .hop-figure{
+          position:absolute; width:21px; height:28px;
+          margin:-28px 0 0 -10.5px;
+          animation:hop-move 7s ease-in-out infinite, hop-squash 7s ease-in-out infinite;
+        }
+        .hop-figure svg{ width:100%; height:100%; }
+        @keyframes hop-move{
+          0%, 12%{ opacity:0; left:8%; top:92%; }
+          14%, 19%{ opacity:1; left:8%; top:90%; }
+          23%{ left:18%; top:70%; }
+          27%, 33%{ left:28%; top:58%; }
+          37%{ left:37%; top:38%; }
+          41%, 47%{ left:46%; top:26%; }
+          51%{ left:60%; top:14%; }
+          55%, 59%{ left:74%; top:8%; }
+          60%, 100%{ opacity:0; left:74%; top:8%; }
+        }
+        @keyframes hop-squash{
+          0%, 12%{ scale:0.5; }
+          14%{ scale:0.85 1.15; }
+          17%, 19%{ scale:1; }
+          23%{ scale:1.1 0.9; }
+          27%{ scale:0.85 1.15; }
+          30%, 33%{ scale:1; }
+          37%{ scale:1.1 0.9; }
+          41%{ scale:0.85 1.15; }
+          44%, 47%{ scale:1; }
+          51%{ scale:1.1 0.9; }
+          55%{ scale:0.85 1.2; }
+          59%{ scale:1; }
+          60%, 100%{ scale:0.5; }
+        }
+        .interview-icon{
+          position:absolute;
+          width:2.1rem;
+          height:2.1rem;
+          opacity:0.55;
+          transition:transform 0.35s ease, opacity 0.35s ease;
+          pointer-events:auto;
+        }
+        .interview-icon svg{
+          width:100%;
+          height:100%;
+          fill:none;
+          stroke-width:1.3;
+          stroke-linecap:round;
+          stroke-linejoin:round;
+        }
+        .interview-icon-float{
+          width:100%;
+          height:100%;
+          animation:interview-bounce 2.6s infinite;
+        }
+        .interview-icon:hover{
+          opacity:0.9;
+          transform:scale(1.3) rotate(-8deg);
+        }
+        @keyframes interview-bounce{
+          0% { transform:translateY(-36px); animation-timing-function:cubic-bezier(0.45,0,0.9,0.55); }
+          52% { transform:translateY(0); animation-timing-function:cubic-bezier(0.1,0.45,0.55,1); }
+          72% { transform:translateY(-12px); animation-timing-function:cubic-bezier(0.45,0,0.9,0.55); }
+          88% { transform:translateY(0); animation-timing-function:cubic-bezier(0.1,0.45,0.55,1); }
+          100% { transform:translateY(0); }
         }
         .interview-side{
-          position:absolute; top:22%; height:58%; width:110px;
-          pointer-events:none; opacity:0.75;
+          position:absolute; top:20%; height:46%; width:130px;
+          pointer-events:none; opacity:0.9;
         }
-        .interview-side svg{ width:100%; height:100%; overflow:visible; }
         .word-float{
           position:absolute;
           font-size:0.68rem;
@@ -415,82 +562,117 @@
           </div>
           ${coins}`;
         })() : ''}
-        ${window.AIAPPS_LOGIN_SCENE === 'gantt-build' ? `
-          <div class="gantt-scene">
-            ${Array.from({ length: 6 }).map((_, i) => {
-              const w = (52 + Math.random() * 38).toFixed(0);
-              const delay = (i * 0.95).toFixed(2);
-              const day = Math.floor(Math.random() * 28) + 1;
-              return `<div class="gantt-row">
-                <div class="gantt-bar" style="--w:${w}%; animation-delay:${delay}s;"></div>
+        ${window.AIAPPS_LOGIN_SCENE === 'gantt-build' ? (() => {
+          const flagColors = ['#E03B2E', '#D8AE6E', '#4E8B8B', '#8C6BAE', '#E8935C', '#5C9BD8', '#7ecfc0'];
+          const rows = Array.from({ length: 9 }).map((_, i) => {
+            const w = (48 + Math.random() * 42).toFixed(0);
+            const delay = (i * 0.68).toFixed(2);
+            const day = Math.floor(Math.random() * 28) + 1;
+            const cls = i % 2 === 0 ? 'c-brass' : 'c-teal';
+            const flagColor = flagColors[i % flagColors.length];
+            return `<div class="gantt-row">
+                <div class="gantt-bar ${cls}" style="--w:${w}%; animation-delay:${delay}s;"></div>
+                <span class="gantt-dot ${cls}" style="--w:${w}%; animation-delay:${delay}s;"></span>
                 <span class="gantt-date" style="left:${w}%; animation-delay:${delay}s;">${day}</span>
-                <span class="gantt-check" style="left:${w}%; animation-delay:${delay}s;">✓</span>
+                <span class="gantt-flag" style="left:${w}%; animation-delay:${delay}s;"><svg viewBox="0 0 24 24" style="stroke:${flagColor}"><path d="M5 21V4"/><path d="M5 4.5h13l-3 4 3 4H5"/></svg></span>
               </div>`;
-            }).join('')}
-          </div>
-        ` : ''}
+          }).join('');
+          return `<div class="gantt-scene">${rows}</div>`;
+        })() : ''}
         ${window.AIAPPS_LOGIN_SCENE === 'travel-sky' ? `
           <div class="travel-skyline">
-            <svg viewBox="0 0 400 100" preserveAspectRatio="none">
-              <path d="M0 100 L0 60 L40 20 L70 55 L100 15 L130 50 L160 60 L160 100Z" fill="#0e7c7b"/>
-              <rect x="180" y="40" width="18" height="60" fill="#0e7c7b"/>
-              <rect x="205" y="25" width="14" height="75" fill="#0e7c7b"/>
-              <rect x="225" y="50" width="20" height="50" fill="#0e7c7b"/>
-              <rect x="250" y="35" width="16" height="65" fill="#0e7c7b"/>
-              <path d="M280 100 L280 45 L320 10 L350 45 L380 25 L400 55 L400 100Z" fill="#0e7c7b"/>
+            <svg viewBox="0 0 400 140" preserveAspectRatio="none">
+              <g opacity="0.22" fill="#0e7c7b">
+                <path d="M0 140 L0 100 L18 82 L30 90 L42 60 L52 72 L64 25 L74 42 L84 33 L96 58 L112 40 L124 56 L136 15 L146 32 L158 46 L175 70 L192 48 L206 64 L220 30 L232 50 L248 42 L262 60 L280 22 L294 44 L308 36 L322 58 L340 20 L352 40 L368 55 L384 38 L400 52 L400 140Z"/>
+              </g>
+              <g opacity="0.32" fill="#0e7c7b">
+                <path d="M0 140 L0 108 L14 96 L24 100 L36 75 L46 84 L58 45 L68 58 L80 50 L94 72 L108 55 L120 70 L134 38 L144 52 L158 64 L172 82 L190 62 L204 76 L220 48 L234 66 L250 58 L266 74 L284 42 L298 60 L312 52 L328 72 L346 40 L358 58 L374 68 L390 55 L400 66 L400 140Z"/>
+              </g>
+              <g class="travel-cloud-drift" style="transform-origin:60px 30px;" opacity="0.5" fill="#e8f4f2">
+                <ellipse cx="55" cy="30" rx="22" ry="9"/>
+                <ellipse cx="68" cy="24" rx="14" ry="8"/>
+                <ellipse cx="40" cy="26" rx="12" ry="7"/>
+              </g>
+              <g class="travel-cloud-drift" style="transform-origin:300px 20px; animation-delay:-4s;" opacity="0.4" fill="#e8f4f2">
+                <ellipse cx="300" cy="20" rx="18" ry="7"/>
+                <ellipse cx="312" cy="16" rx="11" ry="6"/>
+              </g>
+              <g fill="#08121c">
+                <path d="M0 140 L0 105 L20 105 L20 88 L36 88 L36 105 L52 105 L52 70 L70 70 L70 105 L88 105 L88 95 L106 95 L106 105 L124 105 L124 80 L142 80 L142 105 L160 105 L160 92 L178 92 L178 105 L400 105 L400 140Z"/>
+              </g>
+              <g fill="#F4C060">
+                <circle cx="24" cy="94" r="1.1"/><circle cx="30" cy="94" r="1.1"/><circle cx="24" cy="99" r="1.1"/><circle cx="30" cy="99" r="1.1"/>
+                <circle cx="58" cy="78" r="1.1"/><circle cx="64" cy="78" r="1.1"/><circle cx="58" cy="84" r="1.1"/><circle cx="64" cy="84" r="1.1"/><circle cx="58" cy="90" r="1.1"/><circle cx="64" cy="90" r="1.1"/><circle cx="58" cy="96" r="1.1"/><circle cx="64" cy="96" r="1.1"/>
+                <circle cx="76" cy="99" r="1.1"/><circle cx="82" cy="99" r="1.1"/>
+                <circle cx="110" cy="99" r="1.1"/><circle cx="116" cy="99" r="1.1"/>
+                <circle cx="128" cy="84" r="1.1"/><circle cx="134" cy="84" r="1.1"/><circle cx="128" cy="90" r="1.1"/><circle cx="134" cy="90" r="1.1"/><circle cx="128" cy="96" r="1.1"/><circle cx="134" cy="96" r="1.1"/>
+                <circle cx="164" cy="96" r="1.1"/><circle cx="170" cy="96" r="1.1"/>
+              </g>
             </svg>
           </div>
-          ${[0.18, 0.55].map((top, i) => `<span class="plane plane-fly" style="top:${top * 100}%; animation-duration:${13 + i * 3}s; animation-delay:${i * 4}s;">✈️</span>`).join('')}
-          ${[0].map((_, i) => `<span class="plane plane-land" style="animation-duration:16s; animation-delay:${i * 5}s;">✈️</span>`).join('')}
-          ${[0.1, 0.3, 0.65].map((top, i) => `<span class="cloud" style="top:${top * 100}%; animation-duration:${28 + i * 8}s; animation-delay:${i * 6}s;">☁️</span>`).join('')}
+          ${(() => {
+            const planeIcon = '<path d="M22 16v-2l-8.5-5V3.5c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5V9L2 14v2l8.5-2.5V19L8 20.5V22l4-1 4 1v-1.5L13.5 19v-5.5L22 16z"/>';
+            const planes = [
+              { anim: 'fly-1', dur: 15, delay: 0, layer: 'plane-behind' },
+              { anim: 'fly-2', dur: 18, delay: 3, layer: 'plane-front' },
+              { anim: 'fly-3', dur: 13, delay: 7, layer: 'plane-front' },
+              { anim: 'fly-4', dur: 20, delay: 1, layer: 'plane-behind' },
+              { anim: 'fly-5', dur: 17, delay: 5, layer: 'plane-front' },
+              { anim: 'fly-6', dur: 22, delay: 9, layer: 'plane-front' }
+            ];
+            return planes.map(p => `<span class="plane ${p.layer}" style="animation:${p.anim} ${p.dur}s linear infinite; animation-delay:${p.delay}s;"><svg viewBox="0 0 24 24">${planeIcon}</svg></span>`).join('');
+          })()}
+          ${(() => {
+            const cloudSvg = '<svg viewBox="0 0 40 20"><ellipse cx="16" cy="12" rx="15" ry="7" fill="#e8f4f2"/><ellipse cx="26" cy="9" rx="10" ry="6" fill="#e8f4f2"/></svg>';
+            const clouds = [
+              { left: 8, top: 8, w: 34, h: 16, dur: 22, delay: 0, op: 0.55 },
+              { left: 45, top: 5, w: 26, h: 13, dur: 18, delay: -3, op: 0.4 },
+              { left: 68, top: 14, w: 40, h: 19, dur: 26, delay: -9, op: 0.55 },
+              { left: 20, top: 24, w: 22, h: 11, dur: 16, delay: -6, op: 0.35 }
+            ];
+            return clouds.map(c => `<span class="cloud-el" style="left:${c.left}%; top:${c.top}%; width:${c.w}px; height:${c.h}px; animation-duration:${c.dur}s; animation-delay:${c.delay}s; opacity:${c.op};">${cloudSvg}</span>`).join('');
+          })()}
         ` : ''}
-        ${window.AIAPPS_LOGIN_SCENE === 'mentor-people' ? (() => {
-          const person = (hair, armDelay) => `
-            <div class="person">
-              <svg viewBox="0 0 60 140" class="person-figure">
-                ${hair ? '<path d="M17 15 Q30 -1 43 15"/>' : ''}
-                <circle cx="30" cy="18" r="12"/>
-                <path d="M30 30 L30 85"/>
-                <path class="arm-l" d="M30 45 L12 66" style="transform-origin:30px 45px; animation-delay:${armDelay}s;"/>
-                <path class="arm-r" d="M30 45 L48 66" style="transform-origin:30px 45px; animation-delay:${armDelay}s;"/>
-                <path d="M30 85 L18 135"/>
-                <path d="M30 85 L42 135"/>
+        ${window.AIAPPS_LOGIN_SCENE === 'mentor-people' ? `
+          <div class="growth-scene">
+            <svg class="growth-path" viewBox="0 0 100 100" preserveAspectRatio="none">
+              <path class="growth-line" d="M3 96 C 20 82, 14 60, 34 50 C 54 40, 44 18, 80 4" vector-effect="non-scaling-stroke"/>
+              <circle class="milestone m1" cx="8" cy="90"/>
+              <circle class="milestone m2" cx="28" cy="58"/>
+              <circle class="milestone m3" cx="46" cy="26"/>
+              <circle class="milestone m4" cx="74" cy="8"/>
+            </svg>
+            <div class="growth-flag" style="left:70%; top:-8%;">
+              <svg viewBox="0 0 24 24"><path d="M5 21V4"/><path d="M5 4.5h13l-3 4 3 4H5"/></svg>
+            </div>
+            <div class="hop-figure">
+              <svg viewBox="0 0 24 32">
+                <path d="M12 2.5 C16 2.5 16.6 6 15.4 9.4 C19.2 11.2 19.6 17 18 21.2 C16.8 26.6 14.2 29.5 12 29.5 C9.8 29.5 7.2 26.6 6 21.2 C4.4 17 4.8 11.2 8.6 9.4 C7.4 6 8 2.5 12 2.5 Z" fill="#fff9e6"/>
+                <ellipse cx="10.2" cy="5.6" rx="1.3" ry="0.9" fill="rgba(255,255,255,0.55)"/>
               </svg>
             </div>
-          `;
-          return `<div class="mentor-scene">${person(true, 0)}${person(true, 0.6)}${person(false, 1.1)}</div>`;
-        })() : ''}
-        ${window.AIAPPS_LOGIN_SCENE === 'interview' ? `
-          <div class="interview-side" style="left:5%;">
-            <svg viewBox="0 0 100 100" class="person-figure">
-              <path d="M8 68 L80 68"/>
-              <path d="M14 68 L14 92"/>
-              <path d="M74 68 L74 92"/>
-              <rect x="38" y="46" width="26" height="18" rx="1"/>
-              <path d="M51 64 L51 68"/>
-              <circle cx="25" cy="30" r="10"/>
-              <path d="M25 40 L25 60"/>
-              <path class="arm-l" d="M25 48 L10 58" style="transform-origin:25px 48px;"/>
-              <path class="arm-r" d="M25 48 L38 60" style="transform-origin:25px 48px; animation-delay:0.4s;"/>
-            </svg>
           </div>
-          <div class="interview-side" style="right:5%;">
-            <svg viewBox="0 0 60 140" class="person-figure">
-              <circle cx="30" cy="18" r="12"/>
-              <path d="M30 30 L30 85"/>
-              <path d="M30 34 L26 52 L30 47 L34 52 Z"/>
-              <path class="arm-l" d="M30 45 L12 66" style="transform-origin:30px 45px; animation-delay:0.7s;"/>
-              <path class="arm-r" d="M30 45 L48 66" style="transform-origin:30px 45px; animation-delay:1.1s;"/>
-              <path d="M30 85 L18 135"/>
-              <path d="M30 85 L42 135"/>
-            </svg>
-          </div>
-          ${[
-            { text: 'Calendarios', top: 14, left: 32, dur: 6 },
-            { text: 'Técnicos', top: 30, left: 58, dur: 7.5 },
-            { text: 'Lógica', top: 70, left: 40, dur: 6.8 }
-          ].map(w => `<span class="word-float" style="top:${w.top}%; left:${w.left}%; animation-duration:${w.dur}s;">${w.text}</span>`).join('')}
         ` : ''}
+        ${window.AIAPPS_LOGIN_SCENE === 'interview' ? (() => {
+          const names = ['clipboard', 'magnifier', 'briefcase', 'chat-bubble', 'target', 'gear', 'graduation-cap', 'pencil', 'compass', 'trending-up', 'book', 'lightbulb', 'people', 'star', 'calendar', 'clock', 'bar-chart', 'flag'];
+          const colors = ['#E03B2E', '#D8AE6E', '#4E8B8B', '#8C6BAE', '#E8935C', '#5C9BD8', '#7ecfc0'];
+          const cols = [3, 12, 21, 79, 88, 97];
+          const rows = [4, 14, 24, 76, 86, 96];
+          const cells = [];
+          rows.forEach(top => cols.forEach(left => cells.push({ top, left })));
+          return cells.map((cell, i) => {
+            const name = names[i % names.length];
+            const svgPath = ICONS[name];
+            if (!svgPath) return '';
+            const color = colors[i % colors.length];
+            const jitterTop = (Math.random() - 0.5) * 10;
+            const jitterLeft = (Math.random() - 0.5) * 7;
+            const size = 1.7 + Math.random() * 1.0;
+            const pos = `top:${(cell.top + jitterTop).toFixed(1)}%; left:${(cell.left + jitterLeft).toFixed(1)}%; width:${size.toFixed(2)}rem; height:${size.toFixed(2)}rem;`;
+            const delay = (i % 14) * 0.14 + Math.random() * 0.3;
+            return `<span class="interview-icon" style="${pos}"><span class="interview-icon-float" style="animation-delay:-${delay.toFixed(2)}s"><svg viewBox="0 0 24 24" style="stroke:${color}">${svgPath}</svg></span></span>`;
+          }).join('');
+        })() : ''}
         ${!window.AIAPPS_LOGIN_SCENE ? (window.AIAPPS_LOGIN_DECORATIONS || []).map((iconName, i) => {
           const cols = [3, 12, 21, 79, 88, 97];
           const rows = [4, 14, 24, 76, 86, 96];
