@@ -524,7 +524,25 @@
             </div>
           </div>
         ` : ''}
-        ${window.AIAPPS_LOGIN_SCENE === 'interview' ? '' : ''}
+        ${window.AIAPPS_LOGIN_SCENE === 'interview' ? (() => {
+          const items = [
+            { name: 'clipboard', left: 4, top: 8, color: '#E03B2E', delay: 0 },
+            { name: 'magnifier', left: 16, top: 70, color: '#D8AE6E', delay: 0.6 },
+            { name: 'briefcase', left: 6, top: 42, color: '#4E8B8B', delay: 1.2 },
+            { name: 'chat-bubble', left: 84, top: 10, color: '#8C6BAE', delay: 0.3 },
+            { name: 'target', left: 88, top: 68, color: '#E8935C', delay: 0.9 },
+            { name: 'gear', left: 78, top: 38, color: '#5C9BD8', delay: 1.5 },
+            { name: 'graduation-cap', left: 8, top: 12, color: '#7ecfc0', delay: 2.1 },
+            { name: 'pencil', left: 90, top: 88, color: '#E03B2E', delay: 0.15 },
+            { name: 'compass', left: 2, top: 86, color: '#D8AE6E', delay: 1.8 },
+            { name: 'trending-up', left: 92, top: 44, color: '#4E8B8B', delay: 2.4 }
+          ];
+          return items.map(it => {
+            const svgPath = ICONS[it.name];
+            if (!svgPath) return '';
+            return `<span class="deco" style="left:${it.left}%; top:${it.top}%;"><span class="deco-float" style="animation-delay:${it.delay}s"><svg viewBox="0 0 24 24" style="stroke:${it.color}">${svgPath}</svg></span></span>`;
+          }).join('');
+        })() : ''}
         ${!window.AIAPPS_LOGIN_SCENE ? (window.AIAPPS_LOGIN_DECORATIONS || []).map((iconName, i) => {
           const cols = [3, 12, 21, 79, 88, 97];
           const rows = [4, 14, 24, 76, 86, 96];
