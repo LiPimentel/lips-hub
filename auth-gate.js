@@ -132,8 +132,10 @@
           position:absolute;
           top:38%;
           font-size:1.5rem;
+          opacity:0;
           animation:coin-fall var(--dur,7s) linear infinite;
           animation-delay:var(--delay,0s);
+          animation-fill-mode:backwards;
           pointer-events:none;
           filter:drop-shadow(0 2px 4px rgba(0,0,0,0.35)) saturate(1.5) sepia(0.15);
         }
@@ -517,23 +519,52 @@
       <div class="cover ${window.AIAPPS_LOGIN_LAYOUT === 'right' ? 'align-right' : ''}">
         ${window.AIAPPS_LOGIN_SCENE === 'coins-rain' ? (() => {
           const STAR = 'M12 2 L14 10 L22 12 L14 14 L12 22 L10 14 L2 12 L10 10 Z';
-          const floorCoins = Array.from({ length: 170 }).map((_, i) => {
-            const cx = (i * 0.6 + Math.random() * 0.7).toFixed(1);
-            const rx = (0.55 + Math.random() * 0.6).toFixed(2);
+          const pileCenters = [8, 30, 53, 76, 95];
+          const pileHeights = [6.5, 4, 8.5, 5, 3];
+          const pileWidths = [7, 6, 8, 6.5, 5];
+          const baseline = 19.3;
+          const terrainHeight = (x) => {
+            let h = 0;
+            for (let p = 0; p < pileCenters.length; p++) {
+              const dx = x - pileCenters[p];
+              h += pileHeights[p] * Math.exp(-(dx * dx) / (2 * pileWidths[p] * pileWidths[p]));
+            }
+            return Math.min(h, 12.5);
+          };
+          const shadowEllipses = pileCenters.map((cx, i) =>
+            `<ellipse cx="${cx}" cy="${baseline + 0.3}" rx="${pileWidths[i] * 0.9}" ry="1.1" fill="rgba(0,0,0,0.35)"/>`
+          ).join('');
+          const floorCoins = [];
+          for (let x = -2; x <= 102; x += 0.85) {
+            const topH = terrainHeight(x);
+            const topCy = baseline - topH;
+            const rows = Math.max(1, Math.round(topH / 0.62));
+            for (let r = 0; r < rows; r++) {
+              const cy = topCy + (r * 0.62) + Math.random() * 0.25;
+              if (cy > baseline + 0.3) continue;
+              floorCoins.push({
+                cx: (x + (Math.random() - 0.5) * 0.9).toFixed(1),
+                cy,
+                rx: (0.55 + Math.random() * 0.55).toFixed(2),
+                rot: (Math.random() * 16 - 8).toFixed(1),
+                isGlint: Math.random() < 0.045,
+                glintDelay: (Math.random() * 3.5).toFixed(2)
+              });
+            }
+          }
+          floorCoins.sort((a, b) => a.cy - b.cy);
+          const floorEllipses = shadowEllipses + floorCoins.map(c => {
+            const rx = parseFloat(c.rx);
             const ry = (rx * 0.46).toFixed(2);
-            const cy = (13 + Math.random() * 5).toFixed(1);
-            const rot = (Math.random() * 16 - 8).toFixed(1);
-            const isGlint = Math.random() < 0.045;
-            const glintDelay = (Math.random() * 3.5).toFixed(2);
-            const sparkleX = (parseFloat(rx) * 0.3).toFixed(1);
+            const thick = (parseFloat(ry) * 0.6).toFixed(2);
+            const sparkleX = (rx * 0.3).toFixed(1);
             const sparkleY = (-parseFloat(ry) * 0.5).toFixed(1);
-            return { cx, rx, ry, cy: parseFloat(cy), rot, isGlint, glintDelay, sparkleX, sparkleY };
-          }).sort((a, b) => a.cy - b.cy);
-          const floorEllipses = floorCoins.map(c => {
-            return `<g transform="translate(${c.cx},${c.cy}) rotate(${c.rot})">
-              <ellipse cx="0" cy="0" rx="${c.rx}" ry="${c.ry}" fill="url(#coinGrad)" stroke="#5c4009" stroke-width="0.09"/>
-              <ellipse cx="0" cy="${(-c.ry * 0.32).toFixed(2)}" rx="${(c.rx * 0.55).toFixed(2)}" ry="${(c.ry * 0.32).toFixed(2)}" fill="rgba(255,255,255,0.4)"/>
-              ${c.isGlint ? `<g transform="translate(${c.sparkleX},${c.sparkleY}) scale(0.05)"><g class="floor-sparkle" style="animation-delay:${c.glintDelay}s"><path d="${STAR}"/></g></g>` : ''}
+            return `<g transform="translate(${c.cx},${c.cy.toFixed(2)}) rotate(${c.rot})">
+              <rect x="${-rx}" y="0" width="${rx * 2}" height="${thick}" fill="url(#coinEdgeGrad)"/>
+              <ellipse cx="0" cy="${thick}" rx="${rx}" ry="${ry}" fill="#6b4a0e"/>
+              <ellipse cx="0" cy="0" rx="${rx}" ry="${ry}" fill="url(#coinGrad)" stroke="#5c4009" stroke-width="0.09"/>
+              <ellipse cx="0" cy="${(-ry * 0.32).toFixed(2)}" rx="${(rx * 0.55).toFixed(2)}" ry="${(ry * 0.32).toFixed(2)}" fill="rgba(255,255,255,0.4)"/>
+              ${c.isGlint ? `<g transform="translate(${sparkleX},${sparkleY}) scale(0.05)"><g class="floor-sparkle" style="animation-delay:${c.glintDelay}s"><path d="${STAR}"/></g></g>` : ''}
             </g>`;
           }).join('');
           const coins = Array.from({ length: 16 }).map(() => {
@@ -556,6 +587,10 @@
                   <stop offset="75%" stop-color="#D4A017"/>
                   <stop offset="100%" stop-color="#8a6414"/>
                 </radialGradient>
+                <linearGradient id="coinEdgeGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#9c6a12"/>
+                  <stop offset="100%" stop-color="#5c3a09"/>
+                </linearGradient>
               </defs>
               ${floorEllipses}
             </svg>
