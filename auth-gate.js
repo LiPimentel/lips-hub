@@ -119,7 +119,7 @@
         .logo-bars rect{ transform-box:fill-box; transform-origin:center bottom; }
         .logo-bars .lb-1{ fill:#B79BE0; animation:logo-bar-1 2.2s ease-in-out infinite; }
         .logo-bars .lb-2{ fill:#F0C550; animation:logo-bar-2 2.2s ease-in-out infinite; }
-        .logo-bars .lb-3{ fill:#8C6BC8; animation:logo-bar-3 2.2s ease-in-out infinite; }
+        .logo-bars .lb-3{ fill:#B79BE0; animation:logo-bar-3 2.2s ease-in-out infinite; }
         @keyframes logo-bar-1{
           0%, 100%{ transform:scaleY(0.42); }
           50%{ transform:scaleY(1); }
@@ -342,235 +342,78 @@
           100%{ left:10%; top:-10%; transform:rotate(323deg); opacity:0; }
         }
         .growth-scene{
-          position:absolute; left:2.5%; bottom:3%; width:min(56%,720px); height:76%;
+          position:absolute; left:3%; top:9%; width:min(72%,420px); height:82%;
           pointer-events:none;
         }
-        /* En pantallas angostas la cordillera quedaría detrás de la tarjeta. */
-        @media (max-width: 900px){
-          .growth-scene{ display:none; }
-        }
-        .growth-range{
+        .growth-path{
           position:absolute; inset:0; width:100%; height:100%; overflow:visible;
         }
-        .growth-mark{
-          position:absolute; width:56px; height:56px;
-          margin:-28px 0 0 -28px;
+        .growth-line{
+          fill:none;
+          stroke:rgba(255,255,255,0.38);
+          stroke-width:1.8;
+          stroke-dasharray:3.4 3.4;
+        }
+        .milestone{
+          fill:#7ecfc0;
           opacity:0;
-          animation-duration:30s;
-          animation-timing-function:ease-in-out;
-          animation-iteration-count:infinite;
+          animation:milestone-light 7s ease-in-out infinite;
         }
-        .growth-mark svg{ width:100%; height:100%; fill:none; stroke-width:2.4; stroke-linecap:round; stroke-linejoin:round; }
-        .growth-mark.check svg{ stroke:#9ae8d1; }
-        .growth-mark.cross svg{ stroke:#e8705c; }
-        .growth-mark.c1{ animation-name:mk-c1; }
-        .growth-mark.c2{ animation-name:mk-c2; }
-        .growth-mark.c3{ animation-name:mk-c3; }
-        .growth-mark.c4{ animation-name:mk-c4; }
-        .growth-mark.c5{ animation-name:mk-c5; }
-        .growth-mark.c6{ animation-name:mk-c6; }
-        .growth-mark.x3{ animation-name:mk-x3; }
-        .growth-mark.x5{ animation-name:mk-x5; }
-        @keyframes mk-c1{
-          0%, 16%{ opacity:0; scale:0.5; }
-          19%{ opacity:0.55; scale:1.2; }
-          22%, 98%{ opacity:0.38; scale:1; }
-          100%{ opacity:0; scale:1; }
+        .milestone.m1{ animation-delay:0s; }
+        .milestone.m2{ animation-delay:0.98s; }
+        .milestone.m3{ animation-delay:1.96s; }
+        .milestone.m4{ animation-delay:2.94s; }
+        @keyframes milestone-light{
+          0%, 6%{ opacity:0; r:2.8; }
+          14%, 80%{ opacity:1; r:3.4; }
+          92%, 100%{ opacity:0; r:2.8; }
         }
-        @keyframes mk-c2{
-          0%, 25%{ opacity:0; scale:0.5; }
-          28%{ opacity:0.55; scale:1.2; }
-          31%, 34%{ opacity:0.38; scale:1; }
-          35%, 43%{ opacity:0; scale:0.5; }
-          46%{ opacity:0.55; scale:1.2; }
-          49%, 98%{ opacity:0.38; scale:1; }
-          100%{ opacity:0; scale:1; }
-        }
-        @keyframes mk-c3{
-          0%, 52%{ opacity:0; scale:0.5; }
-          55%{ opacity:0.55; scale:1.2; }
-          58%, 98%{ opacity:0.38; scale:1; }
-          100%{ opacity:0; scale:1; }
-        }
-        @keyframes mk-c4{
-          0%, 61%{ opacity:0; scale:0.5; }
-          64%{ opacity:0.55; scale:1.2; }
-          67%, 70%{ opacity:0.38; scale:1; }
-          71%, 79%{ opacity:0; scale:0.5; }
-          82%{ opacity:0.55; scale:1.2; }
-          85%, 98%{ opacity:0.38; scale:1; }
-          100%{ opacity:0; scale:1; }
-        }
-        @keyframes mk-c5{
-          0%, 86.5%{ opacity:0; scale:0.5; }
-          89%{ opacity:0.55; scale:1.2; }
-          90.5%, 98%{ opacity:0.38; scale:1; }
-          100%{ opacity:0; scale:1; }
-        }
-        @keyframes mk-c6{
-          0%, 89%{ opacity:0; scale:0.5; }
-          91.5%{ opacity:0.6; scale:1.25; }
-          93%, 98%{ opacity:0.4; scale:1; }
-          100%{ opacity:0; scale:1; }
-        }
-        @keyframes mk-x3{
-          0%, 27%{ opacity:0; scale:0.5; }
-          30%{ opacity:0.62; scale:1.25; }
-          33%, 43%{ opacity:0.44; scale:1; }
-          44%, 100%{ opacity:0; scale:1; }
-        }
-        @keyframes mk-x5{
-          0%, 63%{ opacity:0; scale:0.5; }
-          66%{ opacity:0.62; scale:1.25; }
-          69%, 79%{ opacity:0.44; scale:1; }
-          80%, 100%{ opacity:0; scale:1; }
-        }
-        /* La bandera cuelga dentro del muñequito, agarrada por la manito:
-           al ser hija de .hop-figure viaja con él y se mantiene en su sitio. */
         .growth-flag{
-          position:absolute; left:20px; top:2px; width:30px; height:30px;
-          opacity:0;
-          transform-origin:21% 46%;
-          animation:flag-cycle 30s ease-in-out infinite, flag-flutter 0.9s ease-in-out infinite;
+          position:absolute; width:30px; height:30px;
+          transform-origin:22% 86%;
+          animation:flag-cycle 7s ease-in-out infinite, flag-flutter 0.9s ease-in-out infinite;
         }
         .growth-flag svg{ width:100%; height:100%; fill:none; stroke:#D8AE6E; stroke-width:1.4; stroke-linecap:round; stroke-linejoin:round; }
         @keyframes flag-cycle{
-          0%, 87%{ opacity:0; scale:0.5; translate:0 8px; }
-          90%{ opacity:0.95; scale:1.15; translate:0 -2px; }
-          92%, 98%{ opacity:0.95; scale:1; translate:0 0; }
-          100%{ opacity:0; scale:1; translate:0 0; }
+          0%, 60%{ opacity:0; scale:0.55; translate:0 6px; }
+          67%{ opacity:0.95; scale:1.05; translate:0 -1px; }
+          74%, 100%{ opacity:0.95; scale:1; translate:0 0; }
         }
         @keyframes flag-flutter{
           0%, 100%{ rotate:-10deg; }
           50%{ rotate:-17deg; }
         }
-        /* El bracito y la manito solo salen en la cima, al agarrar la bandera. */
-        .hop-arm, .hop-hand{
-          opacity:0;
-          animation:arm-show 30s ease-in-out infinite;
-        }
-        @keyframes arm-show{
-          0%, 86.5%{ opacity:0; }
-          88.5%, 98%{ opacity:1; }
-          100%{ opacity:0; }
-        }
-        .firework{
-          position:absolute; width:54px; height:54px;
-          margin:-27px 0 0 -27px;
-          opacity:0;
-          animation-duration:30s;
-          animation-timing-function:ease-out;
-          animation-iteration-count:infinite;
-        }
-        .firework svg{ width:100%; height:100%; }
-        .firework.fw1{ animation-name:fw-a; }
-        .firework.fw2{ animation-name:fw-b; }
-        .firework.fw3{ animation-name:fw-c; }
-        @keyframes fw-a{
-          0%, 88%{ opacity:0; scale:0.15; }
-          89.5%{ opacity:1; scale:0.75; }
-          91%{ opacity:0.85; scale:1.05; }
-          93%{ opacity:0; scale:1.3; }
-          95.5%{ opacity:0; scale:0.15; }
-          96.5%{ opacity:1; scale:0.75; }
-          98%{ opacity:0.8; scale:1.05; }
-          99.5%, 100%{ opacity:0; scale:1.3; }
-        }
-        @keyframes fw-b{
-          0%, 90.5%{ opacity:0; scale:0.15; }
-          92%{ opacity:1; scale:0.8; }
-          93.5%{ opacity:0.85; scale:1.1; }
-          95.5%, 100%{ opacity:0; scale:1.35; }
-        }
-        @keyframes fw-c{
-          0%, 93%{ opacity:0; scale:0.15; }
-          94.5%{ opacity:1; scale:0.7; }
-          96%{ opacity:0.85; scale:1.05; }
-          98%, 100%{ opacity:0; scale:1.3; }
-        }
         .hop-figure{
-          position:absolute; width:30px; height:40px;
-          margin:-40px 0 0 -15px;
-          transform-origin:50% 100%;
-          animation:hop-move 30s ease-in-out infinite, hop-squash 30s ease-in-out infinite, hop-mood 30s linear infinite;
+          position:absolute; width:21px; height:28px;
+          margin:-28px 0 0 -10.5px;
+          animation:hop-move 7s ease-in-out infinite, hop-squash 7s ease-in-out infinite;
         }
         .hop-figure svg{ width:100%; height:100%; }
         @keyframes hop-move{
-          0%, 2%{ opacity:0; left:1%; top:100%; }
-          3%{ opacity:1; left:2%; top:98%; }
-          5.5%{ left:6%; top:66%; }
-          8%, 14%{ left:11%; top:76%; }
-          15.5%{ left:19%; top:55%; }
-          17%, 23%{ left:27%; top:63%; }
-          24.5%{ left:35%; top:42%; }
-          26%, 32%{ left:43%; top:50%; }
-          33.5%{ left:35%; top:42%; }
-          35%, 41%{ left:27%; top:63%; }
-          42.5%{ left:35%; top:42%; }
-          44%, 50%{ left:43%; top:50%; }
-          51.5%{ left:51%; top:29%; }
-          53%, 59%{ left:59%; top:37%; }
-          60.5%{ left:67%; top:15%; }
-          62%, 68%{ left:75%; top:23%; }
-          69.5%{ left:67%; top:15%; }
-          71%, 77%{ left:59%; top:37%; }
-          78.5%{ left:67%; top:15%; }
-          80%, 85%{ left:75%; top:23%; }
-          86%{ left:83%; top:0%; }
-          87%, 98%{ opacity:1; left:91%; top:7%; }
-          100%{ opacity:0; left:91%; top:7%; }
+          0%, 12%{ opacity:0; left:8%; top:92%; }
+          14%, 19%{ opacity:1; left:8%; top:90%; }
+          23%{ left:18%; top:70%; }
+          27%, 33%{ left:28%; top:58%; }
+          37%{ left:37%; top:38%; }
+          41%, 47%{ left:46%; top:26%; }
+          51%{ left:60%; top:14%; }
+          55%, 59%{ left:74%; top:8%; }
+          60%, 100%{ opacity:0; left:74%; top:8%; }
         }
         @keyframes hop-squash{
-          0%, 2%{ scale:0.5; }
-          3%{ scale:0.9 1.12; }
-          5.5%{ scale:1.06 0.94; }
-          8%{ scale:0.86 1.14; }
-          10%, 14%{ scale:1; }
-          15.5%{ scale:1.06 0.94; }
-          17%{ scale:0.86 1.14; }
-          19%, 23%{ scale:1; }
-          24.5%{ scale:1.06 0.94; }
-          26%{ scale:0.86 1.14; }
-          28%, 32%{ scale:1; }
-          33.5%{ scale:1.06 0.94; }
-          35%{ scale:0.86 1.14; }
-          37%, 41%{ scale:1; }
-          42.5%{ scale:1.06 0.94; }
-          44%{ scale:0.86 1.14; }
-          46%, 50%{ scale:1; }
-          51.5%{ scale:1.06 0.94; }
-          53%{ scale:0.86 1.14; }
-          55%, 59%{ scale:1; }
-          60.5%{ scale:1.06 0.94; }
-          62%{ scale:0.86 1.14; }
-          64%, 68%{ scale:1; }
-          69.5%{ scale:1.06 0.94; }
-          71%{ scale:0.86 1.14; }
-          73%, 77%{ scale:1; }
-          78.5%{ scale:1.06 0.94; }
-          80%{ scale:0.86 1.14; }
-          82%, 85%{ scale:1; }
-          86%{ scale:1.06 0.94; }
-          87%{ scale:0.86 1.14; }
-          88.5%, 98%{ scale:1; }
-          100%{ scale:0.5; }
-        }
-        @keyframes hop-mood{
-          0%, 27.5%{ filter:grayscale(0) brightness(1); }
-          28%, 40.5%{ filter:grayscale(1) brightness(0.62); }
-          41%, 63.5%{ filter:grayscale(0) brightness(1); }
-          64%, 76.5%{ filter:grayscale(1) brightness(0.62); }
-          77%, 100%{ filter:grayscale(0) brightness(1); }
-        }
-        @media (prefers-reduced-motion: reduce){
-          .growth-mark, .hop-figure, .growth-flag,
-          .hop-arm, .hop-hand, .firework{ animation:none !important; }
-          .growth-mark.check{ opacity:0.38; }
-          .growth-mark.cross{ opacity:0; }
-          .hop-figure{ left:91%; top:7%; opacity:1; }
-          .growth-flag{ opacity:0.95; }
-          .hop-arm, .hop-hand{ opacity:1; }
-          .firework{ opacity:0.5; scale:1; }
+          0%, 12%{ scale:0.5; }
+          14%{ scale:0.85 1.15; }
+          17%, 19%{ scale:1; }
+          23%{ scale:1.1 0.9; }
+          27%{ scale:0.85 1.15; }
+          30%, 33%{ scale:1; }
+          37%{ scale:1.1 0.9; }
+          41%{ scale:0.85 1.15; }
+          44%, 47%{ scale:1; }
+          51%{ scale:1.1 0.9; }
+          55%{ scale:0.85 1.2; }
+          59%{ scale:1; }
+          60%, 100%{ scale:0.5; }
         }
         .interview-icon{
           position:absolute;
@@ -929,121 +772,26 @@
             return clouds.map(c => `<span class="cloud-el" style="left:${c.left}%; top:${c.top}%; width:${c.w}px; height:${c.h}px; animation-duration:${c.dur}s; animation-delay:${c.delay}s; opacity:${c.op};">${cloudSvg}</span>`).join('');
           })()}
         ` : ''}
-        ${window.AIAPPS_LOGIN_SCENE === 'mentor-people' ? (() => {
-          // Cordillera ascendente: cada cima mas alta que la anterior, alternando
-          // capa de atras / adelante para que se vean entrelazadas.
-          const peaks = [
-            { x: 11, y: 76, hw: 22, layer: 'back' },
-            { x: 27, y: 63, hw: 22, layer: 'front' },
-            { x: 43, y: 50, hw: 22, layer: 'back' },
-            { x: 59, y: 37, hw: 23, layer: 'front' },
-            { x: 75, y: 23, hw: 23, layer: 'back' },
-            { x: 91, y: 7, hw: 22, layer: 'front' }
-          ];
-          const n = (v) => v.toFixed(2);
-          const mountain = (m) => {
-            const back = m.layer === 'back';
-            const h = 100 - m.y;
-            const left = m.x - m.hw, right = m.x + m.hw;
-            const capRatio = 0.2;
-            const capHalf = m.hw * capRatio;
-            const capY = m.y + h * capRatio;
-            const lit = back ? 'url(#mtnLitBack)' : 'url(#mtnLitFront)';
-            const shade = back ? 'url(#mtnShadeBack)' : 'url(#mtnShadeFront)';
-            // Caras: la izquierda recibe la luz, la derecha queda en sombra.
-            const faceL = `M${n(left)} 100 L${n(m.x)} ${n(m.y)} L${n(m.x)} 100 Z`;
-            const faceR = `M${n(m.x)} ${n(m.y)} L${n(right)} 100 L${n(m.x)} 100 Z`;
-            // Nieve en la cima con borde inferior irregular.
-            const cap = `M${n(m.x - capHalf)} ${n(capY)}`
-              + ` L${n(m.x - capHalf * 0.5)} ${n(capY - h * capRatio * 0.34)}`
-              + ` L${n(m.x - capHalf * 0.12)} ${n(capY - h * capRatio * 0.08)}`
-              + ` L${n(m.x + capHalf * 0.3)} ${n(capY - h * capRatio * 0.46)}`
-              + ` L${n(m.x + capHalf * 0.68)} ${n(capY - h * capRatio * 0.14)}`
-              + ` L${n(m.x + capHalf)} ${n(capY)}`
-              + ` L${n(m.x)} ${n(m.y)} Z`;
-            // Relieve: espina central, filo iluminado y grietas en cada cara.
-            const creases = [
-              `M${n(m.x)} ${n(m.y)} L${n(m.x)} 100`,
-              `M${n(m.x - m.hw * 0.52)} 100 L${n(m.x - m.hw * 0.2)} ${n(m.y + h * 0.46)}`,
-              `M${n(m.x - m.hw * 0.82)} 100 L${n(m.x - m.hw * 0.46)} ${n(m.y + h * 0.66)}`,
-              `M${n(m.x + m.hw * 0.5)} 100 L${n(m.x + m.hw * 0.19)} ${n(m.y + h * 0.44)}`,
-              `M${n(m.x + m.hw * 0.84)} 100 L${n(m.x + m.hw * 0.44)} ${n(m.y + h * 0.7)}`
-            ];
-            return `<g>
-              <path d="${faceL}" fill="${lit}"/>
-              <path d="${faceR}" fill="${shade}"/>
-              <path d="${cap}" fill="rgba(226,242,238,0.82)"/>
-              <path d="${creases[0]}" fill="none" stroke="rgba(0,0,0,0.32)" stroke-width="1" vector-effect="non-scaling-stroke"/>
-              <path d="${creases[1]}" fill="none" stroke="rgba(255,255,255,0.11)" stroke-width="1" vector-effect="non-scaling-stroke"/>
-              <path d="${creases[2]}" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="1" vector-effect="non-scaling-stroke"/>
-              <path d="${creases[3]}" fill="none" stroke="rgba(0,0,0,0.22)" stroke-width="1" vector-effect="non-scaling-stroke"/>
-              <path d="${creases[4]}" fill="none" stroke="rgba(0,0,0,0.18)" stroke-width="1" vector-effect="non-scaling-stroke"/>
-              <path d="M${n(left)} 100 L${n(m.x)} ${n(m.y)}" fill="none" stroke="rgba(190,224,216,0.30)" stroke-width="1.1" vector-effect="non-scaling-stroke"/>
-            </g>`;
-          };
-          const grad = (id, from, to) => `<linearGradient id="${id}" x1="0" y1="0" x2="0.25" y2="1">`
-            + `<stop offset="0" stop-color="${from}"/><stop offset="1" stop-color="${to}"/></linearGradient>`;
-          const checkSvg = '<svg viewBox="0 0 24 24"><path d="M4 12.5l5.5 6L20 5.5"/></svg>';
-          const crossSvg = '<svg viewBox="0 0 24 24"><path d="M5.5 5.5l13 13M18.5 5.5l-13 13"/></svg>';
-          // Las marcas van al centro de la cara de cada montaña.
-          const markPos = peaks.map(m => ({ x: m.x, y: m.y + (100 - m.y) * 0.5 }));
-          const marks = [
-            { cls: 'check c1', i: 0, svg: checkSvg },
-            { cls: 'check c2', i: 1, svg: checkSvg },
-            { cls: 'check c3', i: 2, svg: checkSvg },
-            { cls: 'check c4', i: 3, svg: checkSvg },
-            { cls: 'check c5', i: 4, svg: checkSvg },
-            { cls: 'check c6', i: 5, svg: checkSvg },
-            { cls: 'cross x3', i: 2, svg: crossSvg },
-            { cls: 'cross x5', i: 4, svg: crossSvg }
-          ];
-          // Fuegos artificiales chiquitos sobre la cima, para la celebración final.
-          const burst = (color) => {
-            const rays = [], dots = [];
-            for (let k = 0; k < 12; k++) {
-              const a = k * 30 * Math.PI / 180;
-              const r2 = 16 + (k % 3) * 2;
-              rays.push(`<line x1="${n(20 + Math.cos(a) * 5)}" y1="${n(20 + Math.sin(a) * 5)}"`
-                + ` x2="${n(20 + Math.cos(a) * r2)}" y2="${n(20 + Math.sin(a) * r2)}"/>`);
-              dots.push(`<circle cx="${n(20 + Math.cos(a) * (r2 + 2.5))}" cy="${n(20 + Math.sin(a) * (r2 + 2.5))}" r="1.1"/>`);
-            }
-            return `<svg viewBox="0 0 40 40">`
-              + `<g stroke="${color}" stroke-width="1.5" stroke-linecap="round">${rays.join('')}</g>`
-              + `<g fill="${color}">${dots.join('')}</g></svg>`;
-          };
-          const fireworks = [
-            { cls: 'fw1', x: 82, y: -5, color: '#D8AE6E' },
-            { cls: 'fw2', x: 97, y: -1, color: '#7ecfc0' },
-            { cls: 'fw3', x: 89, y: -14, color: '#fff9e6' }
-          ];
-          return `
+        ${window.AIAPPS_LOGIN_SCENE === 'mentor-people' ? `
           <div class="growth-scene">
-            <svg class="growth-range" viewBox="0 0 100 100" preserveAspectRatio="none">
-              <defs>
-                ${grad('mtnLitBack', '#4a6b64', '#2b433e')}
-                ${grad('mtnShadeBack', '#31504a', '#1e3430')}
-                ${grad('mtnLitFront', '#3d6159', '#233f3a')}
-                ${grad('mtnShadeFront', '#264541', '#152b27')}
-              </defs>
-              ${peaks.filter(m => m.layer === 'back').map(mountain).join('')}
-              ${peaks.filter(m => m.layer === 'front').map(mountain).join('')}
+            <svg class="growth-path" viewBox="0 0 100 100" preserveAspectRatio="none">
+              <path class="growth-line" d="M3 96 C 20 82, 14 60, 34 50 C 54 40, 44 18, 80 4" vector-effect="non-scaling-stroke"/>
+              <circle class="milestone m1" cx="8" cy="90"/>
+              <circle class="milestone m2" cx="28" cy="58"/>
+              <circle class="milestone m3" cx="46" cy="26"/>
+              <circle class="milestone m4" cx="74" cy="8"/>
             </svg>
-            ${marks.map(mk => `<span class="growth-mark ${mk.cls}" style="left:${markPos[mk.i].x}%; top:${n(markPos[mk.i].y)}%;">${mk.svg}</span>`).join('')}
-            ${fireworks.map(f => `<span class="firework ${f.cls}" style="left:${f.x}%; top:${f.y}%;">${burst(f.color)}</span>`).join('')}
+            <div class="growth-flag" style="left:70%; top:-8%;">
+              <svg viewBox="0 0 24 24"><path d="M5 21V4"/><path d="M5 4.5h13l-3 4 3 4H5"/></svg>
+            </div>
             <div class="hop-figure">
               <svg viewBox="0 0 24 32">
                 <path d="M12 2.5 C16 2.5 16.6 6 15.4 9.4 C19.2 11.2 19.6 17 18 21.2 C16.8 26.6 14.2 29.5 12 29.5 C9.8 29.5 7.2 26.6 6 21.2 C4.4 17 4.8 11.2 8.6 9.4 C7.4 6 8 2.5 12 2.5 Z" fill="#fff9e6"/>
                 <ellipse cx="10.2" cy="5.6" rx="1.3" ry="0.9" fill="rgba(255,255,255,0.55)"/>
-                <path class="hop-arm" d="M16.4 17.2 C18.6 16.3 20.2 14.9 20.8 13.4" fill="none" stroke="#fff9e6" stroke-width="2.2" stroke-linecap="round"/>
-                <circle class="hop-hand" cx="21.3" cy="12.6" r="2" fill="#fff9e6"/>
               </svg>
-              <div class="growth-flag">
-                <svg viewBox="0 0 24 24"><path d="M5 21V4"/><path d="M5 4.5h13l-3 4 3 4H5"/></svg>
-              </div>
             </div>
           </div>
-          `;
-        })() : ''}
+        ` : ''}
         ${window.AIAPPS_LOGIN_SCENE === 'interview' ? (() => {
           const names = ['clipboard', 'magnifier', 'briefcase', 'chat-bubble', 'target', 'gear', 'graduation-cap', 'pencil', 'compass', 'trending-up', 'book', 'lightbulb', 'people', 'star', 'calendar', 'clock', 'bar-chart', 'flag'];
           const colors = ['#E03B2E', '#D8AE6E', '#4E8B8B', '#8C6BAE', '#E8935C', '#5C9BD8', '#7ecfc0'];
