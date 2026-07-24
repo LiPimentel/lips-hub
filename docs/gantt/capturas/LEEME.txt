@@ -1,0 +1,47 @@
+Esta carpeta está vacía a propósito.
+
+Durante la preparación de docs/gantt/entrenamiento.md se intentó navegar en vivo
+generador_gantt_2.html en el navegador, igual que se había hecho antes con
+StaffGate.html. Se encontraron dos limitaciones, no una sola:
+
+1. Igual que con StaffGate: las herramientas disponibles en esta sesión de
+   trabajo no ofrecen ninguna forma de exportar una captura de pantalla a un
+   archivo .png en disco (solo permiten "ver" la pantalla, no guardarla).
+
+2. Adicional y más limitante: a diferencia de la sesión de StaffGate, en esta
+   sesión el archivo generador_gantt_2.html solo pudo abrirse como una vista
+   estática de una sola "foto" del render inicial de la página. La propia
+   herramienta de navegador avisó explícitamente que "los archivos fuera de
+   la carpeta del proyecto se muestran como una vista estática (snapshot)".
+   Se probó:
+     - Hacer clic en el enlace "¿Olvidaste tu contraseña?" y volver a tomar
+       una captura: la pantalla no cambió de modo.
+     - Escribir un correo y una contraseña en los campos y tomar otra
+       captura: los campos aparecieron vacíos otra vez.
+     - Abrir una pestaña completamente nueva y navegar de nuevo al archivo:
+       al intentar interactuar, la herramienta respondió literalmente
+       "No site is open in this tab" (no hay ningún sitio realmente cargado
+       en esa pestaña).
+     - Forzar la navegación con la opción "force" de la herramienta: mismo
+       resultado.
+     - Cargar la versión publicada en producción (Netlify) para tener una
+       pestaña realmente interactiva: la navegación quedó colgada sin
+       responder, y se abandonó el intento para no arriesgar nada sobre el
+       sitio en vivo de producción.
+     - Buscar un servidor local instalado en esta máquina para servir la
+       carpeta del proyecto (lo que sí habría dado una pestaña interactiva
+       real): no se encontró Python, Node ni npm disponibles.
+
+Por eso, de todo el recorrido de esta app, lo único que se pudo confirmar
+viendo la pantalla real fue el estado inicial de la pantalla de "Iniciar
+sesión" (con la animación de fondo propia de esta app, tipo barras de Gantt
+creciendo). Todo lo demás — el mensaje de error de credenciales, el modo
+"Recuperar contraseña", y sobre todo TODA la funcionalidad propia del
+Generador de Gantt (carga de archivos, tabla editable, generación del
+diagrama, exportaciones a PDF/Excel) — se documentó exclusivamente leyendo
+el código fuente, sin haberlo visto funcionar en pantalla.
+
+Se recomienda repetir esta sesión de documentación con acceso a un servidor
+local real (por ejemplo sirviendo esta carpeta con algún servidor HTTP) o con
+credenciales reales sobre el sitio publicado, para poder capturar imágenes
+reales y confirmar en vivo el resto de las pantallas.
