@@ -1,6 +1,185 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
+<script>
+/* ===== AI APPs · Folder Bridge (guardado en carpeta local) ===== */
+(function(){
+  const APP_ID = "gantt";
+  const SYNC_PREFIX = "gantt_v1";
+  // La caché real se guarda como "gantt_v1::<userId>" (aislada por usuario),
+  // así que este puente reconoce cualquier clave con ese prefijo, no solo la exacta.
+  function isSyncKey(k){ return k === SYNC_PREFIX || k.indexOf(SYNC_PREFIX + '::') === 0; }
+  const DB_NAME = "aiapps-folder-bridge";
+  const STORE = "handles";
+
+  function idbOpen(){
+    return new Promise((res, rej)=>{
+      const req = indexedDB.open(DB_NAME, 1);
+      req.onupgradeneeded = () => req.result.createObjectStore(STORE);
+      req.onsuccess = () => res(req.result);
+      req.onerror = () => rej(req.error);
+    });
+  }
+  async function idbGet(key){
+    const db = await idbOpen();
+    return new Promise((res, rej)=>{
+      const rq = db.transaction(STORE, "readonly").objectStore(STORE).get(key);
+      rq.onsuccess = () => res(rq.result);
+      rq.onerror = () => rej(rq.error);
+    });
+  }
+  async function idbSet(key, val){
+    const db = await idbOpen();
+    return new Promise((res, rej)=>{
+      const tx = db.transaction(STORE, "readwrite");
+      tx.objectStore(STORE).put(val, key);
+      tx.oncomplete = () => res();
+      tx.onerror = () => rej(tx.error);
+    });
+  }
+
+  const supported = 'showDirectoryPicker' in window;
+  let dirHandle = null;
+  let writeTimer = null;
+  let badgeEl = null;
+  const FILE_NAME = APP_ID + ".data.json";
+
+  async function readFolderFile(){
+    if(!dirHandle) return null;
+    try{
+      const fh = await dirHandle.getFileHandle(FILE_NAME, {create:false});
+      const file = await fh.getFile();
+      const text = await file.text();
+      return text ? JSON.parse(text) : null;
+    }catch(e){ return null; }
+  }
+
+  async function writeFolderFile(data){
+    if(!dirHandle) return;
+    try{
+      const fh = await dirHandle.getFileHandle(FILE_NAME, {create:true});
+      const writable = await fh.createWritable();
+      await writable.write(JSON.stringify(data, null, 2));
+      await writable.close();
+    }catch(e){ console.warn("[AI APPs] No se pudo escribir en la carpeta:", e); }
+  }
+
+  function collectLocalSnapshot(){
+    const out = {};
+    Object.keys(localStorage).forEach(k => { if(isSyncKey(k)){ const v = localStorage.getItem(k); if(v !== null) out[k] = v; } });
+    return out;
+  }
+
+  function applySnapshot(snap){
+    if(!snap) return;
+    Object.keys(snap).forEach(k => { if(isSyncKey(k)) localStorage.setItem.__original.call(localStorage, k, snap[k]); });
+  }
+
+  function queueWrite(){
+    clearTimeout(writeTimer);
+    writeTimer = setTimeout(()=>{ writeFolderFile(collectLocalSnapshot()); }, 700);
+  }
+
+  // Interceptar localStorage.setItem para reflejar cada cambio en el archivo de la carpeta
+  const origSetItem = localStorage.setItem.bind(localStorage);
+  function patchedSetItem(key, value){
+    origSetItem(key, value);
+    if(isSyncKey(key)) queueWrite();
+  }
+  patchedSetItem.__original = origSetItem;
+  localStorage.setItem = patchedSetItem;
+
+  function makeBadge(){
+    const el = document.createElement('div');
+    el.id = 'aiapps-folder-badge';
+    el.style.cssText = 'position:fixed;bottom:14px;right:14px;z-index:999999;font-family:system-ui,-apple-system,sans-serif;font-size:12.5px;line-height:1;display:inline-flex;align-items:center;gap:7px;background:#1B2430;color:#F1EDE4;padding:9px 14px;border-radius:999px;box-shadow:0 6px 20px rgba(0,0,0,0.35);border:1px solid rgba(255,255,255,0.12);user-select:none;';
+    document.body.appendChild(el);
+    return el;
+  }
+
+  function setBadge(state){
+    if(!badgeEl) return;
+    if(state === 'connected'){
+      badgeEl.textContent = '📁 Guardando en carpeta local';
+      badgeEl.style.opacity = '0.72';
+      badgeEl.style.cursor = 'default';
+      badgeEl.title = 'Los datos se están guardando en ' + FILE_NAME + ' dentro de tu carpeta AI APPs';
+      badgeEl.onclick = null;
+    } else if(state === 'reconnect'){
+      badgeEl.textContent = '📁 Reconectar carpeta de datos';
+      badgeEl.style.opacity = '1';
+      badgeEl.style.cursor = 'pointer';
+      badgeEl.onclick = connect;
+    } else if(state === 'unsupported'){
+      badgeEl.textContent = '⚠️ Guardado solo local (usa Chrome/Edge)';
+      badgeEl.style.opacity = '0.6';
+      badgeEl.style.cursor = 'default';
+      badgeEl.onclick = null;
+    } else {
+      badgeEl.textContent = '📁 Conectar carpeta de datos';
+      badgeEl.style.opacity = '1';
+      badgeEl.style.cursor = 'pointer';
+      badgeEl.onclick = connect;
+    }
+  }
+
+  async function connect(){
+    try{
+      const handle = await window.showDirectoryPicker({ id: 'aiapps-folder', mode: 'readwrite' });
+      const perm = await handle.requestPermission({ mode: 'readwrite' });
+      if(perm !== 'granted') throw new Error('permiso denegado');
+      dirHandle = handle;
+      await idbSet(APP_ID + '-dir', handle);
+      const existing = await readFolderFile();
+      if(existing){
+        applySnapshot(existing);
+        setBadge('connected');
+        location.reload();
+        return;
+      }
+      await writeFolderFile(collectLocalSnapshot());
+      setBadge('connected');
+    }catch(e){
+      console.warn('[AI APPs] Conexión de carpeta cancelada:', e);
+    }
+  }
+
+  async function tryReconnect(){
+    try{
+      const handle = await idbGet(APP_ID + '-dir');
+      if(!handle){ setBadge('idle'); return; }
+      const perm = await handle.queryPermission({ mode: 'readwrite' });
+      if(perm === 'granted'){
+        dirHandle = handle;
+        const existing = await readFolderFile();
+        if(existing){
+          const localSnap = JSON.stringify(collectLocalSnapshot());
+          const fileSnap = JSON.stringify(existing);
+          if(localSnap !== fileSnap){
+            applySnapshot(existing);
+            setBadge('connected');
+            location.reload();
+            return;
+          }
+        }
+        setBadge('connected');
+      } else {
+        setBadge('reconnect');
+      }
+    }catch(e){
+      setBadge('idle');
+    }
+  }
+
+  window.addEventListener('DOMContentLoaded', async () => {
+    badgeEl = makeBadge();
+    if(!supported){ setBadge('unsupported'); return; }
+    setBadge('idle');
+    await tryReconnect();
+  });
+})();
+</script>
+
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Generador de Gantt — Harper</title>
@@ -161,6 +340,102 @@ let rows = [];
 const statusEl = document.getElementById('status');
 const tbody = document.getElementById('tbody');
 
+/* ═══════════════ PERSISTENCIA (Supabase + caché local) ═══════════════ */
+const SUPA_APP_ID = 'gantt';
+// Evita que un guardado disparado antes de que termine la carga inicial
+// sobrescriba la nube con un estado vacío/desactualizado.
+let cloudSyncReady = false;
+// Se fija una vez que load() confirma la sesión (la página siempre se recarga
+// al iniciar/cerrar sesión, así que el usuario no cambia sin un reload).
+let cachedUserId = null;
+
+// Aísla la caché local por usuario, para que la cuenta de una persona nunca
+// herede la caché de otra que haya usado el mismo navegador/equipo.
+function scopedKey(key, userId){
+  return userId ? `${key}::${userId}` : key;
+}
+
+async function getSupabaseSession(){
+  if(!window.supabaseClient) return null;
+  const { data } = await window.supabaseClient.auth.getSession();
+  return data && data.session ? data.session : null;
+}
+
+// Las fechas se guardan como texto ISO (JSON no soporta Date directamente)
+// y se reconstruyen como objetos Date al cargar.
+function serializeRows(rs){
+  return rs.map(r => ({ fase:r.fase||"", ini: r.ini ? r.ini.toISOString() : null, fin: r.fin ? r.fin.toISOString() : null, ent:r.ent||"", dur:r.dur||"" }));
+}
+function deserializeRows(arr){
+  return (arr||[]).map(r => ({ fase:r.fase||"", ini: r.ini ? new Date(r.ini) : null, fin: r.fin ? new Date(r.fin) : null, ent:r.ent||"", dur:r.dur||"" }));
+}
+
+function save(){
+  // Resuelve la sesión de nuevo en vez de confiar en cachedUserId, para no
+  // dejar una ventana de milisegundos donde un guardado disparado antes de
+  // que load() termine caiga en la clave vieja sin aislar por usuario.
+  (async () => {
+    const session = await getSupabaseSession();
+    const uid = session ? session.user.id : null;
+    localStorage.setItem(scopedKey('gantt_v1', uid), JSON.stringify({ rows: serializeRows(rows) }));
+  })();
+  syncToCloud();
+}
+
+async function syncToCloud(){
+  const session = await getSupabaseSession();
+  if(!session) return;
+  if(!cloudSyncReady) return;
+  try{
+    const { error } = await window.supabaseClient
+      .from('app_data')
+      .upsert(
+        { user_id: session.user.id, app_id: SUPA_APP_ID, data: { rows: serializeRows(rows) }, updated_at: new Date().toISOString() },
+        { onConflict: 'user_id,app_id' }
+      );
+    if(error) throw error;
+  }catch(e){
+    console.warn('[Gantt] Guardado local OK, pero falló la sincronización con la nube:', e);
+  }
+}
+
+function loadFromLocalStorage(userId){
+  const raw = localStorage.getItem(scopedKey('gantt_v1', userId));
+  const parsed = raw ? JSON.parse(raw) : null;
+  rows = parsed ? deserializeRows(parsed.rows) : [];
+}
+
+async function load(){
+  const session = await getSupabaseSession();
+  if(session){
+    cachedUserId = session.user.id;
+    try{
+      const { data, error } = await window.supabaseClient
+        .from('app_data')
+        .select('data')
+        .eq('app_id', SUPA_APP_ID)
+        .eq('user_id', session.user.id)
+        .maybeSingle();
+      if(error) throw error;
+      if(data && data.data){
+        rows = deserializeRows(data.data.rows);
+        localStorage.setItem(scopedKey('gantt_v1', cachedUserId), JSON.stringify({ rows: serializeRows(rows) }));
+        return;
+      }
+      // Sin fila en la nube todavía (cuenta nueva) - usar caché local si existe.
+      loadFromLocalStorage(cachedUserId);
+      return;
+    }catch(e){
+      console.warn('[Gantt] No se pudo leer de la nube, usando caché local:', e);
+      loadFromLocalStorage(cachedUserId);
+      return;
+    }
+  }
+  // Sin sesión confirmada: no cargar datos reales en memoria/DOM, aunque
+  // existan en caché local de una sesión anterior (el candado solo tapa
+  // visualmente, no debe haber datos reales detrás mientras no hay sesión).
+}
+
 function setStatus(msg, isErr){
   statusEl.textContent = msg;
   statusEl.className = "status" + (isErr ? " err" : "");
@@ -274,6 +549,7 @@ function mergeRows(newRows, sourceLabel){
     rows = newRows;
   }
   renderTable();
+  save();
 }
 
 function renderTable(){
@@ -290,7 +566,7 @@ function renderTable(){
     tbody.appendChild(tr);
   });
   tbody.querySelectorAll('.del').forEach(el=>{
-    el.addEventListener('click', ()=>{ rows.splice(+el.dataset.idx,1); renderTable(); });
+    el.addEventListener('click', ()=>{ rows.splice(+el.dataset.idx,1); renderTable(); save(); });
   });
   tbody.querySelectorAll('td[contenteditable]').forEach(td=>{
     td.addEventListener('blur', ()=>{
@@ -301,6 +577,7 @@ function renderTable(){
       if(k==="ini" || k==="fin") rows[idx][k] = parseDateFlexible(val);
       else if(k==="dur") rows[idx][k] = val;
       else rows[idx][k] = val;
+      save();
     });
   });
 }
@@ -319,12 +596,14 @@ document.getElementById('downloadXlsx').addEventListener('click', ()=>{
 document.getElementById('addRow').addEventListener('click', ()=>{
   rows.push({fase:"",ini:null,fin:null,ent:"",dur:""});
   renderTable();
+  save();
 });
 
 document.getElementById('clearAll').addEventListener('click', ()=>{
   rows = []; renderTable();
   document.getElementById('ganttPanel').style.display = "none";
   setStatus("");
+  save();
 });
 
 document.getElementById('loadSample').addEventListener('click', ()=>{
@@ -525,7 +804,12 @@ document.getElementById('generate').addEventListener('click', ()=>{
   }
 });
 
-renderTable();
+/* ═══════════════ BOOT ═══════════════ */
+(async () => {
+  await load();
+  cloudSyncReady = true;
+  renderTable();
+})();
 
 document.getElementById('exportPdf').addEventListener('click', async ()=>{
   const scrollEl = document.getElementById('ganttScroll');

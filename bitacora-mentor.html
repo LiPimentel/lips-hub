@@ -5,7 +5,10 @@
 /* ===== AI APPs · Folder Bridge (guardado en carpeta local) ===== */
 (function(){
   const APP_ID = "bitacora-mentor";
-  const SYNC_KEYS = ["ledger-data"];
+  const SYNC_PREFIX = "ledger-data";
+  // La caché real ahora se guarda como "ledger-data::<userId>" (aislada por usuario),
+  // así que este puente reconoce cualquier clave con ese prefijo, no solo la exacta.
+  function isSyncKey(k){ return k === SYNC_PREFIX || k.indexOf(SYNC_PREFIX + '::') === 0; }
   const DB_NAME = "aiapps-folder-bridge";
   const STORE = "handles";
 
@@ -63,13 +66,13 @@
 
   function collectLocalSnapshot(){
     const out = {};
-    SYNC_KEYS.forEach(k => { const v = localStorage.getItem(k); if(v !== null) out[k] = v; });
+    Object.keys(localStorage).forEach(k => { if(isSyncKey(k)){ const v = localStorage.getItem(k); if(v !== null) out[k] = v; } });
     return out;
   }
 
   function applySnapshot(snap){
     if(!snap) return;
-    Object.keys(snap).forEach(k => { if(SYNC_KEYS.includes(k)) localStorage.setItem.__original.call(localStorage, k, snap[k]); });
+    Object.keys(snap).forEach(k => { if(isSyncKey(k)) localStorage.setItem.__original.call(localStorage, k, snap[k]); });
   }
 
   function queueWrite(){
@@ -81,7 +84,7 @@
   const origSetItem = localStorage.setItem.bind(localStorage);
   function patchedSetItem(key, value){
     origSetItem(key, value);
-    if(SYNC_KEYS.includes(key)) queueWrite();
+    if(isSyncKey(key)) queueWrite();
   }
   patchedSetItem.__original = origSetItem;
   localStorage.setItem = patchedSetItem;
@@ -471,10 +474,28 @@ async function getSupabaseSession(){
   return data && data.session ? data.session : null;
 }
 
+// Aísla la caché local por usuario, para que la cuenta de una persona nunca
+// herede la caché de otra que haya usado el mismo navegador/equipo.
+function scopedKey(key, userId){
+  return userId ? `${key}::${userId}` : key;
+}
+
+// Migración de una sola vez: si existen datos guardados con la clave vieja
+// (de antes de aislar por usuario) y la clave nueva todavía no tiene nada,
+// los copia — para que ese dato no quede huérfano e inaccesible para siempre.
+function migrateLegacyCache(baseKey, scoped){
+  if(scoped === baseKey) return;
+  if(localStorage.getItem(scoped) !== null) return;
+  const legacy = localStorage.getItem(baseKey);
+  if(legacy !== null) localStorage.setItem(scoped, legacy);
+}
+
 const storageAdapter = {
   async get(key){
     const session = await getSupabaseSession();
     if(session){
+      const localKey = scopedKey(key, session.user.id);
+      migrateLegacyCache(key, localKey);
       try{
         const { data, error } = await window.supabaseClient
           .from('app_data')
@@ -485,16 +506,16 @@ const storageAdapter = {
         if(error) throw error;
         if(data && data.data){
           const value = JSON.stringify(data.data);
-          localStorage.setItem(key, value);
+          localStorage.setItem(localKey, value);
           return { key, value };
         }
         // No hay fila en la nube todavía (cuenta nueva) - usar caché local si existe,
         // para no confundir "sin datos en la nube" con "borrar mis datos locales".
-        const raw = localStorage.getItem(key);
+        const raw = localStorage.getItem(localKey);
         return raw ? { key, value: raw } : null;
       }catch(e){
         console.warn('[Bitácora] No se pudo leer de la nube, usando caché local:', e);
-        const raw = localStorage.getItem(key);
+        const raw = localStorage.getItem(localKey);
         return raw ? { key, value: raw } : null;
       }
     }
@@ -507,7 +528,7 @@ const storageAdapter = {
   async set(key, value){
     const session = await getSupabaseSession();
     if(session){
-      localStorage.setItem(key, value);
+      localStorage.setItem(scopedKey(key, session.user.id), value);
       if(!cloudSyncReady){
         // Todavía no terminó la carga inicial - no subir a la nube para no
         // pisar datos reales con un estado vacío/desactualizado.

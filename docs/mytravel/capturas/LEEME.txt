@@ -1,0 +1,50 @@
+Esta carpeta está vacía a propósito.
+
+Durante la preparación de docs/mytravel/entrenamiento.md se intentó navegar en
+vivo mytravel-pro-v4.html en el navegador y tomar capturas reales, igual que
+se había hecho antes con StaffGate y con el Generador de Gantt. Se encontraron
+las mismas limitaciones que ya se habían reportado para el Generador de Gantt,
+más una adicional propia de esta sesión:
+
+1. Las herramientas disponibles en esta sesión de trabajo no ofrecen ninguna
+   forma de exportar una captura de pantalla a un archivo .png en disco (solo
+   permiten "ver" la pantalla, no guardarla) — y en esta sesión, además, cada
+   intento de tomar siquiera esa captura temporal en pantalla se quedó
+   colgado sin responder (tiempo de espera agotado), tanto para el archivo
+   local como para la versión publicada en producción. No se logró ver ni
+   una sola captura, ni siquiera temporal, en toda la sesión.
+
+2. Al abrir mytravel-pro-v4.html directamente como archivo local (protocolo
+   file://), la pantalla de inicio de sesión no llegó a aparecer en absoluto
+   (ni en el texto de la página ni en el árbol de accesibilidad); se veía
+   directamente el contenido interno de la app, vacío. Coincide con lo ya
+   reportado para el Generador de Gantt ("se muestra como una vista
+   estática").
+
+3. Se encontró, sin buscarla, una sesión real ya iniciada en la versión
+   publicada de la app (https://dapper-sunflower-c4c010.netlify.app). Gracias
+   a eso se pudo confirmar por texto/accesibilidad (no por imagen) el
+   contenido real de la primera pantalla interna del app ("Mapa de Rutas")
+   con esa cuenta real, sin viajes ni deseos guardados. No se cerró esa
+   sesión (no había credenciales para volver a entrar) ni se guardó ningún
+   dato de prueba en esa cuenta real.
+
+4. Después de esa primera comprobación, cualquier clic (cambiar de sección,
+   exportar CSV) dejó de producir efecto alguno en la página — el mismo tipo
+   de falla de interactividad ya descrita para el Generador de Gantt en su
+   propia sesión.
+
+5. Se buscó un servidor local instalado en esta máquina (Python, Node, npm)
+   para servir la carpeta del proyecto y tener una pestaña realmente
+   interactiva: no se encontró ninguno disponible.
+
+Por eso, de todo el recorrido de esta app, lo único confirmado de verdad en
+esta sesión fue el contenido de texto/accesibilidad de la primera pantalla
+interna ("Mapa de Rutas") ya con sesión iniciada — no como imagen. Todo lo
+demás (pantalla de login, formulario de nuevo viaje, sección de deseos,
+filtros, exportación, eliminación, carpeta local) se documentó exclusivamente
+leyendo el código fuente, sin haberlo visto funcionar en pantalla.
+
+Se recomienda repetir esta sesión de documentación con una herramienta de
+navegador que no se quede colgada al capturar pantalla, para poder guardar
+imágenes reales y confirmar en vivo el resto de las pantallas.

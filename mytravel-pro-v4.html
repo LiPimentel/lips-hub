@@ -5,7 +5,10 @@
 /* ===== AI APPs · Folder Bridge (guardado en carpeta local) ===== */
 (function(){
   const APP_ID = "mytravel-pro";
-  const SYNC_KEYS = ["mytravel_v4"];
+  const SYNC_PREFIX = "mytravel_v4";
+  // La caché real ahora se guarda como "mytravel_v4::<userId>" (aislada por usuario),
+  // así que este puente reconoce cualquier clave con ese prefijo, no solo la exacta.
+  function isSyncKey(k){ return k === SYNC_PREFIX || k.indexOf(SYNC_PREFIX + '::') === 0; }
   const DB_NAME = "aiapps-folder-bridge";
   const STORE = "handles";
 
@@ -63,13 +66,13 @@
 
   function collectLocalSnapshot(){
     const out = {};
-    SYNC_KEYS.forEach(k => { const v = localStorage.getItem(k); if(v !== null) out[k] = v; });
+    Object.keys(localStorage).forEach(k => { if(isSyncKey(k)){ const v = localStorage.getItem(k); if(v !== null) out[k] = v; } });
     return out;
   }
 
   function applySnapshot(snap){
     if(!snap) return;
-    Object.keys(snap).forEach(k => { if(SYNC_KEYS.includes(k)) localStorage.setItem.__original.call(localStorage, k, snap[k]); });
+    Object.keys(snap).forEach(k => { if(isSyncKey(k)) localStorage.setItem.__original.call(localStorage, k, snap[k]); });
   }
 
   function queueWrite(){
@@ -81,7 +84,7 @@
   const origSetItem = localStorage.setItem.bind(localStorage);
   function patchedSetItem(key, value){
     origSetItem(key, value);
-    if(SYNC_KEYS.includes(key)) queueWrite();
+    if(isSyncKey(key)) queueWrite();
   }
   patchedSetItem.__original = origSetItem;
   localStorage.setItem = patchedSetItem;
@@ -981,6 +984,25 @@ const SUPA_APP_ID='mytravel';
 // Evita que un guardado disparado antes de que termine la carga inicial
 // sobrescriba la nube con un estado vacío/desactualizado.
 let cloudSyncReady=false;
+// Se fija una vez que loadDB() confirma la sesión (la página siempre se recarga
+// al iniciar/cerrar sesión, así que el usuario no cambia sin un reload).
+let cachedUserId=null;
+
+// Aísla la caché local por usuario, para que la cuenta de una persona nunca
+// herede la caché de otra que haya usado el mismo navegador/equipo.
+function scopedKey(key, userId){
+  return userId ? `${key}::${userId}` : key;
+}
+
+// Migración de una sola vez: si existen datos guardados con la clave vieja
+// (de antes de aislar por usuario) y la clave nueva todavía no tiene nada,
+// los copia — para que ese dato no quede huérfano e inaccesible para siempre.
+function migrateLegacyCache(baseKey, scoped){
+  if(scoped === baseKey) return;
+  if(localStorage.getItem(scoped) !== null) return;
+  const legacy = localStorage.getItem(baseKey);
+  if(legacy !== null) localStorage.setItem(scoped, legacy);
+}
 
 async function getSupabaseSession(){
   if(!window.supabaseClient) return null;
@@ -988,13 +1010,15 @@ async function getSupabaseSession(){
   return data && data.session ? data.session : null;
 }
 
-function loadFromLocalStorage(){
-  db=JSON.parse(localStorage.getItem('mytravel_v4'))||{viajes:[],deseos:[]};
+function loadFromLocalStorage(userId){
+  db=JSON.parse(localStorage.getItem(scopedKey('mytravel_v4', userId)))||{viajes:[],deseos:[]};
 }
 
 async function loadDB(){
   const session=await getSupabaseSession();
   if(session){
+    cachedUserId=session.user.id;
+    migrateLegacyCache('mytravel_v4', scopedKey('mytravel_v4', cachedUserId));
     try{
       const { data, error } = await window.supabaseClient
         .from('app_data')
@@ -1005,14 +1029,14 @@ async function loadDB(){
       if(error) throw error;
       if(data && data.data){
         db=data.data;
-        localStorage.setItem('mytravel_v4', JSON.stringify(db));
+        localStorage.setItem(scopedKey('mytravel_v4', cachedUserId), JSON.stringify(db));
         return;
       }
-      loadFromLocalStorage();
+      loadFromLocalStorage(cachedUserId);
       return;
     }catch(e){
       console.warn('[MyTravel] No se pudo leer de la nube, usando caché local:', e);
-      loadFromLocalStorage();
+      loadFromLocalStorage(cachedUserId);
       return;
     }
   }
@@ -1177,6 +1201,7 @@ function guardarViaje(){
   const lon   =document.getElementById('v-ciudad').dataset.lon;
   if(!ciudad||!pais||!lat||!lon){toast('Selecciona una ciudad de la lista.','err');return;}
   if(ini&&fin&&fin<ini){toast('La fecha fin no puede ser antes del inicio.','err');return;}
+  if(pres<0){toast('El presupuesto no puede ser negativo.','err');return;}
   const escalas=[...document.querySelectorAll('.v-escala-input')].map(i=>i.value.trim()).filter(Boolean);
   if(db.viajes.some(v=>v.pais.toLowerCase()===pais.toLowerCase()))
     toast(`Ya tienes un viaje registrado en ${pais}.`,'warn');
@@ -1366,7 +1391,14 @@ function exportData(){
 
 /* ═══════════════ PERSIST ═══════════════ */
 function saveDB(){
-  localStorage.setItem('mytravel_v4',JSON.stringify(db));
+  // Resuelve la sesión de nuevo en vez de confiar en cachedUserId, para no
+  // dejar una ventana de milisegundos donde un guardado disparado antes de
+  // que loadDB() termine caiga en la clave vieja sin aislar por usuario.
+  (async () => {
+    const session = await getSupabaseSession();
+    const uid = session ? session.user.id : null;
+    localStorage.setItem(scopedKey('mytravel_v4', uid),JSON.stringify(db));
+  })();
   syncToCloud();
 }
 

@@ -1,0 +1,18 @@
+Esta carpeta está vacía a propósito.
+
+Durante la preparación de docs/staffgate/entrenamiento.md se navegó en vivo la pantalla
+de inicio de sesión de StaffGate.html en el navegador, incluyendo el formulario normal,
+el mensaje de error por credenciales incorrectas y el modo "Recuperar contraseña", pero
+las herramientas disponibles en esa sesión de trabajo no ofrecieron una forma de
+exportar esas capturas a un archivo .png en disco (solo permiten "ver" la pantalla, no
+guardarla).
+
+Por eso entrenamiento.md describe esas pantallas en texto, con el detalle más fiel
+posible a lo observado, en vez de referenciar imágenes que no se pudieron generar.
+
+Si en el futuro se repite esta sesión con una herramienta que sí permita guardar
+capturas, o con acceso de un desarrollador a la consola del navegador, se recomienda
+volver a capturar la pantalla de login y, con credenciales reales, las pantallas
+posteriores (Candidatos, Plantillas, Reportes, editor de plantillas y las
+exportaciones PDF/Word/TXT/CSV) que en esta versión de la documentación quedaron sin
+verificar visualmente.
