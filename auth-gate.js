@@ -754,13 +754,17 @@
           const barColors = ['c-lila', 'c-amarillo', 'c-purpura'];
           const totalRows = 9;
           const rows = Array.from({ length: totalRows }).map((_, i) => {
-            // Escalera: cada barra llega un poco más lejos que la anterior.
-            const w = (30 + (i * 62) / (totalRows - 1) + (Math.random() - 0.5) * 3).toFixed(1);
+            // La escalera va en el riel de cada fila, no en el relleno animado:
+            // así la piramide se ve siempre, y no solo en el instante en que
+            // una barra llega a su ancho maximo (que por el desfase de las
+            // animaciones nunca ocurre en todas a la vez).
+            const rowW = (34 + (i * 66) / (totalRows - 1)).toFixed(1);
+            const w = (80 + Math.random() * 16).toFixed(1);
             const delay = (i * 0.68).toFixed(2);
             const day = Math.floor(Math.random() * 28) + 1;
             const cls = barColors[i % barColors.length];
             const flagColor = flagColors[i % flagColors.length];
-            return `<div class="gantt-row">
+            return `<div class="gantt-row" style="width:${rowW}%;">
                 <div class="gantt-bar ${cls}" style="--w:${w}%; animation-delay:${delay}s;"></div>
                 <span class="gantt-dot ${cls}" style="--w:${w}%; animation-delay:${delay}s;"></span>
                 <span class="gantt-date" style="left:${w}%; animation-delay:${delay}s;">${day}</span>
