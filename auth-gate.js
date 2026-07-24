@@ -586,8 +586,10 @@
           const ridgeSvg = `<path d="${ridgePath}" fill="url(#ridgeGrad)"/>`;
           const floorEllipses = ridgeSvg + shadowEllipses + floorCoins.map(c => {
             const rx = parseFloat(c.rx);
-            const ry = rx * 0.42;
-            const thick = Math.max(2.4, ry * 1.25);
+            // Cara bastante redonda (0.62 del ancho): con proporciones más
+            // chatas las monedas se leían aplastadas, no como monedas.
+            const ry = rx * 0.62;
+            const thick = Math.max(2.4, ry * 0.85);
             return `<g transform="translate(${c.cx},${c.cy.toFixed(1)}) rotate(${c.rot})">
               <ellipse cx="0" cy="${thick.toFixed(2)}" rx="${rx}" ry="${ry.toFixed(2)}" fill="#4a3208"/>
               <rect x="${-rx}" y="0" width="${(rx * 2).toFixed(2)}" height="${thick.toFixed(2)}" fill="url(#coinEdgeGrad)"/>
