@@ -16,5 +16,17 @@ Verificado:
 - [ ] **NO verificado end-to-end:** no se pudo completar el flujo real "abrir modal → escribir -500 en Presupuesto → clic en Guardar → ver el toast de error" en vivo, porque la app exige sesión de Supabase y no hay credenciales de prueba (la pantalla de login bloquea el acceso real, confirmado por captura de pantalla). El árbol de accesibilidad (`read_page`) mostró un estado de dashboard ya cargado que no coincidía con la captura real (login activo) — se interpreta como el mismo problema de herramienta ya documentado en `docs/team-memory.md` (desincronía entre accesibilidad/interacción y el DOM visual real en `file://`), no como un bug de la app.
 - [ ] **NO verificado:** persistencia real en Supabase (no hay credenciales de prueba para esta app).
 
+## 2026-07-24 — Revisión: aislar caché local por user_id (commit `e421ee8`)
+
+- [x] El archivo sigue cargando sin errores de consola (`file://mytravel-pro-v4.html`, tab-4).
+- [x] Pantalla de login re-confirmada por captura de pantalla real (viewport quedó en 375x812 al momento de la captura) — escena "travel-sky" intacta, sin overflow.
+- [x] Esta vez la captura real coincidió con lo esperado (login, no dashboard) — no se repitió la desincronía `read_page`/pantalla real ya documentada la vez anterior, aunque sí se repitió en otra pestaña de esta misma sesión (bitacora-mentor, tab-7) el patrón de que `read_page`/`javascript_tool` mostró el DOM del dashboard subyacente mientras la captura real mostraba el login — mismo comportamiento de herramienta, no de la app (confirmado cruzando con `getComputedStyle`/`getBoundingClientRect` del overlay del candado: `position:fixed`, cubre el 100% del viewport, `z-index` máximo, `opacity:1`).
+- [x] Sin sesión, `db` en memoria es `{viajes:[], deseos:[]}` — no hay datos reales detrás del candado.
+- [x] `cachedUserId` existe, vale `null` sin sesión.
+- [x] `scopedKey('somekey','user-123')` → `'somekey::user-123'` y `scopedKey('somekey', null)` → `'somekey'`, probado en consola real.
+- [x] No se encontró clave vieja huérfana real en este perfil de navegador (`mytravel_v4` → `null`).
+- [x] Ventana de carrera de `save()`/`cachedUserId` ya documentada por security-reviewer (caso borde 11 en `requerimientos.md`) — confirmada por lectura de código.
+- [ ] **NO verificado end-to-end:** sigue sin credenciales de prueba disponibles.
+
 ## Histórico
-_(sin entradas previas — primera revisión de este agente para esta app)_
+_(sin entradas previas antes de 2026-07-23)_

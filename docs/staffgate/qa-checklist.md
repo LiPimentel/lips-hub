@@ -15,5 +15,18 @@ Verificado:
 - [ ] **NO verificado end-to-end:** no se pudo generar un PDF/Word real exportado desde un candidato con datos reales (requiere sesión de Supabase autenticada; no hay credenciales de prueba para StaffGate). El color correcto dentro del HTML/XML generado se infiere de la lógica ya probada, no de un archivo exportado abierto visualmente.
 - [ ] **NO verificado:** flujo completo de candidatos/plantillas/reportes detrás del login (sin credenciales de prueba).
 
+## 2026-07-24 — Revisión: aislar caché local por user_id (commit `e421ee8`)
+
+Re-verificado lo de la entrada anterior (sigue OK: sin errores de consola, candado visible) y agregado lo específico de este fix:
+
+- [x] El archivo sigue cargando sin errores de consola (`file://StaffGate.html`, tab-6).
+- [x] Pantalla de login re-confirmada por captura de pantalla real también en mobile (375x812) esta vez — escena decorativa de iconos (lupa, maletín, birrete, etc.), sin overflow, formulario completo.
+- [x] Sin sesión, `candidates` y `templates` en memoria son `[]` — no hay datos reales detrás del candado.
+- [x] `cachedUserId` existe como variable, vale `null` sin sesión (como se esperaba).
+- [x] `scopedKey('somekey','user-123')` → `'somekey::user-123'` y `scopedKey('somekey', null)` → `'somekey'`, probado en consola real sobre la página cargada.
+- [x] No se encontró clave vieja huérfana real en este perfil de navegador (`staffgate_cands_v1`/`staffgate_tpls_v1` → `null`).
+- [x] Ventana de carrera de `save()`/`cachedUserId` ya documentada por security-reviewer (caso borde 12 en `requerimientos.md`) — confirmada por lectura de código, no se repite el análisis.
+- [ ] **NO verificado end-to-end:** sigue sin credenciales de prueba disponibles.
+
 ## Histórico
-_(sin entradas previas — primera revisión de este agente para esta app)_
+_(sin entradas previas antes de 2026-07-23)_

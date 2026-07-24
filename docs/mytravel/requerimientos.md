@@ -280,3 +280,19 @@ requieren un cambio; esta persona (BA) no los resuelve.
     cerrarse sin cambios; si en cambio se confirma que el candado no
     aparece en algún escenario real (no solo de herramienta de prueba),
     sería un hallazgo de seguridad urgente.*
+11. **(security-reviewer, 2026-07-23) Ventana de carrera estrecha en la que
+    `saveDB()` todavía puede escribir en la clave local sin aislar por
+    usuario, pese a la corrección de mezcla de cuentas.** El botón
+    "Guardar itinerario" (línea 968, `onclick="guardarViaje()"`) es
+    estático e interactivo desde que la página pinta, sin depender de que
+    `loadDB()` termine. `cachedUserId` (línea 989) solo se fija dentro de
+    `loadDB()` (línea 1010), que es asíncrono. Si `guardarViaje()` se
+    dispara antes de esa asignación (por ejemplo, si `getSupabaseSession()`
+    tarda por una renovación de token), `saveDB()` (línea 1382-1383) escribe
+    con `scopedKey('mytravel_v4', null)` — la clave vieja sin aislar. La
+    nube no se ve afectada (usa `session.user.id` fresco en
+    `syncToCloud()`), pero ese viaje queda huérfano en la clave vieja y, al
+    coincidir con el prefijo de `isSyncKey()` (línea 11), se replica
+    también en el respaldo de carpeta local, quedando expuesto a cualquier
+    otra cuenta que conecte esa carpeta. *Decisión pendiente: ¿deshabilitar
+    los controles de guardado hasta que `cachedUserId` esté confirmado?*
