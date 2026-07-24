@@ -44,9 +44,49 @@
     flag: '<path d="M5 21V4"/><path d="M5 4.5h13l-3 4 3 4H5"/>'
   };
 
+  /* El candado es una superposición: el resto de la página sigue existiendo
+     detrás y, sin esto, seguía siendo alcanzable con Tab (y por lo tanto
+     accionable con teclado) aunque no hubiera sesión. `inert` la saca del
+     orden de tabulación, del árbol de accesibilidad y de los clics de una
+     sola vez. Se recuerda qué elementos se marcaron para poder devolverlos
+     como estaban al quitar la superposición. */
+  let inertedEls = [];
+  let inertObserver = null;
+
+  function applyInert(host) {
+    Array.prototype.forEach.call(document.body.children, (el) => {
+      if (el === host || el.hasAttribute("inert")) return;
+      el.setAttribute("inert", "");
+      inertedEls.push(el);
+    });
+  }
+
+  function lockBackground(host) {
+    unlockBackground();
+    applyInert(host);
+    /* Varias apps agregan elementos al body después de que se pinta el
+       candado (el badge de carpeta local, por ejemplo, que abre el selector
+       de carpetas con permiso de escritura). Sin esto se quedaban fuera
+       del bloqueo. */
+    if (typeof MutationObserver === "function") {
+      inertObserver = new MutationObserver(() => applyInert(host));
+      inertObserver.observe(document.body, { childList: true });
+    }
+  }
+
+  function unlockBackground() {
+    if (inertObserver) {
+      inertObserver.disconnect();
+      inertObserver = null;
+    }
+    inertedEls.forEach((el) => el.removeAttribute("inert"));
+    inertedEls = [];
+  }
+
   function removeExistingOverlay() {
     const existing = document.getElementById("aiapps-auth-gate");
     if (existing) existing.remove();
+    unlockBackground();
   }
 
   function buildOverlay() {
@@ -464,11 +504,25 @@
           text-align:center;
           margin-top:14px;
         }
-        .link-row a{
+        /* Es un <button> (no un <a> sin href) para que se pueda alcanzar con
+           Tab y activar con Enter/Espacio; el aspecto de enlace se mantiene. */
+        .link-row button{
+          width:auto;
+          margin-top:0;
+          padding:2px 4px;
+          border:none;
+          background:none;
+          font-family:inherit;
+          font-weight:400;
           font-size:0.78rem;
           color:#8B94A3;
           cursor:pointer;
           text-decoration:underline;
+        }
+        .link-row button:focus-visible{
+          outline:2px solid #1B2430;
+          outline-offset:2px;
+          border-radius:3px;
         }
         .pw-field{ display:block; }
         .pw-field.hidden{ display:none; }
@@ -824,12 +878,13 @@
           <button type="submit">Entrar</button>
           <div class="error"></div>
           <div class="ok"></div>
-          <div class="link-row"><a class="toggle-mode">¿Olvidaste tu contraseña?</a></div>
+          <div class="link-row"><button type="button" class="toggle-mode">¿Olvidaste tu contraseña?</button></div>
         </form>
       </div>
     `;
 
     document.body.appendChild(host);
+    lockBackground(host);
 
     const coverEl = shadow.querySelector(".cover");
     const cardEl = shadow.querySelector(".card");
@@ -852,11 +907,14 @@
     const titleEl = shadow.querySelector(".title");
     const errorEl = shadow.querySelector(".error");
     const okEl = shadow.querySelector(".ok");
-    const button = shadow.querySelector("button");
+    const button = shadow.querySelector('button[type="submit"]');
     const toggleModeLink = shadow.querySelector(".toggle-mode");
     const pwField = shadow.querySelector(".pw-field");
     const pwInput = shadow.getElementById("aiapps-password");
     const emailInput = shadow.getElementById("aiapps-email");
+
+    // Que el foco arranque dentro del candado y no en el final del documento.
+    emailInput.focus();
 
     let mode = "login";
 
@@ -965,11 +1023,13 @@
     `;
 
     document.body.appendChild(host);
+    lockBackground(host);
 
     const form = shadow.querySelector("form");
     const errorEl = shadow.querySelector(".error");
     const button = shadow.querySelector("button");
     const pwInput = shadow.getElementById("aiapps-recovery-password");
+    pwInput.focus();
 
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
@@ -1144,13 +1204,15 @@
         p{ font-size:0.85rem; color:#3E4757; margin:0; line-height:1.4; }
       </style>
       <div class="cover">
-        <div class="card">
-          <h1>No se pudo conectar</h1>
+        <div class="card" tabindex="-1" role="alertdialog" aria-labelledby="aiapps-conn-title">
+          <h1 id="aiapps-conn-title">No se pudo conectar</h1>
           <p>No se pudo cargar el sistema de acceso. Verifica tu conexión a internet y recarga la página.</p>
         </div>
       </div>
     `;
     document.body.appendChild(host);
+    lockBackground(host);
+    shadow.querySelector(".card").focus();
   }
 
   async function guard() {
