@@ -480,11 +480,22 @@ function scopedKey(key, userId){
   return userId ? `${key}::${userId}` : key;
 }
 
+// Migración de una sola vez: si existen datos guardados con la clave vieja
+// (de antes de aislar por usuario) y la clave nueva todavía no tiene nada,
+// los copia — para que ese dato no quede huérfano e inaccesible para siempre.
+function migrateLegacyCache(baseKey, scoped){
+  if(scoped === baseKey) return;
+  if(localStorage.getItem(scoped) !== null) return;
+  const legacy = localStorage.getItem(baseKey);
+  if(legacy !== null) localStorage.setItem(scoped, legacy);
+}
+
 const storageAdapter = {
   async get(key){
     const session = await getSupabaseSession();
     if(session){
       const localKey = scopedKey(key, session.user.id);
+      migrateLegacyCache(key, localKey);
       try{
         const { data, error } = await window.supabaseClient
           .from('app_data')

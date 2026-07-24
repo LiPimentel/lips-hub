@@ -980,6 +980,16 @@ function scopedKey(key, userId){
   return userId ? `${key}::${userId}` : key;
 }
 
+// Migración de una sola vez: si existen datos guardados con la clave vieja
+// (de antes de aislar por usuario) y la clave nueva todavía no tiene nada,
+// los copia — para que ese dato no quede huérfano e inaccesible para siempre.
+function migrateLegacyCache(baseKey, scoped){
+  if(scoped === baseKey) return;
+  if(localStorage.getItem(scoped) !== null) return;
+  const legacy = localStorage.getItem(baseKey);
+  if(legacy !== null) localStorage.setItem(scoped, legacy);
+}
+
 async function getSupabaseSession(){
   if(!window.supabaseClient) return null;
   const { data } = await window.supabaseClient.auth.getSession();
@@ -1033,6 +1043,8 @@ async function load() {
   const session = await getSupabaseSession();
   if(session){
     cachedUserId = session.user.id;
+    migrateLegacyCache('staffgate_cands_v1', scopedKey('staffgate_cands_v1', cachedUserId));
+    migrateLegacyCache('staffgate_tpls_v1', scopedKey('staffgate_tpls_v1', cachedUserId));
     try{
       const { data, error } = await window.supabaseClient
         .from('app_data')
