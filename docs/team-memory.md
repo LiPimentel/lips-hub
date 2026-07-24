@@ -10,6 +10,8 @@ Este archivo lo leen y actualizan los 5 agentes de revisión del proyecto (busin
 
 ## ⚠️ Requiere atención
 
+- **2026-07-24 (release-manager, verificación previa al merge del PR #18):** el PR #18 (`claude/lpbag-login-background-cg4med`) y el PR #17 (ya fusionado a `master`) reescribieron **la misma escena `coins-rain`** de `auth-gate.js` de forma independiente, con implementaciones distintas. `git merge-tree` confirma conflictos reales; la API de GitHub confirma `mergeable: false`/`mergeable_state: "dirty"` para el PR #18 — **no se puede fusionar tal cual, necesita rebase/reconciliación manual**. Como `auth-gate.js` es compartido por las 5 apps, cualquier agente/rama activa que también lo esté tocando debe coordinarse antes de avanzar mucho, no solo al momento del PR. Además: no se pudo abrir el deploy preview del PR #18 ni pegarle directo a Supabase desde este entorno — el proxy devolvió `403` para `*.netlify.app` y para `supabase.co` (confirmado en `$HTTPS_PROXY/__agentproxy/status`). Detalle completo en `docs/release-log.md` y `docs/lpbag/requerimientos.md` (Casos borde 10 y 11).
+
 - **2026-07-23 (tech lead, en nombre de business-analyst):** al documentar MyTravel Agent Pro, el agente encontró una **sesión real ya autenticada** en la pestaña de producción (Netlify). No guardó ni modificó nada con ella (evitó crear datos de prueba o cerrar sesión), pero cualquier agente que navegue a la URL de producción durante una revisión debe asumir que puede haber una sesión real activa y evitar escribir/borrar datos con ella salvo que el tech lead lo autorice explícitamente para esa tarea.
 
 ## Hechos que todo el equipo debe conocer

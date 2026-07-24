@@ -1,0 +1,19 @@
+# Release log
+
+Mantenido por release-manager. Registro de cada verificación previa al merge (deploy preview, higiene de rama, nota de versión, migraciones) y de cualquier hallazgo de despliegue/infra que no viva mejor en `docs/infra-watch.md`.
+
+**Este archivo no existía hasta hoy (2026-07-24).** Primera entrada.
+
+## 2026-07-24 — PR #18 (`claude/lpbag-login-background-cg4med` → `master`): LPBag, rehacer fondo de login
+
+**Veredicto: RECHAZADO.** Ver detalle completo en el reporte de esta sesión (entregado a la tech lead). Resumen:
+
+- **Conflicto real con `master`, no solo desactualización.** `master` avanzó con el merge del PR #17 (`3e564ba`, "Fondo login: montañas zigzag más altas y definidas, monedas del suelo más 3D", fusionado 2026-07-24T19:03:51Z) que reescribió **la misma escena `coins-rain`** de `auth-gate.js` de forma independiente y con implementación distinta a la de este PR. Confirmado con `git merge-tree` (conflictos reales en `.coin-floor`, `.coin-floor-bg`, generación de la cordillera y de las monedas) y con la API de GitHub: `mergeable: false`, `mergeable_state: "dirty"` para el PR #18 al momento de la revisión. GitHub no permite fusionar este PR tal como está — necesita rebase/resolución manual antes de intentar de nuevo, decidiendo explícitamente cuál de las dos implementaciones (o una combinación) queda.
+- **Deploy preview: no se pudo verificar de forma directa.** Netlify sí construyó el preview (`https://deploy-preview-18--dapper-sunflower-c4c010.netlify.app`, check `netlify/dapper-sunflower-c4c010/deploy-preview` = `success`, "Deploy Preview ready!"), pero el proxy de este contenedor devolvió `403` (`CONNECT tunnel failed`) al intentar `curl` contra ese host — confirmado contra `$HTTPS_PROXY/__agentproxy/status`. No se abrió el preview ni se confirmó visualmente el fondo nuevo. Esto por sí solo ya sería motivo de "no verificado", independientemente del conflicto de rama.
+- **Rama:** NO está al día con `master` (diverge desde `8bb7287` — corregido por el tech lead, el reporte original decía `d5dde9a`; `master` tiene un commit adicional, `3e564ba`, que este PR no incluye). Working tree local limpio, sin archivos sueltos.
+- **Nota de versión:** presente y completa (`release-notes/2026-07-24-5.md`), correctamente marcada como "aún no publicado a producción".
+- **Migraciones Supabase:** no aplica — cambio puramente cosmético en `auth-gate.js`, sin tocar autenticación ni esquema.
+
+**Acción recomendada a la tech lead:** no fusionar. Decidir con el autor de ambos PRs (#17 ya en `master`, #18 pendiente) cuál cordillera/monedas debe quedar — probablemente haya que descartar #18 o rebasarlo sobre `master` reconciliando a mano ambas implementaciones, ya que son visualmente redundantes (ambas describen "cordillera zigzag + monedas 3D" para la misma escena).
+
+**Seguimiento del tech lead (2026-07-24, tras comparar las dos implementaciones):** no son equivalentes, y la usuaria ya se quejó de la que está en producción. La de master (#17) conserva `viewBox="0 0 100 20"` con `preserveAspectRatio="none"`, así que las monedas siguen aplastándose al estirarse a lo ancho de la ventana (a 1920px quedan de ~1px de alto); mantiene los destellos dentro del grupo de cada moneda, donde quedan tapados por las monedas dibujadas después (medido: 31 de 41 ocultos); deja las monedas que caen como emoji `🪙`, que en varios sistemas no se renderiza; y genera 9 cumbres de alturas fijas y parecidas. Las tres quejas de la usuaria en esta sesión ("todas muy altas, no tantas", "se ven aplastadas", "mantener el sparkle") son contra esa versión. El PR #18 corrige las tres y su diff cubre por completo la región que tocó el #17, así que la reconciliación es rebasar #18 sobre `master` tomando su versión de `auth-gate.js`, y renombrar su nota de versión (ambos PRs crearon `release-notes/2026-07-24-5.md`). No se pierde nada del #17.
