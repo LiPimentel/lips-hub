@@ -173,25 +173,62 @@
           z-index:1;
           top:-10%;
           width:26px;
-          height:32px;
+          height:26px;
           opacity:0;
           animation:coin-fall var(--dur,7s) linear infinite;
           animation-delay:var(--delay,0s);
           animation-fill-mode:backwards;
           pointer-events:none;
           filter:drop-shadow(0 3px 5px rgba(0,0,0,0.45));
+          perspective:190px;
         }
         .coin-rain svg{ width:100%; height:100%; display:block; overflow:visible; }
-        /* Caen de punta a punta de la pantalla; el scaleX simula el giro de
-           la moneda sobre su eje (de cara a canto y de vuelta). */
+        /* La caída y el giro van separados: aquí solo el descenso y el
+           bamboleo. El giro es 3D de verdad (ver .coin-3d) — antes era un
+           scaleX que achataba la moneda entera, así que al ponerse de canto
+           no quedaba grosor y se veía como una hoja de papel. */
         @keyframes coin-fall{
-          0%{ transform:translateY(0) rotate(-6deg) scaleX(1); opacity:0; }
+          0%{ transform:translateY(0) rotate(-6deg); opacity:0; }
           6%{ opacity:1; }
-          25%{ transform:translateY(30vh) rotate(4deg) scaleX(0.12); }
-          50%{ transform:translateY(60vh) rotate(-5deg) scaleX(-1); }
-          75%{ transform:translateY(90vh) rotate(6deg) scaleX(0.12); }
+          25%{ transform:translateY(30vh) rotate(4deg); }
+          50%{ transform:translateY(60vh) rotate(-5deg); }
+          75%{ transform:translateY(90vh) rotate(6deg); }
           94%{ opacity:1; }
-          100%{ transform:translateY(118vh) rotate(-4deg) scaleX(1); opacity:0; }
+          100%{ transform:translateY(118vh) rotate(-4deg); opacity:0; }
+        }
+        /* Cilindro: dos caras separadas por el grosor, con el canto metálico
+           entremedio. El canto es una placa girada 90°, así que queda
+           invisible de frente y se muestra completa justo cuando las caras
+           se ponen de perfil — que es el momento en que antes desaparecía. */
+        .coin-3d{
+          position:absolute;
+          inset:0;
+          transform-style:preserve-3d;
+          animation:coin-spin var(--spin,3.4s) linear infinite;
+        }
+        .coin-face{
+          position:absolute;
+          inset:0;
+          backface-visibility:hidden;
+        }
+        .coin-face-back{ transform:rotateY(180deg) translateZ(var(--half,3px)); }
+        .coin-face-front{ transform:translateZ(var(--half,3px)); }
+        .coin-side{
+          position:absolute;
+          top:1px; bottom:1px;
+          left:50%;
+          width:var(--thick,6px);
+          margin-left:calc(var(--thick,6px) / -2);
+          transform:rotateY(90deg);
+          border-radius:2px;
+          /* Mismos tonos que el canto de las monedas del suelo
+             (#coinEdgeGrad), para que se lean del mismo material. */
+          background:linear-gradient(90deg,#4a2f07 0%,#9c6a12 22%,#e0b24a 50%,#a9761a 78%,#5c3a09 100%);
+          box-shadow:inset 0 -3px 4px rgba(0,0,0,0.45);
+        }
+        @keyframes coin-spin{
+          from{ transform:rotateX(14deg) rotateY(0deg); }
+          to{ transform:rotateX(14deg) rotateY(360deg); }
         }
         .sparkle-glint{
           position:absolute;
@@ -671,13 +708,12 @@
           // Moneda dibujada (no emoji): el emoji 🪙 no existe en todas las
           // fuentes y en varios sistemas salía como un cuadrito oscuro,
           // invisible contra el fondo.
-          const fallingCoin = `<svg viewBox="0 0 26 32" aria-hidden="true">
-            <ellipse cx="13" cy="15.5" rx="12" ry="9" fill="#4a3208"/>
-            <rect x="1" y="11" width="24" height="4.5" fill="url(#coinEdgeGrad)"/>
-            <rect x="1" y="11" width="24" height="4.5" fill="url(#coinEdgeShade)"/>
-            <ellipse cx="13" cy="11" rx="12" ry="9" fill="url(#coinGrad)" stroke="#5c4009" stroke-width="0.8"/>
-            <ellipse cx="13" cy="11" rx="8" ry="6" fill="none" stroke="rgba(122,84,10,0.5)" stroke-width="0.7"/>
-            <ellipse cx="10" cy="8" rx="4.5" ry="2.6" fill="rgba(255,255,255,0.5)"/>
+          // La cara va redonda (no elíptica): el achatamiento del giro ahora
+          // lo hace la rotación 3D, no el dibujo.
+          const fallingCoin = `<svg viewBox="0 0 26 26" aria-hidden="true">
+            <circle cx="13" cy="13" r="12.2" fill="url(#coinGrad)" stroke="#5c4009" stroke-width="0.9"/>
+            <circle cx="13" cy="13" r="8.2" fill="none" stroke="rgba(122,84,10,0.5)" stroke-width="0.7"/>
+            <ellipse cx="9.6" cy="9" rx="4.6" ry="2.8" fill="rgba(255,255,255,0.5)" transform="rotate(-28 9.6 9)"/>
           </svg>`;
           const rainCount = 18;
           const coins = Array.from({ length: rainCount }).map((_, i) => {
@@ -689,7 +725,19 @@
             const isSparkle = Math.random() < 0.55;
             const glintDelay = (Math.random() * 1.7).toFixed(2);
             const sparkle = isSparkle ? `<span class="sparkle-glint" style="top:-6px; right:-6px; animation-delay:${glintDelay}s;"><svg viewBox="0 0 24 24"><path d="${STAR}"/></svg></span>` : '';
-            return `<span class="coin-rain" style="left:${left}%; --dur:${duration}s; --delay:${delay}s;">${fallingCoin}${sparkle}</span>`;
+            // Grosor variado (6.5-8.3px sobre 26px de diámetro: la misma
+            // proporción rechoncha que las monedas del suelo, donde el canto
+            // mide ~0.26 del diámetro) y velocidad de giro distinta por
+            // moneda, unas al derecho y otras al revés.
+            const thick = (6.5 + Math.random() * 1.8).toFixed(1);
+            const spin = (2.8 + Math.random() * 2.2).toFixed(2);
+            const dir = Math.random() < 0.5 ? 'normal' : 'reverse';
+            const coin3d = `<span class="coin-3d" style="--thick:${thick}px; --half:${(thick / 2).toFixed(2)}px; animation-duration:${spin}s; animation-direction:${dir};">
+              <span class="coin-side"></span>
+              <span class="coin-face coin-face-front">${fallingCoin}</span>
+              <span class="coin-face coin-face-back">${fallingCoin}</span>
+            </span>`;
+            return `<span class="coin-rain" style="left:${left}%; --dur:${duration}s; --delay:${delay}s;">${coin3d}${sparkle}</span>`;
           }).join('');
           return `
           <div class="coin-floor" style="height:${H}px">
