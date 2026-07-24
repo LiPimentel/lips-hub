@@ -1941,7 +1941,7 @@ function exportPDF() {
   document.getElementById('exportMenu').classList.remove('open');
   const d = buildReportData(); if (!d) return;
   const { c, tpl, sc, vLbl, date, sections } = d;
-  const vColor = vLbl.includes('sólido') ? '#22C97A' : vLbl.includes('cuidado') ? '#F5A623' : vLbl.includes('flags') ? '#E03B2E' : '#5A6480';
+  const vColor = vLbl.includes('aprobado') ? '#22C97A' : vLbl.includes('cuidado') ? '#F5A623' : vLbl.includes('reprobado') ? '#E03B2E' : '#5A6480';
 
   const scoreCards = [
     { label:'Aprobado',  val:sc.g,     color:'#22C97A' },
@@ -2156,7 +2156,7 @@ function exportWord() {
   body += `<w:p><w:pPr><w:spacing w:after="120"/></w:pPr></w:p>`;
 
   // Verdict
-  const vCol = vLbl.includes('sólido') ? '22C97A' : vLbl.includes('cuidado') ? 'F5A623' : vLbl.includes('flags') ? 'E03B2E' : '888888';
+  const vCol = vLbl.includes('aprobado') ? '22C97A' : vLbl.includes('cuidado') ? 'F5A623' : vLbl.includes('reprobado') ? 'E03B2E' : '888888';
   body += para(`VEREDICTO: ${vLbl}`, { bold:true, color:vCol, size:24, align:'center', spaceAfter:200, shading:'F5F5F5' });
 
   // General notes

@@ -1177,6 +1177,7 @@ function guardarViaje(){
   const lon   =document.getElementById('v-ciudad').dataset.lon;
   if(!ciudad||!pais||!lat||!lon){toast('Selecciona una ciudad de la lista.','err');return;}
   if(ini&&fin&&fin<ini){toast('La fecha fin no puede ser antes del inicio.','err');return;}
+  if(pres<0){toast('El presupuesto no puede ser negativo.','err');return;}
   const escalas=[...document.querySelectorAll('.v-escala-input')].map(i=>i.value.trim()).filter(Boolean);
   if(db.viajes.some(v=>v.pais.toLowerCase()===pais.toLowerCase()))
     toast(`Ya tienes un viaje registrado en ${pais}.`,'warn');
