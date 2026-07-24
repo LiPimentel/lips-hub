@@ -130,24 +130,32 @@
         }
         .coin-rain{
           position:absolute;
-          top:38%;
-          font-size:1.5rem;
+          z-index:1;
+          top:-10%;
+          width:26px;
+          height:32px;
           opacity:0;
           animation:coin-fall var(--dur,7s) linear infinite;
           animation-delay:var(--delay,0s);
           animation-fill-mode:backwards;
           pointer-events:none;
-          filter:drop-shadow(0 2px 4px rgba(0,0,0,0.35)) saturate(1.5) sepia(0.15);
+          filter:drop-shadow(0 3px 5px rgba(0,0,0,0.45));
         }
+        .coin-rain svg{ width:100%; height:100%; display:block; overflow:visible; }
+        /* Caen de punta a punta de la pantalla; el scaleX simula el giro de
+           la moneda sobre su eje (de cara a canto y de vuelta). */
         @keyframes coin-fall{
-          0%{ transform:translateY(0) rotate(0deg); opacity:0; }
-          8%{ opacity:0.95; }
-          92%{ opacity:0.95; }
-          100%{ transform:translateY(58vh) rotate(360deg); opacity:0; }
+          0%{ transform:translateY(0) rotate(-6deg) scaleX(1); opacity:0; }
+          6%{ opacity:1; }
+          25%{ transform:translateY(30vh) rotate(4deg) scaleX(0.12); }
+          50%{ transform:translateY(60vh) rotate(-5deg) scaleX(-1); }
+          75%{ transform:translateY(90vh) rotate(6deg) scaleX(0.12); }
+          94%{ opacity:1; }
+          100%{ transform:translateY(118vh) rotate(-4deg) scaleX(1); opacity:0; }
         }
         .sparkle-glint{
           position:absolute;
-          width:18px; height:18px;
+          width:20px; height:20px;
           opacity:0;
           animation:sparkle-flash 1.7s ease-in-out infinite;
           pointer-events:none;
@@ -161,14 +169,15 @@
           93%{ opacity:0; transform:scale(0.3) rotate(20deg); }
         }
         .coin-floor{
-          position:absolute; left:0; right:0; bottom:0; height:56px;
+          position:absolute; left:0; right:0; bottom:0;
+          z-index:0;
           pointer-events:none;
         }
         .coin-floor-bg{
-          position:absolute; left:0; right:0; bottom:0; height:34px;
-          background:linear-gradient(180deg, rgba(184,134,59,0) 0%, rgba(184,134,59,0.4) 100%);
+          position:absolute; left:0; right:0; bottom:0; height:40%;
+          background:linear-gradient(180deg, rgba(184,134,59,0) 0%, rgba(184,134,59,0.35) 100%);
         }
-        .coin-floor svg{ position:absolute; left:0; right:0; bottom:0; width:100%; height:100%; }
+        .coin-floor svg{ position:absolute; left:0; right:0; bottom:0; width:100%; height:100%; display:block; }
         .floor-sparkle{
           transform-box:fill-box; transform-origin:center;
           fill:#fff9e6;
@@ -497,67 +506,125 @@
       <div class="cover ${window.AIAPPS_LOGIN_LAYOUT === 'right' ? 'align-right' : ''}">
         ${window.AIAPPS_LOGIN_SCENE === 'coins-rain' ? (() => {
           const STAR = 'M12 2 L14 10 L22 12 L14 14 L12 22 L10 14 L2 12 L10 10 Z';
-          const pileCenters = [8, 30, 53, 76, 95];
-          const pileHeights = [6.5, 4, 8.5, 5, 3];
-          const pileWidths = [7, 6, 8, 6.5, 5];
-          const baseline = 19.3;
+          // La escena se dibuja en píxeles (1 unidad del viewBox = 1px) para que
+          // las monedas no se deformen al estirar el SVG a lo ancho de la pantalla.
+          const W = Math.max(Math.round(window.innerWidth || 1280), 360);
+          // En pantallas angostas se limita el alto (y el de las cumbres) en
+          // función del ancho, para que los picos no queden como agujas.
+          const H = Math.max(120, Math.min(Math.round((window.innerHeight || 800) * 0.34), 230, Math.round(W * 0.42)));
+          const baseline = H - 4;
+          const peakH = Math.min(H * 0.72, W * 0.26);
+          const valleyH = H * 0.13;
+          // Cordillera en zigzag: nodos alternados cumbre / valle unidos por
+          // rectas, así los picos quedan afilados en vez de redondeados.
+          // Pocas cumbres y bien separadas.
+          const segs = Math.max(4, Math.round(W / 330)) * 2;
+          // Alturas mezcladas a partir de una lista fija barajada, para que
+          // siempre haya cumbres grandes, medianas y chicas (con azar puro
+          // salían todas parecidas).
+          const heightMix = [1, 0.38, 0.74, 0.28, 0.9, 0.48, 0.62, 0.33];
+          for (let i = heightMix.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [heightMix[i], heightMix[j]] = [heightMix[j], heightMix[i]];
+          }
+          const nodes = [];
+          let peakIndex = 0;
+          for (let i = 0; i <= segs; i++) {
+            const isPeak = i % 2 === 1;
+            const mix = heightMix[peakIndex % heightMix.length];
+            if (isPeak) peakIndex++;
+            nodes.push({
+              x: (W * i) / segs,
+              h: isPeak
+                ? peakH * mix * (0.9 + Math.random() * 0.2)
+                : valleyH * (0.25 + Math.random() * 0.9)
+            });
+          }
           const terrainHeight = (x) => {
-            let h = 0;
-            for (let p = 0; p < pileCenters.length; p++) {
-              const dx = x - pileCenters[p];
-              h += pileHeights[p] * Math.exp(-(dx * dx) / (2 * pileWidths[p] * pileWidths[p]));
+            if (x <= nodes[0].x) return nodes[0].h;
+            for (let i = 1; i < nodes.length; i++) {
+              if (x <= nodes[i].x) {
+                const a = nodes[i - 1];
+                const b = nodes[i];
+                return a.h + (b.h - a.h) * ((x - a.x) / (b.x - a.x));
+              }
             }
-            return Math.min(h, 12.5);
+            return nodes[nodes.length - 1].h;
           };
-          const shadowEllipses = pileCenters.map((cx, i) =>
-            `<ellipse cx="${cx}" cy="${baseline + 0.3}" rx="${pileWidths[i] * 0.9}" ry="1.1" fill="rgba(0,0,0,0.35)"/>`
+          const rBase = Math.max(7, H * 0.055);
+          const colStep = rBase * 1.35;
+          const rowStep = rBase * 0.72;
+          // Silueta de la cordillera: da definición a los picos rellenando los
+          // huecos entre monedas. Se baja un poco (rBase * 0.5) para que la
+          // punta oscura no sobresalga por encima de las monedas de la cumbre.
+          const ridgePath = `M0,${H} ` +
+            nodes.map(n => `L${n.x.toFixed(1)},${(baseline - n.h + rBase * 0.5).toFixed(1)}`).join(' ') +
+            ` L${W},${H} Z`;
+          const segW = W / segs;
+          const shadowEllipses = nodes.filter((_, i) => i % 2 === 1).map(n =>
+            `<ellipse cx="${n.x.toFixed(1)}" cy="${baseline + 2}" rx="${(segW * 1.15).toFixed(1)}" ry="${(H * 0.05).toFixed(1)}" fill="rgba(0,0,0,0.4)"/>`
           ).join('');
           const floorCoins = [];
-          for (let x = -2; x <= 102; x += 0.85) {
+          for (let x = -rBase; x <= W + rBase; x += colStep) {
             const topH = terrainHeight(x);
             const topCy = baseline - topH;
-            const rows = Math.max(1, Math.round(topH / 0.62));
+            const rows = Math.max(1, Math.round(topH / rowStep));
             for (let r = 0; r < rows; r++) {
-              const cy = topCy + (r * 0.62) + Math.random() * 0.25;
-              if (cy > baseline + 0.3) continue;
+              const cy = topCy + (r * rowStep) + Math.random() * rowStep * 0.4;
+              if (cy > baseline + 2) continue;
               floorCoins.push({
-                cx: (x + (Math.random() - 0.5) * 0.9).toFixed(1),
+                cx: (x + (Math.random() - 0.5) * colStep * 0.9).toFixed(1),
                 cy,
-                rx: (0.55 + Math.random() * 0.55).toFixed(2),
-                rot: (Math.random() * 16 - 8).toFixed(1),
-                isGlint: Math.random() < 0.045,
+                rx: (rBase * (0.78 + Math.random() * 0.4)).toFixed(2),
+                rot: (Math.random() * 20 - 10).toFixed(1),
+                isGlint: Math.random() < 0.05,
                 glintDelay: (Math.random() * 3.5).toFixed(2)
               });
             }
           }
           floorCoins.sort((a, b) => a.cy - b.cy);
-          const floorEllipses = shadowEllipses + floorCoins.map(c => {
+          const ridgeSvg = `<path d="${ridgePath}" fill="url(#ridgeGrad)"/>`;
+          const floorEllipses = ridgeSvg + shadowEllipses + floorCoins.map(c => {
             const rx = parseFloat(c.rx);
-            const ry = (rx * 0.46).toFixed(2);
-            const thick = (parseFloat(ry) * 0.6).toFixed(2);
-            const sparkleX = (rx * 0.3).toFixed(1);
-            const sparkleY = (-parseFloat(ry) * 0.5).toFixed(1);
-            return `<g transform="translate(${c.cx},${c.cy.toFixed(2)}) rotate(${c.rot})">
-              <rect x="${-rx}" y="0" width="${rx * 2}" height="${thick}" fill="url(#coinEdgeGrad)"/>
-              <ellipse cx="0" cy="${thick}" rx="${rx}" ry="${ry}" fill="#6b4a0e"/>
-              <ellipse cx="0" cy="0" rx="${rx}" ry="${ry}" fill="url(#coinGrad)" stroke="#5c4009" stroke-width="0.09"/>
-              <ellipse cx="0" cy="${(-ry * 0.32).toFixed(2)}" rx="${(rx * 0.55).toFixed(2)}" ry="${(ry * 0.32).toFixed(2)}" fill="rgba(255,255,255,0.4)"/>
-              ${c.isGlint ? `<g transform="translate(${sparkleX},${sparkleY}) scale(0.05)"><g class="floor-sparkle" style="animation-delay:${c.glintDelay}s"><path d="${STAR}"/></g></g>` : ''}
+            const ry = rx * 0.42;
+            const thick = Math.max(2.4, ry * 1.25);
+            return `<g transform="translate(${c.cx},${c.cy.toFixed(1)}) rotate(${c.rot})">
+              <ellipse cx="0" cy="${thick.toFixed(2)}" rx="${rx}" ry="${ry.toFixed(2)}" fill="#4a3208"/>
+              <rect x="${-rx}" y="0" width="${(rx * 2).toFixed(2)}" height="${thick.toFixed(2)}" fill="url(#coinEdgeGrad)"/>
+              <rect x="${-rx}" y="0" width="${(rx * 2).toFixed(2)}" height="${thick.toFixed(2)}" fill="url(#coinEdgeShade)"/>
+              <ellipse cx="0" cy="0" rx="${rx}" ry="${ry.toFixed(2)}" fill="url(#coinGrad)" stroke="#5c4009" stroke-width="${(rx * 0.06).toFixed(2)}"/>
+              <ellipse cx="0" cy="0" rx="${(rx * 0.66).toFixed(2)}" ry="${(ry * 0.66).toFixed(2)}" fill="none" stroke="rgba(122,84,10,0.45)" stroke-width="${(rx * 0.05).toFixed(2)}"/>
+              <ellipse cx="${(-rx * 0.16).toFixed(2)}" cy="${(-ry * 0.34).toFixed(2)}" rx="${(rx * 0.46).toFixed(2)}" ry="${(ry * 0.3).toFixed(2)}" fill="rgba(255,255,255,0.45)"/>
+              ${c.isGlint ? `<g transform="translate(${(rx * 0.3).toFixed(1)},${(-ry * 0.6).toFixed(1)}) scale(${(rx * 0.055).toFixed(3)})"><g class="floor-sparkle" style="animation-delay:${c.glintDelay}s"><path d="${STAR}"/></g></g>` : ''}
             </g>`;
           }).join('');
-          const coins = Array.from({ length: 16 }).map(() => {
+          // Moneda dibujada (no emoji): el emoji 🪙 no existe en todas las
+          // fuentes y en varios sistemas salía como un cuadrito oscuro,
+          // invisible contra el fondo.
+          const fallingCoin = `<svg viewBox="0 0 26 32" aria-hidden="true">
+            <ellipse cx="13" cy="15.5" rx="12" ry="9" fill="#4a3208"/>
+            <rect x="1" y="11" width="24" height="4.5" fill="url(#coinEdgeGrad)"/>
+            <rect x="1" y="11" width="24" height="4.5" fill="url(#coinEdgeShade)"/>
+            <ellipse cx="13" cy="11" rx="12" ry="9" fill="url(#coinGrad)" stroke="#5c4009" stroke-width="0.8"/>
+            <ellipse cx="13" cy="11" rx="8" ry="6" fill="none" stroke="rgba(122,84,10,0.5)" stroke-width="0.7"/>
+            <ellipse cx="10" cy="8" rx="4.5" ry="2.6" fill="rgba(255,255,255,0.5)"/>
+          </svg>`;
+          const rainCount = 18;
+          const coins = Array.from({ length: rainCount }).map((_, i) => {
             const left = (Math.random() * 94 + 2).toFixed(1);
-            const duration = (5 + Math.random() * 4).toFixed(1);
-            const delay = (Math.random() * 8).toFixed(1);
-            const isSparkle = Math.random() < 0.4;
+            const duration = (6 + Math.random() * 4).toFixed(1);
+            // Escalonadas dentro de los primeros ~4s (antes hasta 8s, así que
+            // al abrir la pantalla casi no se veía ninguna cayendo).
+            const delay = ((i / rainCount) * 4 + Math.random() * 0.6).toFixed(1);
+            const isSparkle = Math.random() < 0.55;
             const glintDelay = (Math.random() * 1.7).toFixed(2);
-            const sparkle = isSparkle ? `<span class="sparkle-glint" style="top:-3px; right:-3px; animation-delay:${glintDelay}s;"><svg viewBox="0 0 24 24"><path d="${STAR}"/></svg></span>` : '';
-            return `<span class="coin-rain" style="left:${left}%; --dur:${duration}s; --delay:${delay}s;">🪙${sparkle}</span>`;
+            const sparkle = isSparkle ? `<span class="sparkle-glint" style="top:-6px; right:-6px; animation-delay:${glintDelay}s;"><svg viewBox="0 0 24 24"><path d="${STAR}"/></svg></span>` : '';
+            return `<span class="coin-rain" style="left:${left}%; --dur:${duration}s; --delay:${delay}s;">${fallingCoin}${sparkle}</span>`;
           }).join('');
           return `
-          <div class="coin-floor">
+          <div class="coin-floor" style="height:${H}px">
             <div class="coin-floor-bg"></div>
-            <svg viewBox="0 0 100 20" preserveAspectRatio="none">
+            <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
               <defs>
                 <radialGradient id="coinGrad" cx="35%" cy="30%" r="75%">
                   <stop offset="0%" stop-color="#FFF3B0"/>
@@ -565,9 +632,21 @@
                   <stop offset="75%" stop-color="#D4A017"/>
                   <stop offset="100%" stop-color="#8a6414"/>
                 </radialGradient>
-                <linearGradient id="coinEdgeGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stop-color="#9c6a12"/>
-                  <stop offset="100%" stop-color="#5c3a09"/>
+                <linearGradient id="coinEdgeGrad" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0%" stop-color="#5c3a09"/>
+                  <stop offset="20%" stop-color="#a9761a"/>
+                  <stop offset="46%" stop-color="#e0b24a"/>
+                  <stop offset="74%" stop-color="#9c6a12"/>
+                  <stop offset="100%" stop-color="#4a2f07"/>
+                </linearGradient>
+                <linearGradient id="coinEdgeShade" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#000" stop-opacity="0"/>
+                  <stop offset="100%" stop-color="#000" stop-opacity="0.45"/>
+                </linearGradient>
+                <linearGradient id="ridgeGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#8a6414"/>
+                  <stop offset="55%" stop-color="#5a3f0d"/>
+                  <stop offset="100%" stop-color="#33230a"/>
                 </linearGradient>
               </defs>
               ${floorEllipses}
