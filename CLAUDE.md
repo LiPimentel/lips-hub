@@ -2,6 +2,26 @@
 
 Hub personal con 5 apps HTML independientes (`index.html` + `bitacora-mentor.html`, `StaffGate.html`, `lpbag.html`, `mytravel-pro-v4.html`, `generador_gantt_2.html`), sincronizadas con Supabase.
 
+## Revisión obligatoria antes de cada PR (regla principal)
+
+Esta regla aplica **siempre y en todo lugar**: en cualquier hilo, en la terminal local, en claude.ai/code, o en cualquier computadora. El usuario no debe tener que pedirlo cada vez — es automático.
+
+**Antes de abrir un PR o de fusionar a `master`, el tech lead (la sesión principal de Claude) debe correr los agentes que apliquen al cambio, mediante la herramienta Agent, contra el diff real — no describirles el cambio, sino dejar que lo verifiquen ellos mismos:**
+
+| Agente | Cuándo correrlo |
+|---|---|
+| `qa-lead` | **Siempre**, en todo cambio de código. |
+| `security-reviewer` | **Siempre**, en todo cambio de código. |
+| `accessibility-reviewer` | Cuando el cambio agregue o modifique animaciones, controles de interfaz, o combinaciones de color/texto visibles. |
+| `release-manager` | Antes de fusionar a `master`, y al menos una vez por sesión para vigilar el riesgo de auto-pausa de Supabase (plan gratuito). |
+| `business-analyst` | Después de un cambio funcional ya estabilizado en una app (ver "Documentación de usuario"). |
+
+Reglas de este proceso:
+- Reportar al usuario el veredicto de cada agente (APROBADO / APROBADO CON OBSERVACIONES / RECHAZADO) — no actuar sobre ellos en silencio.
+- Si alguno responde **RECHAZADO**, corregir y volver a correrlo antes de continuar. No pedirle al usuario que acepte un cambio rechazado.
+- Excepción única: cambios que no tocan código de las apps (por ejemplo, solo notas de versión o documentación) no requieren correr QA ni seguridad.
+- Si un agente no está disponible como `subagent_type` en la sesión actual, correr `general-purpose` pegando el contenido de `.claude/agents/{nombre}.md` en el prompt — el rol se cumple igual, no se omite.
+
 ## Notas de versión (obligatorio)
 
 Cada vez que se haga un cambio en el código de este proyecto, generar una nota de versión y guardarla en la carpeta `release-notes/` (en la raíz del proyecto), con nombre `YYYY-MM-DD.md` (usar `YYYY-MM-DD-2.md`, `-3.md`, etc. si ya hay una nota ese mismo día).
