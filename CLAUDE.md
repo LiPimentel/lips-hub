@@ -12,3 +12,9 @@ Cada nota debe estar en español, dirigida a una persona no técnica, e incluir:
 - Si se publicó a producción o solo quedó en una rama/vista previa
 
 No es necesario preguntar antes de crear la nota — es un paso automático de cada cambio.
+
+## Documentación de usuario (obligatorio)
+
+Cada vez que se haga un cambio funcional en una app (cómo funciona, qué hace, sus pantallas o su flujo de uso — no aplica a ajustes puramente cosméticos del fondo de login, que es compartido y decorativo), correr el agente `business-analyst` sobre esa app para actualizar `docs/{app-id}/requerimientos.md` y `docs/{app-id}/entrenamiento.md`.
+
+No es necesario preguntar antes de correrlo — es un paso automático de cada cambio funcional, igual que la nota de versión.
