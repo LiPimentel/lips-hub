@@ -302,11 +302,6 @@
           88%{ opacity:0.85; }
           100%{ left:10%; top:-10%; transform:rotate(323deg); opacity:0; }
         }
-        .mentor-scene{
-          position:absolute; left:5%; top:22%; width:min(40%,460px); height:56%;
-          display:flex; align-items:center; justify-content:space-around;
-          pointer-events:none; opacity:0.9;
-        }
         .growth-scene{
           position:absolute; left:3%; top:9%; width:min(72%,420px); height:82%;
           pointer-events:none;
@@ -412,23 +407,6 @@
           72% { transform:translateY(-12px); animation-timing-function:cubic-bezier(0.45,0,0.9,0.55); }
           88% { transform:translateY(0); animation-timing-function:cubic-bezier(0.1,0.45,0.55,1); }
           100% { transform:translateY(0); }
-        }
-        .interview-side{
-          position:absolute; top:20%; height:46%; width:130px;
-          pointer-events:none; opacity:0.9;
-        }
-        .word-float{
-          position:absolute;
-          font-size:0.68rem;
-          color:rgba(255,255,255,0.55);
-          letter-spacing:0.06em;
-          text-transform:uppercase;
-          animation:word-drift ease-in-out infinite;
-          pointer-events:none;
-        }
-        @keyframes word-drift{
-          0%, 100%{ transform:translateY(0); opacity:0.35; }
-          50%{ transform:translateY(-14px); opacity:0.8; }
         }
         label{
           display:block;
