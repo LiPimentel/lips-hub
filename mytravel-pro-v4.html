@@ -1380,7 +1380,14 @@ function exportData(){
 
 /* ═══════════════ PERSIST ═══════════════ */
 function saveDB(){
-  localStorage.setItem(scopedKey('mytravel_v4', cachedUserId),JSON.stringify(db));
+  // Resuelve la sesión de nuevo en vez de confiar en cachedUserId, para no
+  // dejar una ventana de milisegundos donde un guardado disparado antes de
+  // que loadDB() termine caiga en la clave vieja sin aislar por usuario.
+  (async () => {
+    const session = await getSupabaseSession();
+    const uid = session ? session.user.id : null;
+    localStorage.setItem(scopedKey('mytravel_v4', uid),JSON.stringify(db));
+  })();
   syncToCloud();
 }
 

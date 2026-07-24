@@ -851,7 +851,14 @@ async function getSupabaseSession(){
 
 /* ── PERSIST ── */
 function save(){
-  localStorage.setItem(scopedKey('LPBag_db', cachedUserId),JSON.stringify(appData));
+  // Resuelve la sesión de nuevo en vez de confiar en cachedUserId, para no
+  // dejar una ventana de milisegundos donde un guardado disparado antes de
+  // que load() termine caiga en la clave vieja sin aislar por usuario.
+  (async () => {
+    const session = await getSupabaseSession();
+    const uid = session ? session.user.id : null;
+    localStorage.setItem(scopedKey('LPBag_db', uid),JSON.stringify(appData));
+  })();
   syncToCloud();
 }
 

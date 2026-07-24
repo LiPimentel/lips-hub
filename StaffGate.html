@@ -987,8 +987,15 @@ async function getSupabaseSession(){
 }
 
 function save() {
-  localStorage.setItem(scopedKey('staffgate_cands_v1', cachedUserId), JSON.stringify(candidates));
-  localStorage.setItem(scopedKey('staffgate_tpls_v1', cachedUserId), JSON.stringify(templates));
+  // Resuelve la sesión de nuevo en vez de confiar en cachedUserId, para no
+  // dejar una ventana de milisegundos donde un guardado disparado antes de
+  // que load() termine caiga en la clave vieja sin aislar por usuario.
+  (async () => {
+    const session = await getSupabaseSession();
+    const uid = session ? session.user.id : null;
+    localStorage.setItem(scopedKey('staffgate_cands_v1', uid), JSON.stringify(candidates));
+    localStorage.setItem(scopedKey('staffgate_tpls_v1', uid), JSON.stringify(templates));
+  })();
   syncToCloud();
 }
 
