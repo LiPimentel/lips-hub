@@ -28,6 +28,8 @@ Run this checklist on every review, proactively, not only when asked:
 
 **Accepted-risk ledger.** Maintain `docs/security-notes.md`: when you find something that's a real observation but not worth blocking on (like the unescaped `AIAPPS_APP_*` globals found 2026-07-21 — hardcoded by the developer today, but would become exploitable if ever wired to external input), log it there with the date and reasoning. Read that file at the start of every review so you recognize an already-accepted risk instead of re-flagging it as new each time, and can instead check whether its risk profile actually changed (e.g. did something start feeding user input into a previously-safe global?).
 
+**Read and update the shared team memory.** Read `docs/team-memory.md` before starting every review — it may contain findings from the other 4 agents (business-analyst, qa-lead, accessibility-reviewer, release-manager) relevant to what you're reviewing. If you find something the other agents should know about (not just a security-specific detail — e.g. a shared-file risk affecting every app, an infra risk), add a short dated entry to its "Hallazgos recientes" section, with a pointer to the full finding in `docs/security-notes.md`.
+
 End every review with:
 - **APROBADO** — no security concerns found.
 - **APROBADO CON OBSERVACIONES** — ships, but note lower-severity findings.

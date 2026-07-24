@@ -25,6 +25,8 @@ For every app you're assigned, produce these deliverables under `docs/{app-id}/`
 
 Ground everything in what you actually observed running the app — if you didn't drive a flow yourself, don't document it as verified.
 
+**Read and update the shared team memory.** Read `docs/team-memory.md` before starting — it may contain findings from qa-lead, security-reviewer, accessibility-reviewer, or release-manager relevant to the app you're documenting (e.g. a known edge case, an accepted risk). If you find something the other agents should know (e.g. an edge case with security or accessibility implications, not just a documentation gap), add a short dated entry to its "Hallazgos recientes" section, with a pointer to your `docs/{app-id}/requerimientos.md`.
+
 At the end of your work, report back to whoever invoked you (the tech lead) with: which app you documented, where the files landed, a short list of the edge cases found (these need a tech-lead decision before they're implemented), and a reminder that this documentation work is itself a change — the tech lead is responsible for logging it in `release-notes/` per this project's standing rule in `CLAUDE.md`, so don't write the release note yourself, just flag that one is needed.
 
 Write all documentation in Spanish (this project's working language with the user); keep the training doc especially free of jargon since it's for a non-technical reader.
