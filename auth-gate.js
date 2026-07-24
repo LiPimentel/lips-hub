@@ -110,6 +110,34 @@
           color:#8B94A3;
           margin-top:4px;
         }
+        .logo-bars{
+          display:inline-block;
+          vertical-align:-0.28em;
+          margin-right:0.1em;
+        }
+        .logo-bars svg{ display:block; width:1.7em; height:1.7em; }
+        .logo-bars rect{ transform-box:fill-box; transform-origin:center bottom; }
+        .logo-bars .lb-1{ fill:#B79BE0; animation:logo-bar-1 2.2s ease-in-out infinite; }
+        .logo-bars .lb-2{ fill:#F0C550; animation:logo-bar-2 2.2s ease-in-out infinite; }
+        .logo-bars .lb-3{ fill:#8C6BC8; animation:logo-bar-3 2.2s ease-in-out infinite; }
+        @keyframes logo-bar-1{
+          0%, 100%{ transform:scaleY(0.42); }
+          50%{ transform:scaleY(1); }
+        }
+        @keyframes logo-bar-2{
+          0%, 100%{ transform:scaleY(1); }
+          45%{ transform:scaleY(0.38); }
+        }
+        @keyframes logo-bar-3{
+          0%, 100%{ transform:scaleY(0.7); }
+          30%{ transform:scaleY(1); }
+          70%{ transform:scaleY(0.35); }
+        }
+        @media (prefers-reduced-motion: reduce){
+          .logo-bars .lb-1{ animation:none; transform:scaleY(0.55); }
+          .logo-bars .lb-2{ animation:none; transform:scaleY(1); }
+          .logo-bars .lb-3{ animation:none; transform:scaleY(0.75); }
+        }
         .emoji-wrap{ position:relative; display:inline-block; }
         .coin{
           position:absolute;
@@ -197,8 +225,9 @@
           width:0%;
           animation:gantt-grow 6s ease-in-out infinite;
         }
-        .gantt-bar.c-brass{ background:linear-gradient(90deg, #B8863B, #D8AE6E); }
-        .gantt-bar.c-teal{ background:linear-gradient(90deg, #3E6E6E, #7ecfc0); }
+        .gantt-bar.c-lila{ background:linear-gradient(90deg, #7E5EC2, #C3ABF0); }
+        .gantt-bar.c-amarillo{ background:linear-gradient(90deg, #C99A2E, #F5D77A); }
+        .gantt-bar.c-purpura{ background:linear-gradient(90deg, #4C2A80, #9B6BD6); }
         .gantt-dot{
           position:absolute; top:50%; width:9px; height:9px; border-radius:50%;
           margin:-4.5px 0 0 -4.5px;
@@ -206,8 +235,9 @@
           opacity:0;
           animation:gantt-dot-move 6s ease-in-out infinite;
         }
-        .gantt-dot.c-brass{ background:#F3D9A8; }
-        .gantt-dot.c-teal{ background:#bdf0e4; }
+        .gantt-dot.c-lila{ background:#DCCCF7; }
+        .gantt-dot.c-amarillo{ background:#F3D9A8; }
+        .gantt-dot.c-purpura{ background:#C7A6F0; }
         .gantt-flag{
           position:absolute; bottom:2px; width:26px; height:26px;
           margin-left:-3px;
@@ -670,11 +700,14 @@
         })() : ''}
         ${window.AIAPPS_LOGIN_SCENE === 'gantt-build' ? (() => {
           const flagColors = ['#E03B2E', '#D8AE6E', '#4E8B8B', '#8C6BAE', '#E8935C', '#5C9BD8', '#7ecfc0'];
-          const rows = Array.from({ length: 9 }).map((_, i) => {
-            const w = (48 + Math.random() * 42).toFixed(0);
+          const barColors = ['c-lila', 'c-amarillo', 'c-purpura'];
+          const totalRows = 9;
+          const rows = Array.from({ length: totalRows }).map((_, i) => {
+            // Escalera: cada barra llega un poco más lejos que la anterior.
+            const w = (30 + (i * 62) / (totalRows - 1) + (Math.random() - 0.5) * 3).toFixed(1);
             const delay = (i * 0.68).toFixed(2);
             const day = Math.floor(Math.random() * 28) + 1;
-            const cls = i % 2 === 0 ? 'c-brass' : 'c-teal';
+            const cls = barColors[i % barColors.length];
             const flagColor = flagColors[i % flagColors.length];
             return `<div class="gantt-row">
                 <div class="gantt-bar ${cls}" style="--w:${w}%; animation-delay:${delay}s;"></div>
@@ -801,6 +834,13 @@
             <div class="brand-mark">${(() => {
               if (window.AIAPPS_APP_LOGO_URL && window.AIAPPS_APP_EMOJI) {
                 return `<span class="brand-fallback-emoji" style="display:none">${window.AIAPPS_APP_EMOJI} </span>`;
+              }
+              if (window.AIAPPS_LOGO_BARS) {
+                return `<span class="logo-bars" aria-hidden="true"><svg viewBox="0 0 24 24">
+                  <rect class="lb-1" x="3" y="4" width="5" height="16" rx="1.4"/>
+                  <rect class="lb-2" x="9.5" y="4" width="5" height="16" rx="1.4"/>
+                  <rect class="lb-3" x="16" y="4" width="5" height="16" rx="1.4"/>
+                </svg></span> `;
               }
               if (!window.AIAPPS_APP_EMOJI) return '';
               if (window.AIAPPS_LOGO_COINS) {
