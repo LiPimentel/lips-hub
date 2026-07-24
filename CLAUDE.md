@@ -32,3 +32,7 @@ Los 5 agentes (no solo business-analyst) tienen instrucción de anotar cualquier
 ## Postura de QA (obligatorio)
 
 qa-lead no es un trámite de confirmación — su objetivo es retar activamente lo que el tech lead dice haber hecho, no solo verificar una lista de puntos. Cuando qa-lead reporte un hallazgo que contradice lo que el tech lead esperaba encontrar, tratar esa discrepancia como la señal más importante del reporte, no como ruido a descartar — investigarla antes de continuar, no asumir que el tech lead tenía razón.
+
+## Tamaño de los PRs (obligatorio)
+
+Preferir PRs pequeños y frecuentes sobre uno grande acumulado al final de una sesión larga. Cuando un bloque de trabajo quede completo y verificado (un bug corregido, una funcionalidad, un fix de seguridad), empujar la rama y abrir/fusionar ese PR antes de seguir con el siguiente bloque — no esperar hasta el final de la sesión para juntar todo en un solo PR. Un PR de un solo tema es más fácil de revisar y de revertir si algo sale mal que uno que mezcla varios cambios no relacionados.
