@@ -196,10 +196,12 @@
           94%{ opacity:1; }
           100%{ transform:translateY(118vh) rotate(-4deg); opacity:0; }
         }
-        /* Cilindro: dos caras separadas por el grosor, con el canto metálico
-           entremedio. El canto es una placa girada 90°, así que queda
-           invisible de frente y se muestra completa justo cuando las caras
-           se ponen de perfil — que es el momento en que antes desaparecía. */
+        /* Cilindro por capas. Una sola placa central no basta: en los ángulos
+           intermedios del giro queda escondida detrás de la cara, y la moneda
+           vuelve a leerse como una lámina. Aquí el cuerpo son varios discos
+           apilados en el eje Z entre las dos caras: al girar, cada disco
+           asoma un poco más allá del anterior y juntos forman la franja del
+           canto, en todo el recorrido y no solo en el perfil exacto. */
         .coin-3d{
           position:absolute;
           inset:0;
@@ -213,6 +215,14 @@
         }
         .coin-face-back{ transform:rotateY(180deg) translateZ(var(--half,3px)); }
         .coin-face-front{ transform:translateZ(var(--half,3px)); }
+        /* Discos del cuerpo: apenas más chicos que la cara para que no
+           asomen como un borde sucio cuando la moneda está de frente. */
+        .coin-body{
+          position:absolute;
+          inset:0.7px;
+          border-radius:50%;
+          background:linear-gradient(90deg,#4a2f07 0%,#8f6110 22%,#d9aa42 50%,#9c6a12 78%,#4a2f07 100%);
+        }
         .coin-side{
           position:absolute;
           top:1px; bottom:1px;
@@ -732,7 +742,15 @@
             const thick = (6.5 + Math.random() * 1.8).toFixed(1);
             const spin = (2.8 + Math.random() * 2.2).toFixed(2);
             const dir = Math.random() < 0.5 ? 'normal' : 'reverse';
+            // Un disco por cada ~1px de grosor: así la separación entre ellos
+            // en pantalla nunca deja huecos visibles, ni de perfil.
+            const layers = Math.max(5, Math.round(thick));
+            const body = Array.from({ length: layers }).map((_, k) => {
+              const z = -thick / 2 + (thick * (k + 0.5)) / layers;
+              return `<span class="coin-body" style="transform:translateZ(${z.toFixed(2)}px)"></span>`;
+            }).join('');
             const coin3d = `<span class="coin-3d" style="--thick:${thick}px; --half:${(thick / 2).toFixed(2)}px; animation-duration:${spin}s; animation-direction:${dir};">
+              ${body}
               <span class="coin-side"></span>
               <span class="coin-face coin-face-front">${fallingCoin}</span>
               <span class="coin-face coin-face-back">${fallingCoin}</span>
