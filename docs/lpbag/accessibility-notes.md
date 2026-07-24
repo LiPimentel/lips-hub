@@ -107,6 +107,10 @@ Medido con una sesión de LP-Bag recién cargada (sin categorías): **25 control
 
 Repetí la misma prueba contra el commit inmediatamente anterior a estos dos PRs (`eae42fb`, antes del PR #17): el primer Tab también aterriza en `#globalCurrency`, igual que ahora. **Este comportamiento es arquitectónico de cómo `auth-gate.js` monta el overlay (no usa `inert` ni gestiona el foco al montar/desmontar), no algo que el PR #18 haya tocado o cambiado.**
 
+> **RESUELTO (tech lead, 2026-07-24) — commit `38f96f1`, fusionado a `master` en el PR #20.** Mientras la superposición está visible, `auth-gate.js` marca `inert` en todos los hijos del `<body>` salvo su propio host, y lo revierte al quitarla; el foco ahora arranca en el campo de correo. Un `MutationObserver` sobre `document.body` cubre lo que las apps agregan **después** del candado — el badge "Conectar carpeta de datos" de LP-Bag se escapaba del bloqueo inicial, y es justo el que abre el selector de carpetas con permiso de escritura.
+>
+> Re-verificado en vivo el 2026-07-24 sobre `lpbag.html`: de los 4 hijos del `<body>`, **0 quedan sin `inert`** aparte del host del candado (que correctamente no lo lleva). Antes eran 25 controles alcanzables con Tab antes del campo de correo.
+
 ### 4.2 El enlace "¿Olvidaste tu contraseña?" es inalcanzable por teclado (hallazgo severo, preexistente)
 
 `auth-gate.js:824`: `<div class="link-row"><a class="toggle-mode">¿Olvidaste tu contraseña?</a></div>` — el `<a>` no tiene atributo `href` ni `tabindex`. Confirmado en vivo:
@@ -115,6 +119,12 @@ Repetí la misma prueba contra el commit inmediatamente anterior a estos dos PRs
 - Mismo código exacto (`<a class="toggle-mode">` sin `href`) ya estaba presente en el commit previo al PR #17 (línea 731 de esa versión) — no es algo introducido por el PR #18.
 
 **Impacto:** una persona que use solo teclado no tiene forma de activar el flujo de "Recuperar contraseña" en ninguna de las 5 apps (el componente es compartido). Solo funciona con mouse/touch.
+
+> **RESUELTO (tech lead, 2026-07-24) — commit `38f96f1`, fusionado a `master` en el PR #20.** El `<a>` sin `href` pasó a ser `<button type="button" class="toggle-mode">`, dentro del mismo `<form>` (el `type="button"` es lo que evita que haga submit; el submit real sigue siendo el botón "Entrar"). El aspecto de enlace se conserva en `.link-row button` y se agregó un anillo de foco propio en `.link-row button:focus-visible` (`outline:2px solid #1B2430; outline-offset:2px`), que antes no existía para este elemento.
+>
+> Re-verificado en vivo el 2026-07-24 sobre `lpbag.html`: el elemento es `BUTTON` con `type="button"`, `.focus()` **sí** lo convierte en `shadowRoot.activeElement`, y partiendo del campo de correo se alcanza en el **3.er Tab** (correo → contraseña → "Entrar" → enlace de recuperación). Activándolo, la tarjeta cambia a "Recuperar contraseña", se oculta `.pw-field` y el propio botón pasa a "Volver a iniciar sesión" — el flujo con mouse sigue igual que antes.
+>
+> **Salvedad de método:** la activación con Enter/Espacio **no se pudo confirmar end-to-end con la herramienta de navegador de esta sesión** — ver la limitación anotada en `docs/team-memory.md` ("Hechos que todo el equipo debe conocer"): sus eventos de teclado sintéticos no disparan la activación por defecto del navegador, ni siquiera sobre un `<button>` normal del light DOM creado como control. Lo que sí queda verificado es lo que era el defecto real (que el elemento no era enfocable ni alcanzable con Tab); la activación con Enter/Espacio es comportamiento nativo de `<button>`, no código de la app, y esa es justamente la razón de haber preferido `<button>` sobre `<a tabindex="0">` + manejador de `keydown`.
 
 ### 4.3 Foco visible
 
