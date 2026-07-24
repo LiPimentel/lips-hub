@@ -46,7 +46,53 @@
 
   function removeExistingOverlay() {
     const existing = document.getElementById("aiapps-auth-gate");
-    if (existing) existing.remove();
+    if (!existing) return;
+    if (existing._aiappsTimers) existing._aiappsTimers.forEach((id) => clearInterval(id));
+    existing.remove();
+  }
+
+  // Reparte `count` posiciones por toda la pantalla (no solo en las esquinas),
+  // saltando la zona donde va la tarjeta de login para no tapar el formulario.
+  function scatterCells(count) {
+    const cols = [4, 12, 21, 30, 40, 50, 60, 70, 79, 88, 94];
+    const rows = [4, 11, 22, 34, 46, 58, 70, 82, 89, 95];
+    const alignRight = window.AIAPPS_LOGIN_LAYOUT === 'right';
+    const cardLeft = alignRight ? 58 : 31;
+    const cardRight = alignRight ? 99 : 69;
+    const sides = [];
+    const overUnder = [];
+    rows.forEach((top) => cols.forEach((left) => {
+      const sameColumnAsCard = left > cardLeft && left < cardRight;
+      if (!sameColumnAsCard) sides.push({ top, left });
+      else if (top <= 10 || top >= 88) overUnder.push({ top, left });
+    }));
+    if (!sides.length && !overUnder.length) return [];
+
+    // Se recorre la rejilla en orden y se toma una celda al azar dentro de cada
+    // tramo: así quedan repartidos por toda la pantalla en vez de amontonarse.
+    const sample = (pool, howMany) => {
+      if (!pool.length || howMany <= 0) return [];
+      const step = pool.length / howMany;
+      return Array.from({ length: howMany }, (_, i) => {
+        const start = Math.floor(i * step);
+        const end = Math.max(start + 1, Math.floor((i + 1) * step));
+        return pool[Math.min(pool.length - 1, start + Math.floor(Math.random() * (end - start)))];
+      });
+    };
+    // Una quinta parte va arriba y abajo de la tarjeta, para que esa franja
+    // del centro no quede vacía.
+    const centerCount = Math.min(overUnder.length, Math.round(count * 0.2));
+    const picked = sample(overUnder, centerCount).concat(sample(sides, count - centerCount));
+    for (let i = picked.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [picked[i], picked[j]] = [picked[j], picked[i]];
+    }
+    // Se le suma un desvío al azar a cada celda para que no se note la rejilla,
+    // sin dejar que ningún icono se salga del borde de la pantalla.
+    return picked.map((cell) => ({
+      top: Math.min(92, Math.max(1.5, cell.top + (Math.random() - 0.5) * 6)),
+      left: Math.min(94, Math.max(1.5, cell.left + (Math.random() - 0.5) * 6))
+    }));
   }
 
   function buildOverlay() {
@@ -436,7 +482,8 @@
           height:100%;
           animation:interview-bounce 2.6s infinite;
         }
-        .interview-icon:hover{
+        .interview-icon:hover,
+        .interview-icon.auto-focus{
           opacity:0.9;
           transform:scale(1.3) rotate(-8deg);
         }
@@ -524,9 +571,13 @@
           stroke-linecap:round;
           stroke-linejoin:round;
         }
-        .deco:hover{
+        .deco:hover,
+        .deco.auto-focus{
           opacity:0.8;
           transform:scale(1.35) rotate(-8deg);
+        }
+        @media (prefers-reduced-motion: reduce){
+          .interview-icon.auto-focus, .deco.auto-focus{ transform:none; }
         }
         @keyframes deco-float{
           0%, 100% { transform:translateY(0) rotate(0deg); }
@@ -795,38 +846,31 @@
         ${window.AIAPPS_LOGIN_SCENE === 'interview' ? (() => {
           const names = ['clipboard', 'magnifier', 'briefcase', 'chat-bubble', 'target', 'gear', 'graduation-cap', 'pencil', 'compass', 'trending-up', 'book', 'lightbulb', 'people', 'star', 'calendar', 'clock', 'bar-chart', 'flag'];
           const colors = ['#E03B2E', '#D8AE6E', '#4E8B8B', '#8C6BAE', '#E8935C', '#5C9BD8', '#7ecfc0'];
-          const cols = [3, 12, 21, 79, 88, 97];
-          const rows = [4, 14, 24, 76, 86, 96];
-          const cells = [];
-          rows.forEach(top => cols.forEach(left => cells.push({ top, left })));
+          const cells = scatterCells(36);
           return cells.map((cell, i) => {
             const name = names[i % names.length];
             const svgPath = ICONS[name];
             if (!svgPath) return '';
             const color = colors[i % colors.length];
-            const jitterTop = (Math.random() - 0.5) * 10;
-            const jitterLeft = (Math.random() - 0.5) * 7;
             const size = 1.7 + Math.random() * 1.0;
-            const pos = `top:${(cell.top + jitterTop).toFixed(1)}%; left:${(cell.left + jitterLeft).toFixed(1)}%; width:${size.toFixed(2)}rem; height:${size.toFixed(2)}rem;`;
+            const pos = `top:${cell.top.toFixed(1)}%; left:${cell.left.toFixed(1)}%; width:${size.toFixed(2)}rem; height:${size.toFixed(2)}rem;`;
             const delay = (i % 14) * 0.14 + Math.random() * 0.3;
             return `<span class="interview-icon" style="${pos}"><span class="interview-icon-float" style="animation-delay:-${delay.toFixed(2)}s"><svg viewBox="0 0 24 24" style="stroke:${color}">${svgPath}</svg></span></span>`;
           }).join('');
         })() : ''}
-        ${!window.AIAPPS_LOGIN_SCENE ? (window.AIAPPS_LOGIN_DECORATIONS || []).map((iconName, i) => {
-          const cols = [3, 12, 21, 79, 88, 97];
-          const rows = [4, 14, 24, 76, 86, 96];
-          const cells = [];
-          rows.forEach(top => cols.forEach(left => cells.push({ top, left })));
-          const svgPath = ICONS[iconName];
-          if (!svgPath) return '';
-          const cell = cells[i % cells.length];
-          const jitterTop = (Math.random() - 0.5) * 12;
-          const jitterLeft = (Math.random() - 0.5) * 8;
-          const size = 1.7 + Math.random() * 1.1;
-          const pos = `top:${(cell.top + jitterTop).toFixed(1)}%; left:${(cell.left + jitterLeft).toFixed(1)}%; width:${size.toFixed(2)}rem; height:${size.toFixed(2)}rem;`;
-          const delay = (i % 8) * 0.55;
-          return `<span class="deco" style="${pos}"><span class="deco-float" style="animation-delay:${delay}s"><svg viewBox="0 0 24 24">${svgPath}</svg></span></span>`;
-        }).join('') : ''}
+        ${!window.AIAPPS_LOGIN_SCENE ? (() => {
+          const decoNames = window.AIAPPS_LOGIN_DECORATIONS || [];
+          const decoCells = scatterCells(decoNames.length);
+          return decoNames.map((iconName, i) => {
+            const svgPath = ICONS[iconName];
+            if (!svgPath) return '';
+            const cell = decoCells[i];
+            const size = 1.7 + Math.random() * 1.1;
+            const pos = `top:${cell.top.toFixed(1)}%; left:${cell.left.toFixed(1)}%; width:${size.toFixed(2)}rem; height:${size.toFixed(2)}rem;`;
+            const delay = (i % 8) * 0.55;
+            return `<span class="deco" style="${pos}"><span class="deco-float" style="animation-delay:${delay}s"><svg viewBox="0 0 24 24">${svgPath}</svg></span></span>`;
+          }).join('');
+        })() : ''}
         <form class="card">
           ${window.AIAPPS_APP_NAME ? `
           <div class="brand">
@@ -884,6 +928,25 @@
     coverEl.addEventListener("mouseleave", () => {
       cardEl.style.transform = "perspective(800px) rotateX(0deg) rotateY(0deg)";
     });
+
+    // Cada 2 segundos, dos iconos al azar hacen el mismo zoom que al pasar el mouse,
+    // sin que el usuario tenga que tocarlos.
+    const focusables = Array.from(shadow.querySelectorAll(".interview-icon, .deco"));
+    const reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (focusables.length >= 2 && !reduceMotion) {
+      host._aiappsTimers = host._aiappsTimers || [];
+      host._aiappsTimers.push(setInterval(() => {
+        const pool = focusables.filter((el) => !el.classList.contains("auto-focus"));
+        if (pool.length < 2) return;
+        const first = Math.floor(Math.random() * pool.length);
+        let second = Math.floor(Math.random() * (pool.length - 1));
+        if (second >= first) second++;
+        [pool[first], pool[second]].forEach((el) => {
+          el.classList.add("auto-focus");
+          setTimeout(() => el.classList.remove("auto-focus"), 1200);
+        });
+      }, 2000));
+    }
 
     const form = shadow.querySelector("form");
     const titleEl = shadow.querySelector(".title");
