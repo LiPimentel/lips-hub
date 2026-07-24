@@ -577,8 +577,7 @@
                 cy,
                 rx: (rBase * (0.78 + Math.random() * 0.4)).toFixed(2),
                 rot: (Math.random() * 20 - 10).toFixed(1),
-                isGlint: Math.random() < 0.05,
-                glintDelay: (Math.random() * 3.5).toFixed(2)
+                isTop: r === 0
               });
             }
           }
@@ -597,9 +596,21 @@
               <ellipse cx="0" cy="0" rx="${rx}" ry="${ry.toFixed(2)}" fill="url(#coinGrad)" stroke="#5c4009" stroke-width="${(rx * 0.06).toFixed(2)}"/>
               <ellipse cx="0" cy="0" rx="${(rx * 0.66).toFixed(2)}" ry="${(ry * 0.66).toFixed(2)}" fill="none" stroke="rgba(122,84,10,0.45)" stroke-width="${(rx * 0.05).toFixed(2)}"/>
               <ellipse cx="${(-rx * 0.16).toFixed(2)}" cy="${(-ry * 0.34).toFixed(2)}" rx="${(rx * 0.46).toFixed(2)}" ry="${(ry * 0.3).toFixed(2)}" fill="rgba(255,255,255,0.45)"/>
-              ${c.isGlint ? `<g transform="translate(${(rx * 0.3).toFixed(1)},${(-ry * 0.6).toFixed(1)}) scale(${(rx * 0.055).toFixed(3)})"><g class="floor-sparkle" style="animation-delay:${c.glintDelay}s"><path d="${STAR}"/></g></g>` : ''}
             </g>`;
           }).join('');
+          // Los destellos van en una capa aparte, dibujada después de todas las
+          // monedas y solo sobre las de la superficie: dentro del grupo de cada
+          // moneda quedaban tapados por las que se pintan encima.
+          const surfaceCoins = floorCoins.filter(c => c.isTop);
+          const glints = surfaceCoins
+            .filter(() => Math.random() < 0.28)
+            .map(c => {
+              const rx = parseFloat(c.rx);
+              const scale = (rx * 0.075).toFixed(3);
+              const gx = (parseFloat(c.cx) + rx * 0.2).toFixed(1);
+              const gy = (c.cy - rx * 0.5).toFixed(1);
+              return `<g transform="translate(${gx},${gy}) scale(${scale}) translate(-12,-12)"><g class="floor-sparkle" style="animation-delay:${(Math.random() * 3.5).toFixed(2)}s"><path d="${STAR}"/></g></g>`;
+            }).join('');
           // Moneda dibujada (no emoji): el emoji 🪙 no existe en todas las
           // fuentes y en varios sistemas salía como un cuadrito oscuro,
           // invisible contra el fondo.
@@ -652,6 +663,7 @@
                 </linearGradient>
               </defs>
               ${floorEllipses}
+              ${glints}
             </svg>
           </div>
           ${coins}`;
