@@ -161,12 +161,12 @@
           93%{ opacity:0; transform:scale(0.3) rotate(20deg); }
         }
         .coin-floor{
-          position:absolute; left:0; right:0; bottom:0; height:56px;
+          position:absolute; left:0; right:0; bottom:0; height:72px;
           pointer-events:none;
         }
         .coin-floor-bg{
-          position:absolute; left:0; right:0; bottom:0; height:34px;
-          background:linear-gradient(180deg, rgba(184,134,59,0) 0%, rgba(184,134,59,0.4) 100%);
+          position:absolute; left:0; right:0; bottom:0; height:44px;
+          background:linear-gradient(180deg, rgba(184,134,59,0) 0%, rgba(184,134,59,0.45) 100%);
         }
         .coin-floor svg{ position:absolute; left:0; right:0; bottom:0; width:100%; height:100%; }
         .floor-sparkle{
@@ -497,20 +497,23 @@
       <div class="cover ${window.AIAPPS_LOGIN_LAYOUT === 'right' ? 'align-right' : ''}">
         ${window.AIAPPS_LOGIN_SCENE === 'coins-rain' ? (() => {
           const STAR = 'M12 2 L14 10 L22 12 L14 14 L12 22 L10 14 L2 12 L10 10 Z';
-          const pileCenters = [8, 30, 53, 76, 95];
-          const pileHeights = [6.5, 4, 8.5, 5, 3];
-          const pileWidths = [7, 6, 8, 6.5, 5];
+          const pileCenters = [4, 15, 27, 40, 52, 64, 77, 89, 98];
+          const pileHeights = [10, 6.5, 13, 7.5, 12, 7, 11.5, 8, 9.5];
+          const pileWidths  = [9, 8, 10, 8, 9, 8, 9, 8, 8];
           const baseline = 19.3;
+          // Picos triangulares (zigzag) definidos: se toma el pico dominante en cada punto,
+          // con solape suave para que los valles no bajen del todo al suelo.
           const terrainHeight = (x) => {
-            let h = 0;
+            let h = 1.4;
             for (let p = 0; p < pileCenters.length; p++) {
-              const dx = x - pileCenters[p];
-              h += pileHeights[p] * Math.exp(-(dx * dx) / (2 * pileWidths[p] * pileWidths[p]));
+              const dx = Math.abs(x - pileCenters[p]);
+              const t = Math.max(0, 1 - dx / pileWidths[p]);
+              h = Math.max(h, pileHeights[p] * t);
             }
-            return Math.min(h, 12.5);
+            return Math.min(h, 14);
           };
           const shadowEllipses = pileCenters.map((cx, i) =>
-            `<ellipse cx="${cx}" cy="${baseline + 0.3}" rx="${pileWidths[i] * 0.9}" ry="1.1" fill="rgba(0,0,0,0.35)"/>`
+            `<ellipse cx="${cx}" cy="${baseline + 0.3}" rx="${pileWidths[i] * 0.8}" ry="1.2" fill="rgba(0,0,0,0.35)"/>`
           ).join('');
           const floorCoins = [];
           for (let x = -2; x <= 102; x += 0.85) {
@@ -523,7 +526,7 @@
               floorCoins.push({
                 cx: (x + (Math.random() - 0.5) * 0.9).toFixed(1),
                 cy,
-                rx: (0.55 + Math.random() * 0.55).toFixed(2),
+                rx: (0.62 + Math.random() * 0.6).toFixed(2),
                 rot: (Math.random() * 16 - 8).toFixed(1),
                 isGlint: Math.random() < 0.045,
                 glintDelay: (Math.random() * 3.5).toFixed(2)
@@ -533,13 +536,14 @@
           floorCoins.sort((a, b) => a.cy - b.cy);
           const floorEllipses = shadowEllipses + floorCoins.map(c => {
             const rx = parseFloat(c.rx);
-            const ry = (rx * 0.46).toFixed(2);
-            const thick = (parseFloat(ry) * 0.6).toFixed(2);
+            const ry = (rx * 0.5).toFixed(2);
+            const thick = (parseFloat(ry) * 1.35).toFixed(2);
             const sparkleX = (rx * 0.3).toFixed(1);
             const sparkleY = (-parseFloat(ry) * 0.5).toFixed(1);
             return `<g transform="translate(${c.cx},${c.cy.toFixed(2)}) rotate(${c.rot})">
-              <rect x="${-rx}" y="0" width="${rx * 2}" height="${thick}" fill="url(#coinEdgeGrad)"/>
               <ellipse cx="0" cy="${thick}" rx="${rx}" ry="${ry}" fill="#6b4a0e"/>
+              <rect x="${-rx}" y="0" width="${rx * 2}" height="${thick}" fill="url(#coinEdgeGrad)"/>
+              <rect x="${-rx}" y="0" width="${(rx * 0.34).toFixed(2)}" height="${thick}" fill="rgba(255,240,190,0.28)"/>
               <ellipse cx="0" cy="0" rx="${rx}" ry="${ry}" fill="url(#coinGrad)" stroke="#5c4009" stroke-width="0.09"/>
               <ellipse cx="0" cy="${(-ry * 0.32).toFixed(2)}" rx="${(rx * 0.55).toFixed(2)}" ry="${(ry * 0.32).toFixed(2)}" fill="rgba(255,255,255,0.4)"/>
               ${c.isGlint ? `<g transform="translate(${sparkleX},${sparkleY}) scale(0.05)"><g class="floor-sparkle" style="animation-delay:${c.glintDelay}s"><path d="${STAR}"/></g></g>` : ''}
