@@ -5,7 +5,10 @@
 /* ===== AI APPs · Folder Bridge (guardado en carpeta local) ===== */
 (function(){
   const APP_ID = "lpbag-presupuesto";
-  const SYNC_KEYS = ["LPBag_db"];
+  const SYNC_PREFIX = "LPBag_db";
+  // La caché real ahora se guarda como "LPBag_db::<userId>" (aislada por usuario),
+  // así que este puente reconoce cualquier clave con ese prefijo, no solo la exacta.
+  function isSyncKey(k){ return k === SYNC_PREFIX || k.indexOf(SYNC_PREFIX + '::') === 0; }
   const DB_NAME = "aiapps-folder-bridge";
   const STORE = "handles";
 
@@ -63,13 +66,13 @@
 
   function collectLocalSnapshot(){
     const out = {};
-    SYNC_KEYS.forEach(k => { const v = localStorage.getItem(k); if(v !== null) out[k] = v; });
+    Object.keys(localStorage).forEach(k => { if(isSyncKey(k)){ const v = localStorage.getItem(k); if(v !== null) out[k] = v; } });
     return out;
   }
 
   function applySnapshot(snap){
     if(!snap) return;
-    Object.keys(snap).forEach(k => { if(SYNC_KEYS.includes(k)) localStorage.setItem.__original.call(localStorage, k, snap[k]); });
+    Object.keys(snap).forEach(k => { if(isSyncKey(k)) localStorage.setItem.__original.call(localStorage, k, snap[k]); });
   }
 
   function queueWrite(){
@@ -81,7 +84,7 @@
   const origSetItem = localStorage.setItem.bind(localStorage);
   function patchedSetItem(key, value){
     origSetItem(key, value);
-    if(SYNC_KEYS.includes(key)) queueWrite();
+    if(isSyncKey(key)) queueWrite();
   }
   patchedSetItem.__original = origSetItem;
   localStorage.setItem = patchedSetItem;
@@ -830,6 +833,15 @@ const SUPA_APP_ID='lpbag';
 // Evita que un guardado disparado antes de que termine la carga inicial
 // sobrescriba la nube con un estado vacío/desactualizado.
 let cloudSyncReady=false;
+// Se fija una vez que load() confirma la sesión (la página siempre se recarga
+// al iniciar/cerrar sesión, así que el usuario no cambia sin un reload).
+let cachedUserId=null;
+
+// Aísla la caché local por usuario, para que la cuenta de una persona nunca
+// herede la caché de otra que haya usado el mismo navegador/equipo.
+function scopedKey(key, userId){
+  return userId ? `${key}::${userId}` : key;
+}
 
 async function getSupabaseSession(){
   if(!window.supabaseClient) return null;
@@ -839,7 +851,7 @@ async function getSupabaseSession(){
 
 /* ── PERSIST ── */
 function save(){
-  localStorage.setItem('LPBag_db',JSON.stringify(appData));
+  localStorage.setItem(scopedKey('LPBag_db', cachedUserId),JSON.stringify(appData));
   syncToCloud();
 }
 
@@ -860,13 +872,14 @@ async function syncToCloud(){
   }
 }
 
-function loadFromLocalStorage(){
-  appData=JSON.parse(localStorage.getItem('LPBag_db'))||{rate:59,rateDate:'',categories:['Vivienda','Servicios','Suscripciones','Transporte','Otros'],expenses:[]};
+function loadFromLocalStorage(userId){
+  appData=JSON.parse(localStorage.getItem(scopedKey('LPBag_db', userId)))||{rate:59,rateDate:'',categories:['Vivienda','Servicios','Suscripciones','Transporte','Otros'],expenses:[]};
 }
 
 async function load(){
   const session=await getSupabaseSession();
   if(session){
+    cachedUserId=session.user.id;
     try{
       const { data, error } = await window.supabaseClient
         .from('app_data')
@@ -877,14 +890,14 @@ async function load(){
       if(error) throw error;
       if(data && data.data){
         appData=data.data;
-        localStorage.setItem('LPBag_db', JSON.stringify(appData));
+        localStorage.setItem(scopedKey('LPBag_db', cachedUserId), JSON.stringify(appData));
         return;
       }
-      loadFromLocalStorage();
+      loadFromLocalStorage(cachedUserId);
       return;
     }catch(e){
       console.warn('[LPBag] No se pudo leer de la nube, usando caché local:', e);
-      loadFromLocalStorage();
+      loadFromLocalStorage(cachedUserId);
       return;
     }
   }

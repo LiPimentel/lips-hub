@@ -5,7 +5,10 @@
 /* ===== AI APPs · Folder Bridge (guardado en carpeta local) ===== */
 (function(){
   const APP_ID = "staffgate";
-  const SYNC_KEYS = ["staffgate_cands_v1", "staffgate_tpls_v1"];
+  const SYNC_PREFIXES = ["staffgate_cands_v1", "staffgate_tpls_v1"];
+  // La caché real ahora se guarda como "<prefijo>::<userId>" (aislada por usuario),
+  // así que este puente reconoce cualquier clave con esos prefijos, no solo las exactas.
+  function isSyncKey(k){ return SYNC_PREFIXES.some(p => k === p || k.indexOf(p + '::') === 0); }
   const DB_NAME = "aiapps-folder-bridge";
   const STORE = "handles";
 
@@ -63,13 +66,13 @@
 
   function collectLocalSnapshot(){
     const out = {};
-    SYNC_KEYS.forEach(k => { const v = localStorage.getItem(k); if(v !== null) out[k] = v; });
+    Object.keys(localStorage).forEach(k => { if(isSyncKey(k)){ const v = localStorage.getItem(k); if(v !== null) out[k] = v; } });
     return out;
   }
 
   function applySnapshot(snap){
     if(!snap) return;
-    Object.keys(snap).forEach(k => { if(SYNC_KEYS.includes(k)) localStorage.setItem.__original.call(localStorage, k, snap[k]); });
+    Object.keys(snap).forEach(k => { if(isSyncKey(k)) localStorage.setItem.__original.call(localStorage, k, snap[k]); });
   }
 
   function queueWrite(){
@@ -81,7 +84,7 @@
   const origSetItem = localStorage.setItem.bind(localStorage);
   function patchedSetItem(key, value){
     origSetItem(key, value);
-    if(SYNC_KEYS.includes(key)) queueWrite();
+    if(isSyncKey(key)) queueWrite();
   }
   patchedSetItem.__original = origSetItem;
   localStorage.setItem = patchedSetItem;
@@ -967,6 +970,15 @@ const SUPA_APP_ID = 'staffgate';
 // Evita que un guardado disparado antes de que termine la carga inicial
 // sobrescriba la nube con un estado vacío/desactualizado.
 let cloudSyncReady = false;
+// Se fija una vez que load() confirma la sesión (la página siempre se recarga
+// al iniciar/cerrar sesión, así que el usuario no cambia sin un reload).
+let cachedUserId = null;
+
+// Aísla la caché local por usuario, para que la cuenta de una persona nunca
+// herede la caché de otra que haya usado el mismo navegador/equipo.
+function scopedKey(key, userId){
+  return userId ? `${key}::${userId}` : key;
+}
 
 async function getSupabaseSession(){
   if(!window.supabaseClient) return null;
@@ -975,8 +987,8 @@ async function getSupabaseSession(){
 }
 
 function save() {
-  localStorage.setItem('staffgate_cands_v1', JSON.stringify(candidates));
-  localStorage.setItem('staffgate_tpls_v1', JSON.stringify(templates));
+  localStorage.setItem(scopedKey('staffgate_cands_v1', cachedUserId), JSON.stringify(candidates));
+  localStorage.setItem(scopedKey('staffgate_tpls_v1', cachedUserId), JSON.stringify(templates));
   syncToCloud();
 }
 
@@ -998,9 +1010,9 @@ async function syncToCloud(){
   }
 }
 
-function loadFromLocalStorage() {
-  const rc = localStorage.getItem('staffgate_cands_v1');
-  const rt = localStorage.getItem('staffgate_tpls_v1');
+function loadFromLocalStorage(userId) {
+  const rc = localStorage.getItem(scopedKey('staffgate_cands_v1', userId));
+  const rt = localStorage.getItem(scopedKey('staffgate_tpls_v1', userId));
   candidates = rc ? JSON.parse(rc) : [];
   if (rt) {
     templates = JSON.parse(rt);
@@ -1013,6 +1025,7 @@ function loadFromLocalStorage() {
 async function load() {
   const session = await getSupabaseSession();
   if(session){
+    cachedUserId = session.user.id;
     try{
       const { data, error } = await window.supabaseClient
         .from('app_data')
@@ -1025,16 +1038,16 @@ async function load() {
         candidates = data.data.cands || [];
         templates = data.data.tpls || [];
         if (!templates.find(t => t.id === DEFAULT_TPL.id)) templates.unshift(DEFAULT_TPL);
-        localStorage.setItem('staffgate_cands_v1', JSON.stringify(candidates));
-        localStorage.setItem('staffgate_tpls_v1', JSON.stringify(templates));
+        localStorage.setItem(scopedKey('staffgate_cands_v1', cachedUserId), JSON.stringify(candidates));
+        localStorage.setItem(scopedKey('staffgate_tpls_v1', cachedUserId), JSON.stringify(templates));
         return;
       }
       // Sin fila en la nube todavía (cuenta nueva) - usar caché local si existe.
-      loadFromLocalStorage();
+      loadFromLocalStorage(cachedUserId);
       return;
     }catch(e){
       console.warn('[StaffGate] No se pudo leer de la nube, usando caché local:', e);
-      loadFromLocalStorage();
+      loadFromLocalStorage(cachedUserId);
       return;
     }
   }
