@@ -508,7 +508,10 @@
           const STAR = 'M12 2 L14 10 L22 12 L14 14 L12 22 L10 14 L2 12 L10 10 Z';
           // La escena se dibuja en píxeles (1 unidad del viewBox = 1px) para que
           // las monedas no se deformen al estirar el SVG a lo ancho de la pantalla.
-          const W = Math.max(Math.round(window.innerWidth || 1280), 360);
+          // Sin piso de ancho: el viewBox tiene que medir exactamente lo que
+          // mide el contenedor, o `preserveAspectRatio="none"` vuelve a
+          // deformar las monedas en ventanas más angostas que ese piso.
+          const W = Math.round(window.innerWidth) || 1280;
           // En pantallas angostas se limita el alto (y el de las cumbres) en
           // función del ancho, para que los picos no queden como agujas.
           const H = Math.max(120, Math.min(Math.round((window.innerHeight || 800) * 0.34), 230, Math.round(W * 0.42)));
