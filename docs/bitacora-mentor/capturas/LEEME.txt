@@ -1,0 +1,15 @@
+Esta carpeta está vacía a propósito.
+
+Durante la preparación de docs/bitacora-mentor/entrenamiento.md se navegó en vivo la
+pantalla de inicio de sesión de bitacora-mentor.html en el navegador, pero las
+herramientas disponibles en esa sesión de trabajo no ofrecieron una forma de exportar
+esa captura a un archivo .png en disco (solo permiten "ver" la pantalla, no guardarla).
+
+Por eso entrenamiento.md describe esa pantalla en texto, con el detalle más fiel
+posible a lo observado, en vez de referenciar una imagen que no se pudo generar.
+
+Si en el futuro se repite esta sesión con una herramienta que sí permita guardar
+capturas, o con acceso de un desarrollador a la consola del navegador, se recomienda
+volver a capturar la pantalla de login y, con credenciales reales, las pantallas
+posteriores (Mentoría, Grupos, Plantillas, Base de datos, Reportes) que en esta
+versión de la documentación quedaron sin verificar visualmente.
