@@ -1,0 +1,32 @@
+# Cabeceras del sitio. Formato compatible con Cloudflare Pages y con Netlify,
+# así que sirve igual durante la migración y después de ella.
+
+/*
+  # Nadie puede meter el login dentro de un iframe en otro sitio (clickjacking:
+  # una página ajena embebe el login real y captura lo que se escribe).
+  X-Frame-Options: DENY
+  # El navegador respeta el tipo declarado y no "adivina" (evita que un archivo
+  # se ejecute como script porque el contenido lo parece).
+  X-Content-Type-Options: nosniff
+  # Al salir del sitio no se filtra la ruta completa que se estaba visitando.
+  Referrer-Policy: strict-origin-when-cross-origin
+  # Permisos del navegador que ninguna app usa hoy.
+  Permissions-Policy: camera=(), microphone=(), payment=(), usb=(), geolocation=()
+  # Aísla la ventana de otras que pudieran haberla abierto.
+  Cross-Origin-Opener-Policy: same-origin
+  # CSP deliberadamente acotada a lo que NO puede romper la carga de recursos:
+  # prohíbe embebido en iframes, plugins, y cambiar la base de las rutas.
+  # No se restringe todavía de dónde se cargan scripts/estilos/imágenes: las 5
+  # apps usan CDNs (unpkg, cdnjs, jsdelivr, fonts.googleapis) y todo su código
+  # va en línea dentro del HTML, así que una CSP completa hay que probarla app
+  # por app con sesión real antes de activarla. Ver docs/hosting-cloudflare-pages.md.
+  Content-Security-Policy: frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'
+
+# El sitio no versiona los nombres de archivo: si el navegador guarda en caché
+# el HTML o auth-gate.js, la persona sigue viendo la versión vieja después de
+# publicar un cambio. Con esto siempre revalida contra el servidor.
+/*.html
+  Cache-Control: public, max-age=0, must-revalidate
+
+/*.js
+  Cache-Control: public, max-age=0, must-revalidate

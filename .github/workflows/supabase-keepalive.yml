@@ -1,0 +1,58 @@
+name: Mantener Supabase activo
+
+# El plan gratuito de Supabase pausa el proyecto después de 7 días sin
+# actividad, y restaurarlo es manual. Esta tarea le hace una consulta mínima
+# dos veces por semana para que eso no llegue a pasar.
+#
+# Ojo: GitHub desactiva las tareas programadas de un repo público después de
+# 60 días sin ningún commit. Mientras el proyecto tenga movimiento no aplica,
+# pero si se deja quieto dos meses hay que volver a activarla a mano desde la
+# pestaña Actions.
+
+on:
+  schedule:
+    # Lunes y jueves, 12:17 UTC (minuto no redondo a propósito: las tareas
+    # programadas en la hora en punto se encolan con las de todo GitHub).
+    - cron: '17 12 * * 1,4'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Consultar Supabase
+        env:
+          SUPABASE_URL: https://mkliirscqulfrutmjncu.supabase.co
+          # Llave pública 'anon': es la misma que ya viaja en supabase-client.js
+          # y que cualquiera puede leer en el repo. NO es llave de administrador
+          # y está limitada por las políticas RLS de las tablas. Si algún día se
+          # rota, basta con guardar la nueva como secreto SUPABASE_ANON_KEY y
+          # esta tarea la tomará de ahí sin tocar el archivo.
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1rbGlpcnNjcXVsZnJ1dG1qbmN1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQzMDE0NzcsImV4cCI6MjA5OTg3NzQ3N30.4Qk-hH3NjawJX1eGQtzPnPOtwE9RieK42pjLxR0t65s' }}
+        run: |
+          code=$(curl -sS -o respuesta.txt -w '%{http_code}' \
+            -H "apikey: $SUPABASE_ANON_KEY" \
+            -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
+            "$SUPABASE_URL/rest/v1/app_data?select=app_id&limit=1")
+          echo "HTTP $code"
+          head -c 400 respuesta.txt || true
+          echo
+          case "$code" in
+            # 200/206: respondió con datos. 401/403: respondió y RLS bloqueó la
+            # lectura anónima, que es justamente lo que debe pasar — la consulta
+            # llegó a la base igual, y eso es lo que cuenta como actividad.
+            200|206|401|403)
+              echo "Proyecto activo (HTTP $code)."
+              ;;
+            000)
+              echo "::error::No se pudo conectar con Supabase. Si el proyecto ya está pausado, hay que restaurarlo a mano desde el panel de Supabase."
+              exit 1
+              ;;
+            *)
+              echo "::error::Supabase respondió HTTP $code, que no es lo esperado. Revisar el panel de Supabase."
+              exit 1
+              ;;
+          esac
