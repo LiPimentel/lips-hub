@@ -85,8 +85,87 @@
 
   function removeExistingOverlay() {
     const existing = document.getElementById("aiapps-auth-gate");
-    if (existing) existing.remove();
+    if (existing) {
+      if (existing._aiappsTimers) existing._aiappsTimers.forEach((id) => clearInterval(id));
+      if (existing._aiappsCleanups) existing._aiappsCleanups.forEach((fn) => fn());
+      existing.remove();
+    }
     unlockBackground();
+  }
+
+  // Reparte `count` posiciones por toda la pantalla (no solo en las esquinas),
+  // saltando la zona donde va la tarjeta de login para no tapar el formulario.
+  function scatterCells(count) {
+    const cols = [4, 12, 21, 30, 40, 50, 60, 70, 79, 88, 94];
+    const rows = [4, 11, 22, 34, 46, 58, 70, 82, 89, 95];
+    const alignRight = window.AIAPPS_LOGIN_LAYOUT === 'right';
+    // La tarjeta mide `min(320px, 90vw)` de ancho y unos 460px de alto, así que
+    // en porcentaje ocupa muchísimo más en un teléfono que en un monitor: la
+    // zona a esquivar hay que calcularla, no dejarla fija, o en pantalla
+    // angosta los iconos caen encima del formulario.
+    const vw = window.innerWidth || 1280;
+    const vh = window.innerHeight || 720;
+    // El icono más grande mide 2.7rem; se cuenta su tamaño (más un margen) para
+    // que la esquina de un icono tampoco toque la tarjeta.
+    const iconW = 46 / vw * 100;
+    const iconH = 46 / vh * 100;
+    const cardW = Math.min(320, vw * 0.9) / vw * 100;
+    const cardH = Math.min(460 / vh * 100, 88);
+    const cardRight = alignRight ? 92 : 50 + cardW / 2;
+    const cardLeft = (alignRight ? 92 - cardW : 50 - cardW / 2);
+    const cardTop = 50 - cardH / 2;
+    const cardBottom = 50 + cardH / 2;
+    const maxLeft = 99 - iconW;
+    const maxTop = 99 - iconH;
+    const touchesCard = (left, top) => (
+      left + iconW > cardLeft && left < cardRight &&
+      top + iconH > cardTop && top < cardBottom
+    );
+    const sides = [];
+    const overUnder = [];
+    rows.forEach((top) => cols.forEach((left) => {
+      if (touchesCard(left, top)) return;
+      const sameColumnAsCard = left + iconW > cardLeft && left < cardRight;
+      if (sameColumnAsCard) overUnder.push({ top, left });
+      else sides.push({ top, left });
+    }));
+    if (!sides.length && !overUnder.length) return [];
+
+    // Se recorre la rejilla en orden y se toma una celda al azar dentro de cada
+    // tramo: así quedan repartidos por toda la pantalla en vez de amontonarse.
+    const sample = (pool, howMany) => {
+      if (!pool.length || howMany <= 0) return [];
+      const step = pool.length / howMany;
+      return Array.from({ length: howMany }, (_, i) => {
+        const start = Math.floor(i * step);
+        const end = Math.max(start + 1, Math.floor((i + 1) * step));
+        return pool[Math.min(pool.length - 1, start + Math.floor(Math.random() * (end - start)))];
+      });
+    };
+    // Una quinta parte va arriba y abajo de la tarjeta, para que esa franja del
+    // centro no quede vacía. En pantalla angosta la tarjeta se come casi todo el
+    // ancho y quedan pocas celdas a los costados, así que ahí la proporción se
+    // invierte sola en vez de amontonar 29 iconos en una sola columna.
+    const fromCenter = Math.min(overUnder.length, Math.max(Math.round(count * 0.2), count - sides.length));
+    const fromSides = Math.min(sides.length, count - fromCenter);
+    const picked = sample(overUnder, fromCenter).concat(sample(sides, fromSides));
+    for (let i = picked.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [picked[i], picked[j]] = [picked[j], picked[i]];
+    }
+    // Se le suma un desvío al azar a cada celda para que no se note la rejilla,
+    // sin dejar que ningún icono se salga del borde. Si el desvío empujó la
+    // posición sobre la tarjeta, se vuelve a la celda original; y si la celda
+    // tampoco entra (pantalla muy chica), ese icono no se dibuja: es preferible
+    // que haya menos iconos que uno encima del formulario.
+    return picked.map((cell) => {
+      const top = Math.min(maxTop, Math.max(1, cell.top + (Math.random() - 0.5) * 6));
+      const left = Math.min(maxLeft, Math.max(1, cell.left + (Math.random() - 0.5) * 6));
+      if (!touchesCard(left, top)) return { top, left };
+      const rawTop = Math.min(maxTop, Math.max(1, cell.top));
+      const rawLeft = Math.min(maxLeft, Math.max(1, cell.left));
+      return touchesCard(rawLeft, rawTop) ? null : { top: rawTop, left: rawLeft };
+    }).filter(Boolean);
   }
 
   function buildOverlay() {
@@ -149,6 +228,34 @@
           text-transform:uppercase;
           color:#8B94A3;
           margin-top:4px;
+        }
+        .logo-bars{
+          display:inline-block;
+          vertical-align:-0.28em;
+          margin-right:0.1em;
+        }
+        .logo-bars svg{ display:block; width:1.7em; height:1.7em; }
+        .logo-bars rect{ transform-box:fill-box; transform-origin:center bottom; }
+        .logo-bars .lb-1{ fill:#B79BE0; animation:logo-bar-1 2.2s ease-in-out infinite; }
+        .logo-bars .lb-2{ fill:#F0C550; animation:logo-bar-2 2.2s ease-in-out infinite; }
+        .logo-bars .lb-3{ fill:#B79BE0; animation:logo-bar-3 2.2s ease-in-out infinite; }
+        @keyframes logo-bar-1{
+          0%, 100%{ transform:scaleY(0.42); }
+          50%{ transform:scaleY(1); }
+        }
+        @keyframes logo-bar-2{
+          0%, 100%{ transform:scaleY(1); }
+          45%{ transform:scaleY(0.38); }
+        }
+        @keyframes logo-bar-3{
+          0%, 100%{ transform:scaleY(0.7); }
+          30%{ transform:scaleY(1); }
+          70%{ transform:scaleY(0.35); }
+        }
+        @media (prefers-reduced-motion: reduce){
+          .logo-bars .lb-1{ animation:none; transform:scaleY(0.55); }
+          .logo-bars .lb-2{ animation:none; transform:scaleY(1); }
+          .logo-bars .lb-3{ animation:none; transform:scaleY(0.75); }
         }
         .emoji-wrap{ position:relative; display:inline-block; }
         .coin{
@@ -284,8 +391,9 @@
           width:0%;
           animation:gantt-grow 6s ease-in-out infinite;
         }
-        .gantt-bar.c-brass{ background:linear-gradient(90deg, #B8863B, #D8AE6E); }
-        .gantt-bar.c-teal{ background:linear-gradient(90deg, #3E6E6E, #7ecfc0); }
+        .gantt-bar.c-lila{ background:linear-gradient(90deg, #7E5EC2, #C3ABF0); }
+        .gantt-bar.c-amarillo{ background:linear-gradient(90deg, #C99A2E, #F5D77A); }
+        .gantt-bar.c-purpura{ background:linear-gradient(90deg, #4C2A80, #9B6BD6); }
         .gantt-dot{
           position:absolute; top:50%; width:9px; height:9px; border-radius:50%;
           margin:-4.5px 0 0 -4.5px;
@@ -293,8 +401,9 @@
           opacity:0;
           animation:gantt-dot-move 6s ease-in-out infinite;
         }
-        .gantt-dot.c-brass{ background:#F3D9A8; }
-        .gantt-dot.c-teal{ background:#bdf0e4; }
+        .gantt-dot.c-lila{ background:#DCCCF7; }
+        .gantt-dot.c-amarillo{ background:#F3D9A8; }
+        .gantt-dot.c-purpura{ background:#C7A6F0; }
         .gantt-flag{
           position:absolute; bottom:2px; width:26px; height:26px;
           margin-left:-3px;
@@ -332,7 +441,7 @@
         }
         .travel-skyline{
           position:absolute; left:0; right:0; bottom:0; height:46%;
-          filter:blur(2px); opacity:0.6; pointer-events:none;
+          filter:blur(1.2px); opacity:0.66; pointer-events:none;
         }
         .travel-skyline svg{ width:100%; height:100%; display:block; }
         .travel-cloud-drift{
@@ -398,79 +507,281 @@
           88%{ opacity:0.85; }
           100%{ left:10%; top:-10%; transform:rotate(323deg); opacity:0; }
         }
-        .growth-scene{
-          position:absolute; left:3%; top:9%; width:min(72%,420px); height:82%;
+        /* Avion del logo de MyTravel: flota en su sitio, con dos nubecitas. */
+        .logo-plane{
+          position:relative;
+          display:inline-block;
+          margin-right:0.18em;
+          padding:0 0.12em;
+        }
+        .logo-plane .lp-glyph{
+          display:inline-block;
+          animation:logo-plane-float 3.6s ease-in-out infinite;
+        }
+        .logo-plane .lp-cloud{
+          position:absolute;
+          height:auto;
+          fill:#A9BFC4;
+          opacity:0.6;
           pointer-events:none;
         }
-        .growth-path{
+        .logo-plane .lp-cloud-1{
+          width:0.62em; top:-0.06em; left:-0.42em;
+          animation:logo-cloud-float 5s ease-in-out infinite;
+        }
+        .logo-plane .lp-cloud-2{
+          width:0.44em; bottom:0.02em; right:-0.3em; opacity:0.45;
+          animation:logo-cloud-float 6.4s ease-in-out infinite reverse;
+        }
+        @keyframes logo-plane-float{
+          0%, 100%{ transform:translateY(0); }
+          50%{ transform:translateY(-0.16em); }
+        }
+        @keyframes logo-cloud-float{
+          0%, 100%{ transform:translateY(0); }
+          50%{ transform:translateY(-0.08em); }
+        }
+        @media (prefers-reduced-motion: reduce){
+          /* Sin movimiento: aviones y nubes se quedan quietos en su posicion. */
+          .plane{ animation:none !important; opacity:0.85; }
+          .cloud-el, .travel-cloud-drift{ animation:none !important; }
+          .logo-plane .lp-glyph, .logo-plane .lp-cloud{ animation:none; }
+        }
+        .growth-scene{
+          position:absolute; left:2.5%; bottom:3%; height:76%;
+          width:min(56%, 720px, calc(78vw - 355px));
+          pointer-events:none;
+        }
+        /* Más abajo ya no queda ancho útil: la cordillera saldría aplastada. */
+        @media (max-width: 900px){
+          .growth-scene{ display:none; }
+        }
+        .growth-range{
           position:absolute; inset:0; width:100%; height:100%; overflow:visible;
         }
-        .growth-line{
-          fill:none;
-          stroke:rgba(255,255,255,0.38);
-          stroke-width:1.8;
-          stroke-dasharray:3.4 3.4;
-        }
-        .milestone{
-          fill:#7ecfc0;
+        .growth-mark{
+          position:absolute; width:56px; height:56px;
+          margin:-28px 0 0 -28px;
           opacity:0;
-          animation:milestone-light 7s ease-in-out infinite;
+          animation-duration:30s;
+          animation-timing-function:ease-in-out;
+          animation-iteration-count:infinite;
         }
-        .milestone.m1{ animation-delay:0s; }
-        .milestone.m2{ animation-delay:0.98s; }
-        .milestone.m3{ animation-delay:1.96s; }
-        .milestone.m4{ animation-delay:2.94s; }
-        @keyframes milestone-light{
-          0%, 6%{ opacity:0; r:2.8; }
-          14%, 80%{ opacity:1; r:3.4; }
-          92%, 100%{ opacity:0; r:2.8; }
+        .growth-mark svg{ width:100%; height:100%; fill:none; stroke-width:2.4; stroke-linecap:round; stroke-linejoin:round; }
+        .growth-mark.check svg{ stroke:#9ae8d1; }
+        .growth-mark.cross svg{ stroke:#e8705c; }
+        .growth-mark.c1{ animation-name:mk-c1; }
+        .growth-mark.c2{ animation-name:mk-c2; }
+        .growth-mark.c3{ animation-name:mk-c3; }
+        .growth-mark.c4{ animation-name:mk-c4; }
+        .growth-mark.c5{ animation-name:mk-c5; }
+        .growth-mark.c6{ animation-name:mk-c6; }
+        .growth-mark.x3{ animation-name:mk-x3; }
+        .growth-mark.x5{ animation-name:mk-x5; }
+        @keyframes mk-c1{
+          0%, 16%{ opacity:0; scale:0.5; }
+          19%{ opacity:0.55; scale:1.2; }
+          22%, 98%{ opacity:0.38; scale:1; }
+          100%{ opacity:0; scale:1; }
         }
+        @keyframes mk-c2{
+          0%, 25%{ opacity:0; scale:0.5; }
+          28%{ opacity:0.55; scale:1.2; }
+          31%, 34%{ opacity:0.38; scale:1; }
+          35%, 43%{ opacity:0; scale:0.5; }
+          46%{ opacity:0.55; scale:1.2; }
+          49%, 98%{ opacity:0.38; scale:1; }
+          100%{ opacity:0; scale:1; }
+        }
+        @keyframes mk-c3{
+          0%, 52%{ opacity:0; scale:0.5; }
+          55%{ opacity:0.55; scale:1.2; }
+          58%, 98%{ opacity:0.38; scale:1; }
+          100%{ opacity:0; scale:1; }
+        }
+        @keyframes mk-c4{
+          0%, 61%{ opacity:0; scale:0.5; }
+          64%{ opacity:0.55; scale:1.2; }
+          67%, 70%{ opacity:0.38; scale:1; }
+          71%, 79%{ opacity:0; scale:0.5; }
+          82%{ opacity:0.55; scale:1.2; }
+          85%, 98%{ opacity:0.38; scale:1; }
+          100%{ opacity:0; scale:1; }
+        }
+        @keyframes mk-c5{
+          0%, 86.5%{ opacity:0; scale:0.5; }
+          89%{ opacity:0.55; scale:1.2; }
+          90.5%, 98%{ opacity:0.38; scale:1; }
+          100%{ opacity:0; scale:1; }
+        }
+        @keyframes mk-c6{
+          0%, 89%{ opacity:0; scale:0.5; }
+          91.5%{ opacity:0.6; scale:1.25; }
+          93%, 98%{ opacity:0.4; scale:1; }
+          100%{ opacity:0; scale:1; }
+        }
+        @keyframes mk-x3{
+          0%, 27%{ opacity:0; scale:0.5; }
+          30%{ opacity:0.62; scale:1.25; }
+          33%, 43%{ opacity:0.44; scale:1; }
+          44%, 100%{ opacity:0; scale:1; }
+        }
+        @keyframes mk-x5{
+          0%, 63%{ opacity:0; scale:0.5; }
+          66%{ opacity:0.62; scale:1.25; }
+          69%, 79%{ opacity:0.44; scale:1; }
+          80%, 100%{ opacity:0; scale:1; }
+        }
+        /* La bandera cuelga dentro del muñequito, agarrada por la manito:
+           al ser hija de .hop-figure viaja con él y se mantiene en su sitio. */
         .growth-flag{
-          position:absolute; width:30px; height:30px;
-          transform-origin:22% 86%;
-          animation:flag-cycle 7s ease-in-out infinite, flag-flutter 0.9s ease-in-out infinite;
+          position:absolute; left:20px; top:2px; width:30px; height:30px;
+          opacity:0;
+          transform-origin:21% 46%;
+          animation:flag-cycle 30s ease-in-out infinite, flag-flutter 0.9s ease-in-out infinite;
         }
         .growth-flag svg{ width:100%; height:100%; fill:none; stroke:#D8AE6E; stroke-width:1.4; stroke-linecap:round; stroke-linejoin:round; }
+        /* Arranca en 88.5% y no en 87%: si asoma durante el rebote del
+           aterrizaje hereda el squash del muñeco y se ve deformada. */
         @keyframes flag-cycle{
-          0%, 60%{ opacity:0; scale:0.55; translate:0 6px; }
-          67%{ opacity:0.95; scale:1.05; translate:0 -1px; }
-          74%, 100%{ opacity:0.95; scale:1; translate:0 0; }
+          0%, 88.5%{ opacity:0; scale:0.5; translate:0 8px; }
+          90.5%{ opacity:0.95; scale:1.15; translate:0 -2px; }
+          92%, 98%{ opacity:0.95; scale:1; translate:0 0; }
+          100%{ opacity:0; scale:1; translate:0 0; }
         }
         @keyframes flag-flutter{
           0%, 100%{ rotate:-10deg; }
           50%{ rotate:-17deg; }
         }
+        /* El bracito y la manito solo salen en la cima, al agarrar la bandera. */
+        .hop-arm, .hop-hand{
+          opacity:0;
+          animation:arm-show 30s ease-in-out infinite;
+        }
+        @keyframes arm-show{
+          0%, 86.5%{ opacity:0; }
+          88.5%, 98%{ opacity:1; }
+          100%{ opacity:0; }
+        }
+        .firework{
+          position:absolute; width:54px; height:54px;
+          margin:-27px 0 0 -27px;
+          opacity:0;
+          animation-duration:30s;
+          animation-timing-function:ease-out;
+          animation-iteration-count:infinite;
+        }
+        .firework svg{ width:100%; height:100%; }
+        .firework.fw1{ animation-name:fw-a; }
+        .firework.fw2{ animation-name:fw-b; }
+        .firework.fw3{ animation-name:fw-c; }
+        @keyframes fw-a{
+          0%, 87.3%{ opacity:0; scale:0.15; }
+          88.8%{ opacity:1; scale:0.75; }
+          90.3%{ opacity:0.85; scale:1.05; }
+          92.3%{ opacity:0; scale:1.3; }
+          95.5%{ opacity:0; scale:0.15; }
+          96.8%{ opacity:1; scale:0.75; }
+          98.4%{ opacity:0.8; scale:1.05; }
+          99.8%, 100%{ opacity:0; scale:1.3; }
+        }
+        @keyframes fw-b{
+          0%, 90.5%{ opacity:0; scale:0.15; }
+          92%{ opacity:1; scale:0.8; }
+          93.5%{ opacity:0.85; scale:1.1; }
+          95.5%, 100%{ opacity:0; scale:1.35; }
+        }
+        @keyframes fw-c{
+          0%, 93%{ opacity:0; scale:0.15; }
+          94.5%{ opacity:1; scale:0.7; }
+          96%{ opacity:0.85; scale:1.05; }
+          98%, 100%{ opacity:0; scale:1.3; }
+        }
         .hop-figure{
-          position:absolute; width:21px; height:28px;
-          margin:-28px 0 0 -10.5px;
-          animation:hop-move 7s ease-in-out infinite, hop-squash 7s ease-in-out infinite;
+          position:absolute; width:30px; height:40px;
+          margin:-40px 0 0 -15px;
+          transform-origin:50% 100%;
+          animation:hop-move 30s ease-in-out infinite, hop-squash 30s ease-in-out infinite, hop-mood 30s linear infinite;
         }
         .hop-figure svg{ width:100%; height:100%; }
         @keyframes hop-move{
-          0%, 12%{ opacity:0; left:8%; top:92%; }
-          14%, 19%{ opacity:1; left:8%; top:90%; }
-          23%{ left:18%; top:70%; }
-          27%, 33%{ left:28%; top:58%; }
-          37%{ left:37%; top:38%; }
-          41%, 47%{ left:46%; top:26%; }
-          51%{ left:60%; top:14%; }
-          55%, 59%{ left:74%; top:8%; }
-          60%, 100%{ opacity:0; left:74%; top:8%; }
+          0%, 2%{ opacity:0; left:1%; top:100%; }
+          3%{ opacity:1; left:2%; top:98%; }
+          5.5%{ left:6%; top:66%; }
+          8%, 14%{ left:11%; top:76%; }
+          15.5%{ left:19%; top:55%; }
+          17%, 23%{ left:27%; top:63%; }
+          24.5%{ left:35%; top:42%; }
+          26%, 32%{ left:43%; top:50%; }
+          33.5%{ left:35%; top:42%; }
+          35%, 41%{ left:27%; top:63%; }
+          42.5%{ left:35%; top:42%; }
+          44%, 50%{ left:43%; top:50%; }
+          51.5%{ left:51%; top:29%; }
+          53%, 59%{ left:59%; top:37%; }
+          60.5%{ left:67%; top:15%; }
+          62%, 68%{ left:75%; top:23%; }
+          69.5%{ left:67%; top:15%; }
+          71%, 77%{ left:59%; top:37%; }
+          78.5%{ left:67%; top:15%; }
+          80%, 85%{ left:75%; top:23%; }
+          86%{ left:83%; top:0%; }
+          87%, 98%{ opacity:1; left:91%; top:7%; }
+          100%{ opacity:0; left:91%; top:7%; }
         }
         @keyframes hop-squash{
-          0%, 12%{ scale:0.5; }
-          14%{ scale:0.85 1.15; }
-          17%, 19%{ scale:1; }
-          23%{ scale:1.1 0.9; }
-          27%{ scale:0.85 1.15; }
-          30%, 33%{ scale:1; }
-          37%{ scale:1.1 0.9; }
-          41%{ scale:0.85 1.15; }
-          44%, 47%{ scale:1; }
-          51%{ scale:1.1 0.9; }
-          55%{ scale:0.85 1.2; }
-          59%{ scale:1; }
-          60%, 100%{ scale:0.5; }
+          0%, 2%{ scale:0.5; }
+          3%{ scale:0.9 1.12; }
+          5.5%{ scale:1.06 0.94; }
+          8%{ scale:0.86 1.14; }
+          10%, 14%{ scale:1; }
+          15.5%{ scale:1.06 0.94; }
+          17%{ scale:0.86 1.14; }
+          19%, 23%{ scale:1; }
+          24.5%{ scale:1.06 0.94; }
+          26%{ scale:0.86 1.14; }
+          28%, 32%{ scale:1; }
+          33.5%{ scale:1.06 0.94; }
+          35%{ scale:0.86 1.14; }
+          37%, 41%{ scale:1; }
+          42.5%{ scale:1.06 0.94; }
+          44%{ scale:0.86 1.14; }
+          46%, 50%{ scale:1; }
+          51.5%{ scale:1.06 0.94; }
+          53%{ scale:0.86 1.14; }
+          55%, 59%{ scale:1; }
+          60.5%{ scale:1.06 0.94; }
+          62%{ scale:0.86 1.14; }
+          64%, 68%{ scale:1; }
+          69.5%{ scale:1.06 0.94; }
+          71%{ scale:0.86 1.14; }
+          73%, 77%{ scale:1; }
+          78.5%{ scale:1.06 0.94; }
+          80%{ scale:0.86 1.14; }
+          82%, 85%{ scale:1; }
+          86%{ scale:1.06 0.94; }
+          87%{ scale:0.86 1.14; }
+          88.5%, 98%{ scale:1; }
+          100%{ scale:0.5; }
+        }
+        /* Se pone gris DESPUÉS de que la ✗ ya se ve (30% y 66%): la marca es
+           la causa y el color del muñeco la consecuencia, no al revés. */
+        @keyframes hop-mood{
+          0%, 30%{ filter:grayscale(0) brightness(1); }
+          30.5%, 40.5%{ filter:grayscale(1) brightness(0.62); }
+          41%, 66%{ filter:grayscale(0) brightness(1); }
+          66.5%, 76.5%{ filter:grayscale(1) brightness(0.62); }
+          77%, 100%{ filter:grayscale(0) brightness(1); }
+        }
+        @media (prefers-reduced-motion: reduce){
+          .growth-mark, .hop-figure, .growth-flag,
+          .hop-arm, .hop-hand, .firework{ animation:none !important; }
+          .growth-mark.check{ opacity:0.38; }
+          .growth-mark.cross{ opacity:0; }
+          .hop-figure{ left:91%; top:7%; opacity:1; }
+          .growth-flag{ opacity:0.95; }
+          .hop-arm, .hop-hand{ opacity:1; }
+          .firework{ opacity:0.5; scale:1; }
         }
         .interview-icon{
           position:absolute;
@@ -493,7 +804,8 @@
           height:100%;
           animation:interview-bounce 2.6s infinite;
         }
-        .interview-icon:hover{
+        .interview-icon:hover,
+        .interview-icon.auto-focus{
           opacity:0.9;
           transform:scale(1.3) rotate(-8deg);
         }
@@ -595,9 +907,13 @@
           stroke-linecap:round;
           stroke-linejoin:round;
         }
-        .deco:hover{
+        .deco:hover,
+        .deco.auto-focus{
           opacity:0.8;
           transform:scale(1.35) rotate(-8deg);
+        }
+        @media (prefers-reduced-motion: reduce){
+          .interview-icon.auto-focus, .deco.auto-focus{ transform:none; }
         }
         @keyframes deco-float{
           0%, 100% { transform:translateY(0) rotate(0deg); }
@@ -613,9 +929,19 @@
            que cada elemento se fija a mano en su estado visible, y solo se
            ocultan los que existen únicamente para moverse (las monedas en
            caída, los aviones en vuelo, las monedas que saltan del logo). */
+        /* Este bloque va después de los bloques por escena de arriba (logo del
+           Gantt, travel-sky, mentor-people, interview), que ya fijan a mano sus
+           propios elementos. Aquí va la red de seguridad general — ninguna
+           animación corre — más las escenas que faltaban: coins-rain y
+           gantt-build. Cuidado al agregar reglas: por orden de aparición, lo de
+           aquí gana sobre los bloques de arriba (por eso los aviones de
+           travel-sky NO se ocultan acá: ese bloque los deja quietos y
+           visibles a propósito). */
         @media (prefers-reduced-motion: reduce){
           .cover *{ animation:none !important; }
-          .coin, .coin-rain, .plane{ display:none !important; }
+          /* Solo lo que existe únicamente para moverse y no tiene una posición
+             propia donde quedarse quieto. */
+          .coin, .coin-rain{ display:none !important; }
           /* coins-rain: queda el montón del suelo, con sus destellos quietos. */
           .floor-sparkle{ opacity:1; }
           /* gantt-build: barras completas, con su punto, bandera y fecha. */
@@ -623,8 +949,6 @@
           .gantt-dot{ opacity:1; left:var(--w,70%); }
           .gantt-flag{ opacity:1; transform:scale(1) rotate(-4deg); }
           .gantt-date{ opacity:0.85; transform:translateY(0); }
-          /* mentor-people / travel-sky: hitos del camino visibles. */
-          .milestone{ opacity:1; }
         }
       </style>
       <div class="cover ${window.AIAPPS_LOGIN_LAYOUT === 'right' ? 'align-right' : ''}">
@@ -816,13 +1140,20 @@
         })() : ''}
         ${window.AIAPPS_LOGIN_SCENE === 'gantt-build' ? (() => {
           const flagColors = ['#E03B2E', '#D8AE6E', '#4E8B8B', '#8C6BAE', '#E8935C', '#5C9BD8', '#7ecfc0'];
-          const rows = Array.from({ length: 9 }).map((_, i) => {
-            const w = (48 + Math.random() * 42).toFixed(0);
+          const barColors = ['c-lila', 'c-amarillo', 'c-purpura'];
+          const totalRows = 9;
+          const rows = Array.from({ length: totalRows }).map((_, i) => {
+            // La escalera va en el riel de cada fila, no en el relleno animado:
+            // así la piramide se ve siempre, y no solo en el instante en que
+            // una barra llega a su ancho maximo (que por el desfase de las
+            // animaciones nunca ocurre en todas a la vez).
+            const rowW = (34 + (i * 66) / (totalRows - 1)).toFixed(1);
+            const w = (80 + Math.random() * 16).toFixed(1);
             const delay = (i * 0.68).toFixed(2);
             const day = Math.floor(Math.random() * 28) + 1;
-            const cls = i % 2 === 0 ? 'c-brass' : 'c-teal';
+            const cls = barColors[i % barColors.length];
             const flagColor = flagColors[i % flagColors.length];
-            return `<div class="gantt-row">
+            return `<div class="gantt-row" style="width:${rowW}%;">
                 <div class="gantt-bar ${cls}" style="--w:${w}%; animation-delay:${delay}s;"></div>
                 <span class="gantt-dot ${cls}" style="--w:${w}%; animation-delay:${delay}s;"></span>
                 <span class="gantt-date" style="left:${w}%; animation-delay:${delay}s;">${day}</span>
@@ -831,7 +1162,158 @@
           }).join('');
           return `<div class="gantt-scene">${rows}</div>`;
         })() : ''}
-        ${window.AIAPPS_LOGIN_SCENE === 'travel-sky' ? `
+        ${window.AIAPPS_LOGIN_SCENE === 'travel-sky' ? (() => {
+          const n = (v) => Number(v).toFixed(1);
+          const groundY = 108;
+
+          // --- Ciudad: mas edificios, con formas y alturas distintas.
+          // Los mas altos (h >= 78) rebasan las cimas de las montanas.
+          const buildings = [
+            { x: -4, w: 18, h: 28, type: 'flat' },
+            { x: 12, w: 12, h: 44, type: 'antenna' },
+            { x: 23, w: 16, h: 20, type: 'pitch' },
+            { x: 37, w: 14, h: 34, type: 'step' },
+            { x: 49, w: 18, h: 62, type: 'setback' },
+            { x: 65, w: 12, h: 26, type: 'flat' },
+            { x: 75, w: 16, h: 38, type: 'slant' },
+            { x: 89, w: 11, h: 18, type: 'dome' },
+            { x: 97, w: 20, h: 52, type: 'step' },
+            { x: 115, w: 12, h: 30, type: 'flat' },
+            { x: 125, w: 13, h: 88, type: 'antenna' },
+            { x: 139, w: 16, h: 32, type: 'pitch' },
+            { x: 153, w: 12, h: 24, type: 'flat' },
+            { x: 163, w: 18, h: 46, type: 'setback' },
+            { x: 181, w: 12, h: 20, type: 'flat' },
+            { x: 191, w: 15, h: 36, type: 'step' },
+            { x: 205, w: 20, h: 80, type: 'setback' },
+            { x: 223, w: 12, h: 22, type: 'dome' },
+            { x: 233, w: 16, h: 40, type: 'slant' },
+            { x: 247, w: 11, h: 28, type: 'flat' },
+            { x: 256, w: 18, h: 58, type: 'antenna' },
+            { x: 273, w: 14, h: 24, type: 'pitch' },
+            { x: 285, w: 12, h: 34, type: 'flat' },
+            { x: 295, w: 20, h: 92, type: 'setback' },
+            { x: 313, w: 13, h: 26, type: 'step' },
+            { x: 325, w: 16, h: 44, type: 'slant' },
+            { x: 339, w: 12, h: 20, type: 'flat' },
+            { x: 349, w: 18, h: 64, type: 'antenna' },
+            { x: 365, w: 14, h: 30, type: 'dome' },
+            { x: 377, w: 16, h: 38, type: 'step' },
+            { x: 391, w: 16, h: 22, type: 'flat' }
+          ];
+          const rect = (x, y, w, h) => `<rect x="${n(x)}" y="${n(y)}" width="${n(w)}" height="${n(h)}"/>`;
+          const buildingShape = (b) => {
+            const top = groundY - b.h;
+            switch (b.type) {
+              case 'step':
+                return rect(b.x, top + 7, b.w, b.h - 7) + rect(b.x + b.w * 0.22, top, b.w * 0.56, 8);
+              case 'antenna':
+                return rect(b.x, top, b.w, b.h) + rect(b.x + b.w / 2 - 0.7, top - 11, 1.4, 11);
+              case 'pitch':
+                return rect(b.x, top + 6, b.w, b.h - 6) +
+                  `<path d="M${n(b.x - 1)} ${n(top + 6.5)} L${n(b.x + b.w / 2)} ${n(top)} L${n(b.x + b.w + 1)} ${n(top + 6.5)} Z"/>`;
+              case 'dome':
+                return rect(b.x, top, b.w, b.h) +
+                  `<path d="M${n(b.x + 1)} ${n(top + 0.5)} a ${n(b.w / 2 - 1)} ${n(b.w / 2 - 1)} 0 0 1 ${n(b.w - 2)} 0 Z"/>`;
+              case 'slant':
+                return `<path d="M${n(b.x)} ${n(groundY)} L${n(b.x)} ${n(top + 9)} L${n(b.x + b.w)} ${n(top)} L${n(b.x + b.w)} ${n(groundY)} Z"/>`;
+              case 'setback':
+                return rect(b.x, groundY - b.h * 0.55, b.w, b.h * 0.55) +
+                  rect(b.x + b.w * 0.15, groundY - b.h * 0.85, b.w * 0.7, b.h * 0.3) +
+                  rect(b.x + b.w * 0.29, top, b.w * 0.42, b.h * 0.15) +
+                  rect(b.x + b.w / 2 - 0.6, top - 8, 1.2, 8);
+              default:
+                return rect(b.x, top, b.w, b.h);
+            }
+          };
+          const cityPath = rect(-2, groundY, 404, 140 - groundY) + buildings.map(buildingShape).join('');
+
+          // Ventanas encendidas, solo dentro del cuerpo solido de cada edificio.
+          const lights = buildings.map((b) => {
+            if (b.h < 16) return '';
+            const bodyH = b.h * (b.type === 'setback' ? 0.5 : 0.8);
+            const cols = Math.max(1, Math.floor((b.w - 4) / 6));
+            const rows = Math.max(1, Math.floor((bodyH - 8) / 6));
+            const x0 = b.x + (b.w - (cols - 1) * 6) / 2;
+            let out = '';
+            for (let c = 0; c < cols; c++) {
+              for (let r = 0; r < rows; r++) {
+                if (Math.random() > 0.42) continue;
+                out += `<circle cx="${n(x0 + c * 6)}" cy="${n(groundY - 6 - r * 6)}" r="1.1"/>`;
+              }
+            }
+            return out;
+          }).join('');
+
+          // --- Semi bosque al pie de las montanas: dos franjas de arboles.
+          const tree = (cx, base, h, kind) => {
+            const w = h * 0.55;
+            if (kind === 0) {
+              return `<path d="M${n(cx)} ${n(base - h)} L${n(cx + w * 0.34)} ${n(base - h * 0.5)} L${n(cx + w * 0.16)} ${n(base - h * 0.5)} L${n(cx + w * 0.5)} ${n(base)} L${n(cx - w * 0.5)} ${n(base)} L${n(cx - w * 0.16)} ${n(base - h * 0.5)} L${n(cx - w * 0.34)} ${n(base - h * 0.5)} Z"/>`;
+            }
+            if (kind === 1) {
+              return `<rect x="${n(cx - 0.6)}" y="${n(base - h * 0.45)}" width="1.2" height="${n(h * 0.45)}"/>` +
+                `<ellipse cx="${n(cx)}" cy="${n(base - h * 0.68)}" rx="${n(w * 0.62)}" ry="${n(h * 0.36)}"/>`;
+            }
+            return `<ellipse cx="${n(cx)}" cy="${n(base - h * 0.3)}" rx="${n(w * 0.8)}" ry="${n(h * 0.34)}"/>` +
+              `<ellipse cx="${n(cx - w * 0.45)}" cy="${n(base - h * 0.2)}" rx="${n(w * 0.5)}" ry="${n(h * 0.24)}"/>`;
+          };
+          const forestBand = (step, baseMin, baseVar, hMin, hVar) => {
+            let out = '';
+            for (let x = -6; x < 406; x += step) {
+              const cx = x + (Math.random() - 0.5) * step * 0.7;
+              const base = baseMin + Math.random() * baseVar;
+              const h = hMin + Math.random() * hVar;
+              const r = Math.random();
+              out += tree(cx, base, h, r < 0.6 ? 0 : r < 0.88 ? 1 : 2);
+            }
+            return out;
+          };
+          // Franja alta: el bosque que se ve al pie de las montanas, por encima
+          // de los edificios bajos. Franja baja: arboles a nivel de la ciudad.
+          const forestFar = forestBand(4.5, 92, 6, 7, 9);
+          const forestNear = forestBand(6, 102, 6, 10, 14);
+
+          const planeIcon = '<path d="M22 16v-2l-8.5-5V3.5c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5V9L2 14v2l8.5-2.5V19L8 20.5V22l4-1 4 1v-1.5L13.5 19v-5.5L22 16z"/>';
+          const planes = [
+            { anim: 'fly-1', dur: 15, delay: 0, layer: 'plane-behind', x: 12, y: 62, rot: 55 },
+            { anim: 'fly-2', dur: 18, delay: 3, layer: 'plane-front', x: 86, y: 22, rot: 243 },
+            { anim: 'fly-3', dur: 13, delay: 7, layer: 'plane-front', x: 18, y: 18, rot: 78 },
+            { anim: 'fly-4', dur: 20, delay: 1, layer: 'plane-behind', x: 78, y: 70, rot: 31 },
+            { anim: 'fly-5', dur: 17, delay: 5, layer: 'plane-front', x: 8, y: 34, rot: 286 },
+            { anim: 'fly-6', dur: 22, delay: 9, layer: 'plane-front', x: 90, y: 52, rot: 323 }
+          ];
+          const planeEls = planes.map((p) => `<span class="plane ${p.layer}" style="left:${p.x}%; top:${p.y}%; transform:rotate(${p.rot}deg); animation:${p.anim} ${p.dur}s linear infinite; animation-delay:${p.delay}s;"><svg viewBox="0 0 24 24">${planeIcon}</svg></span>`).join('');
+
+          // --- Nubes de pantalla: varias formas distintas, no siempre la misma.
+          const cloudShapes = {
+            wide: { ratio: 48 / 22, svg: '<svg viewBox="0 0 48 22" fill="#e8f4f2"><ellipse cx="18" cy="14" rx="17" ry="7.5"/><ellipse cx="31" cy="10" rx="12" ry="7"/></svg>' },
+            puffy: { ratio: 48 / 24, svg: '<svg viewBox="0 0 48 24" fill="#e8f4f2"><ellipse cx="14" cy="16" rx="12" ry="7"/><ellipse cx="25" cy="11" rx="13" ry="9"/><ellipse cx="36" cy="16" rx="11" ry="6.5"/></svg>' },
+            wispy: { ratio: 48 / 14, svg: '<svg viewBox="0 0 48 14" fill="#e8f4f2"><ellipse cx="24" cy="9" rx="23" ry="4"/><ellipse cx="30" cy="6" rx="12" ry="3"/></svg>' },
+            puff: { ratio: 24 / 20, svg: '<svg viewBox="0 0 24 20" fill="#e8f4f2"><ellipse cx="12" cy="12" rx="11" ry="7"/><ellipse cx="15" cy="8" rx="7" ry="5"/></svg>' },
+            tower: { ratio: 40 / 28, svg: '<svg viewBox="0 0 40 28" fill="#e8f4f2"><ellipse cx="18" cy="21" rx="16" ry="6.5"/><ellipse cx="20" cy="14" rx="12" ry="8"/><ellipse cx="24" cy="8" rx="8" ry="6"/></svg>' },
+            flat: { ratio: 56 / 18, svg: '<svg viewBox="0 0 56 18" fill="#e8f4f2"><ellipse cx="20" cy="12" rx="19" ry="5.5"/><ellipse cx="34" cy="9" rx="14" ry="6"/><ellipse cx="46" cy="12" rx="9" ry="4.5"/></svg>' }
+          };
+          const clouds = [
+            { s: 'puffy', left: 6, top: 7, w: 44, dur: 24, delay: 0, op: 0.55 },
+            { s: 'wide', left: 26, top: 3, w: 32, dur: 19, delay: -4, op: 0.4 },
+            { s: 'wispy', left: 44, top: 9, w: 52, dur: 28, delay: -11, op: 0.32 },
+            { s: 'flat', left: 64, top: 4, w: 58, dur: 25, delay: -7, op: 0.5 },
+            { s: 'puff', left: 84, top: 11, w: 22, dur: 17, delay: -2, op: 0.42 },
+            { s: 'tower', left: 14, top: 19, w: 34, dur: 30, delay: -13, op: 0.45 },
+            { s: 'wide', left: 72, top: 20, w: 40, dur: 21, delay: -5, op: 0.5 },
+            { s: 'puff', left: 16, top: 29, w: 18, dur: 15, delay: -9, op: 0.3 },
+            { s: 'wispy', left: 2, top: 40, w: 46, dur: 33, delay: -3, op: 0.28 },
+            { s: 'puffy', left: 88, top: 30, w: 30, dur: 26, delay: -16, op: 0.4 },
+            { s: 'flat', left: 78, top: 41, w: 44, dur: 29, delay: -6, op: 0.25 },
+            { s: 'puff', left: 6, top: 60, w: 16, dur: 18, delay: -12, op: 0.22 }
+          ];
+          const cloudEls = clouds.map((c) => {
+            const shape = cloudShapes[c.s];
+            return `<span class="cloud-el" style="left:${c.left}%; top:${c.top}%; width:${c.w}px; height:${n(c.w / shape.ratio)}px; animation-duration:${c.dur}s; animation-delay:${c.delay}s; opacity:${c.op};">${shape.svg}</span>`;
+          }).join('');
+
+          return `
           <div class="travel-skyline">
             <svg viewBox="0 0 400 140" preserveAspectRatio="none">
               <g opacity="0.22" fill="#0e7c7b">
@@ -849,97 +1331,169 @@
                 <ellipse cx="300" cy="20" rx="18" ry="7"/>
                 <ellipse cx="312" cy="16" rx="11" ry="6"/>
               </g>
-              <g fill="#08121c">
-                <path d="M0 140 L0 105 L20 105 L20 88 L36 88 L36 105 L52 105 L52 70 L70 70 L70 105 L88 105 L88 95 L106 95 L106 105 L124 105 L124 80 L142 80 L142 105 L160 105 L160 92 L178 92 L178 105 L400 105 L400 140Z"/>
+              <g class="travel-cloud-drift" style="transform-origin:180px 14px; animation-delay:-9s;" opacity="0.3" fill="#e8f4f2">
+                <ellipse cx="176" cy="14" rx="24" ry="5"/>
+                <ellipse cx="188" cy="10" rx="13" ry="5"/>
               </g>
-              <g fill="#F4C060">
-                <circle cx="24" cy="94" r="1.1"/><circle cx="30" cy="94" r="1.1"/><circle cx="24" cy="99" r="1.1"/><circle cx="30" cy="99" r="1.1"/>
-                <circle cx="58" cy="78" r="1.1"/><circle cx="64" cy="78" r="1.1"/><circle cx="58" cy="84" r="1.1"/><circle cx="64" cy="84" r="1.1"/><circle cx="58" cy="90" r="1.1"/><circle cx="64" cy="90" r="1.1"/><circle cx="58" cy="96" r="1.1"/><circle cx="64" cy="96" r="1.1"/>
-                <circle cx="76" cy="99" r="1.1"/><circle cx="82" cy="99" r="1.1"/>
-                <circle cx="110" cy="99" r="1.1"/><circle cx="116" cy="99" r="1.1"/>
-                <circle cx="128" cy="84" r="1.1"/><circle cx="134" cy="84" r="1.1"/><circle cx="128" cy="90" r="1.1"/><circle cx="134" cy="90" r="1.1"/><circle cx="128" cy="96" r="1.1"/><circle cx="134" cy="96" r="1.1"/>
-                <circle cx="164" cy="96" r="1.1"/><circle cx="170" cy="96" r="1.1"/>
+              <g class="travel-cloud-drift" style="transform-origin:355px 44px; animation-delay:-14s;" opacity="0.28" fill="#e8f4f2">
+                <ellipse cx="352" cy="44" rx="16" ry="6"/>
+                <ellipse cx="362" cy="40" rx="10" ry="5"/>
+                <ellipse cx="341" cy="41" rx="9" ry="4.5"/>
               </g>
+              <g opacity="0.34" fill="#12857f">${forestFar}</g>
+              <g opacity="0.62" fill="#0a5152">${forestNear}</g>
+              <g fill="#08121c">${cityPath}</g>
+              <g fill="#F4C060">${lights}</g>
             </svg>
           </div>
-          ${(() => {
-            const planeIcon = '<path d="M22 16v-2l-8.5-5V3.5c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5V9L2 14v2l8.5-2.5V19L8 20.5V22l4-1 4 1v-1.5L13.5 19v-5.5L22 16z"/>';
-            const planes = [
-              { anim: 'fly-1', dur: 15, delay: 0, layer: 'plane-behind' },
-              { anim: 'fly-2', dur: 18, delay: 3, layer: 'plane-front' },
-              { anim: 'fly-3', dur: 13, delay: 7, layer: 'plane-front' },
-              { anim: 'fly-4', dur: 20, delay: 1, layer: 'plane-behind' },
-              { anim: 'fly-5', dur: 17, delay: 5, layer: 'plane-front' },
-              { anim: 'fly-6', dur: 22, delay: 9, layer: 'plane-front' }
+          ${planeEls}
+          ${cloudEls}
+        `;
+        })() : ''}
+        ${window.AIAPPS_LOGIN_SCENE === 'mentor-people' ? (() => {
+          // Cordillera ascendente: cada cima mas alta que la anterior, alternando
+          // capa de atras / adelante para que se vean entrelazadas.
+          const peaks = [
+            { x: 11, y: 76, hw: 22, layer: 'back' },
+            { x: 27, y: 63, hw: 22, layer: 'front' },
+            { x: 43, y: 50, hw: 22, layer: 'back' },
+            { x: 59, y: 37, hw: 23, layer: 'front' },
+            { x: 75, y: 23, hw: 23, layer: 'back' },
+            { x: 91, y: 7, hw: 22, layer: 'front' }
+          ];
+          const n = (v) => v.toFixed(2);
+          const mountain = (m) => {
+            const back = m.layer === 'back';
+            const h = 100 - m.y;
+            const left = m.x - m.hw, right = m.x + m.hw;
+            const capRatio = 0.2;
+            const capHalf = m.hw * capRatio;
+            const capY = m.y + h * capRatio;
+            const lit = back ? 'url(#mtnLitBack)' : 'url(#mtnLitFront)';
+            const shade = back ? 'url(#mtnShadeBack)' : 'url(#mtnShadeFront)';
+            // Caras: la izquierda recibe la luz, la derecha queda en sombra.
+            const faceL = `M${n(left)} 100 L${n(m.x)} ${n(m.y)} L${n(m.x)} 100 Z`;
+            const faceR = `M${n(m.x)} ${n(m.y)} L${n(right)} 100 L${n(m.x)} 100 Z`;
+            // Nieve en la cima con borde inferior irregular.
+            const cap = `M${n(m.x - capHalf)} ${n(capY)}`
+              + ` L${n(m.x - capHalf * 0.5)} ${n(capY - h * capRatio * 0.34)}`
+              + ` L${n(m.x - capHalf * 0.12)} ${n(capY - h * capRatio * 0.08)}`
+              + ` L${n(m.x + capHalf * 0.3)} ${n(capY - h * capRatio * 0.46)}`
+              + ` L${n(m.x + capHalf * 0.68)} ${n(capY - h * capRatio * 0.14)}`
+              + ` L${n(m.x + capHalf)} ${n(capY)}`
+              + ` L${n(m.x)} ${n(m.y)} Z`;
+            // Relieve: espina central, filo iluminado y grietas en cada cara.
+            const creases = [
+              `M${n(m.x)} ${n(m.y)} L${n(m.x)} 100`,
+              `M${n(m.x - m.hw * 0.52)} 100 L${n(m.x - m.hw * 0.2)} ${n(m.y + h * 0.46)}`,
+              `M${n(m.x - m.hw * 0.82)} 100 L${n(m.x - m.hw * 0.46)} ${n(m.y + h * 0.66)}`,
+              `M${n(m.x + m.hw * 0.5)} 100 L${n(m.x + m.hw * 0.19)} ${n(m.y + h * 0.44)}`,
+              `M${n(m.x + m.hw * 0.84)} 100 L${n(m.x + m.hw * 0.44)} ${n(m.y + h * 0.7)}`
             ];
-            return planes.map(p => `<span class="plane ${p.layer}" style="animation:${p.anim} ${p.dur}s linear infinite; animation-delay:${p.delay}s;"><svg viewBox="0 0 24 24">${planeIcon}</svg></span>`).join('');
-          })()}
-          ${(() => {
-            const cloudSvg = '<svg viewBox="0 0 40 20"><ellipse cx="16" cy="12" rx="15" ry="7" fill="#e8f4f2"/><ellipse cx="26" cy="9" rx="10" ry="6" fill="#e8f4f2"/></svg>';
-            const clouds = [
-              { left: 8, top: 8, w: 34, h: 16, dur: 22, delay: 0, op: 0.55 },
-              { left: 45, top: 5, w: 26, h: 13, dur: 18, delay: -3, op: 0.4 },
-              { left: 68, top: 14, w: 40, h: 19, dur: 26, delay: -9, op: 0.55 },
-              { left: 20, top: 24, w: 22, h: 11, dur: 16, delay: -6, op: 0.35 }
-            ];
-            return clouds.map(c => `<span class="cloud-el" style="left:${c.left}%; top:${c.top}%; width:${c.w}px; height:${c.h}px; animation-duration:${c.dur}s; animation-delay:${c.delay}s; opacity:${c.op};">${cloudSvg}</span>`).join('');
-          })()}
-        ` : ''}
-        ${window.AIAPPS_LOGIN_SCENE === 'mentor-people' ? `
+            return `<g>
+              <path d="${faceL}" fill="${lit}"/>
+              <path d="${faceR}" fill="${shade}"/>
+              <path d="${cap}" fill="rgba(226,242,238,0.82)"/>
+              <path d="${creases[0]}" fill="none" stroke="rgba(0,0,0,0.32)" stroke-width="1" vector-effect="non-scaling-stroke"/>
+              <path d="${creases[1]}" fill="none" stroke="rgba(255,255,255,0.11)" stroke-width="1" vector-effect="non-scaling-stroke"/>
+              <path d="${creases[2]}" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="1" vector-effect="non-scaling-stroke"/>
+              <path d="${creases[3]}" fill="none" stroke="rgba(0,0,0,0.22)" stroke-width="1" vector-effect="non-scaling-stroke"/>
+              <path d="${creases[4]}" fill="none" stroke="rgba(0,0,0,0.18)" stroke-width="1" vector-effect="non-scaling-stroke"/>
+              <path d="M${n(left)} 100 L${n(m.x)} ${n(m.y)}" fill="none" stroke="rgba(190,224,216,0.30)" stroke-width="1.1" vector-effect="non-scaling-stroke"/>
+            </g>`;
+          };
+          const grad = (id, from, to) => `<linearGradient id="${id}" x1="0" y1="0" x2="0.25" y2="1">`
+            + `<stop offset="0" stop-color="${from}"/><stop offset="1" stop-color="${to}"/></linearGradient>`;
+          const checkSvg = '<svg viewBox="0 0 24 24"><path d="M4 12.5l5.5 6L20 5.5"/></svg>';
+          const crossSvg = '<svg viewBox="0 0 24 24"><path d="M5.5 5.5l13 13M18.5 5.5l-13 13"/></svg>';
+          // Las marcas van al centro de la cara de cada montaña.
+          const markPos = peaks.map(m => ({ x: m.x, y: m.y + (100 - m.y) * 0.5 }));
+          const marks = [
+            { cls: 'check c1', i: 0, svg: checkSvg },
+            { cls: 'check c2', i: 1, svg: checkSvg },
+            { cls: 'check c3', i: 2, svg: checkSvg },
+            { cls: 'check c4', i: 3, svg: checkSvg },
+            { cls: 'check c5', i: 4, svg: checkSvg },
+            { cls: 'check c6', i: 5, svg: checkSvg },
+            { cls: 'cross x3', i: 2, svg: crossSvg },
+            { cls: 'cross x5', i: 4, svg: crossSvg }
+          ];
+          // Fuegos artificiales chiquitos sobre la cima, para la celebración final.
+          const burst = (color) => {
+            const rays = [], dots = [];
+            for (let k = 0; k < 12; k++) {
+              const a = k * 30 * Math.PI / 180;
+              const r2 = 16 + (k % 3) * 2;
+              rays.push(`<line x1="${n(20 + Math.cos(a) * 5)}" y1="${n(20 + Math.sin(a) * 5)}"`
+                + ` x2="${n(20 + Math.cos(a) * r2)}" y2="${n(20 + Math.sin(a) * r2)}"/>`);
+              dots.push(`<circle cx="${n(20 + Math.cos(a) * (r2 + 2.5))}" cy="${n(20 + Math.sin(a) * (r2 + 2.5))}" r="1.1"/>`);
+            }
+            return `<svg viewBox="0 0 40 40">`
+              + `<g stroke="${color}" stroke-width="1.5" stroke-linecap="round">${rays.join('')}</g>`
+              + `<g fill="${color}">${dots.join('')}</g></svg>`;
+          };
+          const fireworks = [
+            { cls: 'fw1', x: 82, y: -5, color: '#D8AE6E' },
+            { cls: 'fw2', x: 97, y: -1, color: '#7ecfc0' },
+            { cls: 'fw3', x: 89, y: -14, color: '#fff9e6' }
+          ];
+          return `
           <div class="growth-scene">
-            <svg class="growth-path" viewBox="0 0 100 100" preserveAspectRatio="none">
-              <path class="growth-line" d="M3 96 C 20 82, 14 60, 34 50 C 54 40, 44 18, 80 4" vector-effect="non-scaling-stroke"/>
-              <circle class="milestone m1" cx="8" cy="90"/>
-              <circle class="milestone m2" cx="28" cy="58"/>
-              <circle class="milestone m3" cx="46" cy="26"/>
-              <circle class="milestone m4" cx="74" cy="8"/>
+            <svg class="growth-range" viewBox="0 0 100 100" preserveAspectRatio="none">
+              <defs>
+                ${grad('mtnLitBack', '#4a6b64', '#2b433e')}
+                ${grad('mtnShadeBack', '#31504a', '#1e3430')}
+                ${grad('mtnLitFront', '#3d6159', '#233f3a')}
+                ${grad('mtnShadeFront', '#264541', '#152b27')}
+              </defs>
+              ${peaks.filter(m => m.layer === 'back').map(mountain).join('')}
+              ${peaks.filter(m => m.layer === 'front').map(mountain).join('')}
             </svg>
-            <div class="growth-flag" style="left:70%; top:-8%;">
-              <svg viewBox="0 0 24 24"><path d="M5 21V4"/><path d="M5 4.5h13l-3 4 3 4H5"/></svg>
-            </div>
+            ${marks.map(mk => `<span class="growth-mark ${mk.cls}" style="left:${markPos[mk.i].x}%; top:${n(markPos[mk.i].y)}%;">${mk.svg}</span>`).join('')}
+            ${fireworks.map(f => `<span class="firework ${f.cls}" style="left:${f.x}%; top:${f.y}%;">${burst(f.color)}</span>`).join('')}
             <div class="hop-figure">
               <svg viewBox="0 0 24 32">
                 <path d="M12 2.5 C16 2.5 16.6 6 15.4 9.4 C19.2 11.2 19.6 17 18 21.2 C16.8 26.6 14.2 29.5 12 29.5 C9.8 29.5 7.2 26.6 6 21.2 C4.4 17 4.8 11.2 8.6 9.4 C7.4 6 8 2.5 12 2.5 Z" fill="#fff9e6"/>
                 <ellipse cx="10.2" cy="5.6" rx="1.3" ry="0.9" fill="rgba(255,255,255,0.55)"/>
+                <path class="hop-arm" d="M16.4 17.2 C18.6 16.3 20.2 14.9 20.8 13.4" fill="none" stroke="#fff9e6" stroke-width="2.2" stroke-linecap="round"/>
+                <circle class="hop-hand" cx="21.3" cy="12.6" r="2" fill="#fff9e6"/>
               </svg>
+              <div class="growth-flag">
+                <svg viewBox="0 0 24 24"><path d="M5 21V4"/><path d="M5 4.5h13l-3 4 3 4H5"/></svg>
+              </div>
             </div>
           </div>
-        ` : ''}
+          `;
+        })() : ''}
         ${window.AIAPPS_LOGIN_SCENE === 'interview' ? (() => {
           const names = ['clipboard', 'magnifier', 'briefcase', 'chat-bubble', 'target', 'gear', 'graduation-cap', 'pencil', 'compass', 'trending-up', 'book', 'lightbulb', 'people', 'star', 'calendar', 'clock', 'bar-chart', 'flag'];
           const colors = ['#E03B2E', '#D8AE6E', '#4E8B8B', '#8C6BAE', '#E8935C', '#5C9BD8', '#7ecfc0'];
-          const cols = [3, 12, 21, 79, 88, 97];
-          const rows = [4, 14, 24, 76, 86, 96];
-          const cells = [];
-          rows.forEach(top => cols.forEach(left => cells.push({ top, left })));
+          const cells = scatterCells(36);
           return cells.map((cell, i) => {
             const name = names[i % names.length];
             const svgPath = ICONS[name];
             if (!svgPath) return '';
             const color = colors[i % colors.length];
-            const jitterTop = (Math.random() - 0.5) * 10;
-            const jitterLeft = (Math.random() - 0.5) * 7;
             const size = 1.7 + Math.random() * 1.0;
-            const pos = `top:${(cell.top + jitterTop).toFixed(1)}%; left:${(cell.left + jitterLeft).toFixed(1)}%; width:${size.toFixed(2)}rem; height:${size.toFixed(2)}rem;`;
+            const pos = `top:${cell.top.toFixed(1)}%; left:${cell.left.toFixed(1)}%; width:${size.toFixed(2)}rem; height:${size.toFixed(2)}rem;`;
             const delay = (i % 14) * 0.14 + Math.random() * 0.3;
-            return `<span class="interview-icon" style="${pos}"><span class="interview-icon-float" style="animation-delay:-${delay.toFixed(2)}s"><svg viewBox="0 0 24 24" style="stroke:${color}">${svgPath}</svg></span></span>`;
+            return `<span class="interview-icon" aria-hidden="true" style="${pos}"><span class="interview-icon-float" style="animation-delay:-${delay.toFixed(2)}s"><svg viewBox="0 0 24 24" style="stroke:${color}">${svgPath}</svg></span></span>`;
           }).join('');
         })() : ''}
-        ${!window.AIAPPS_LOGIN_SCENE ? (window.AIAPPS_LOGIN_DECORATIONS || []).map((iconName, i) => {
-          const cols = [3, 12, 21, 79, 88, 97];
-          const rows = [4, 14, 24, 76, 86, 96];
-          const cells = [];
-          rows.forEach(top => cols.forEach(left => cells.push({ top, left })));
-          const svgPath = ICONS[iconName];
-          if (!svgPath) return '';
-          const cell = cells[i % cells.length];
-          const jitterTop = (Math.random() - 0.5) * 12;
-          const jitterLeft = (Math.random() - 0.5) * 8;
-          const size = 1.7 + Math.random() * 1.1;
-          const pos = `top:${(cell.top + jitterTop).toFixed(1)}%; left:${(cell.left + jitterLeft).toFixed(1)}%; width:${size.toFixed(2)}rem; height:${size.toFixed(2)}rem;`;
-          const delay = (i % 8) * 0.55;
-          return `<span class="deco" style="${pos}"><span class="deco-float" style="animation-delay:${delay}s"><svg viewBox="0 0 24 24">${svgPath}</svg></span></span>`;
-        }).join('') : ''}
+        ${!window.AIAPPS_LOGIN_SCENE ? (() => {
+          const decoNames = window.AIAPPS_LOGIN_DECORATIONS || [];
+          // Se itera sobre las celdas, no sobre los nombres: `scatterCells` puede
+          // devolver menos posiciones de las pedidas si no todas entran.
+          return scatterCells(decoNames.length).map((cell, i) => {
+            const iconName = decoNames[i];
+            const svgPath = ICONS[iconName];
+            if (!svgPath) return '';
+            const size = 1.7 + Math.random() * 1.1;
+            const pos = `top:${cell.top.toFixed(1)}%; left:${cell.left.toFixed(1)}%; width:${size.toFixed(2)}rem; height:${size.toFixed(2)}rem;`;
+            const delay = (i % 8) * 0.55;
+            return `<span class="deco" aria-hidden="true" style="${pos}"><span class="deco-float" style="animation-delay:${delay}s"><svg viewBox="0 0 24 24">${svgPath}</svg></span></span>`;
+          }).join('');
+        })() : ''}
         <form class="card">
           ${window.AIAPPS_APP_NAME ? `
           <div class="brand">
@@ -948,9 +1502,19 @@
               if (window.AIAPPS_APP_LOGO_URL && window.AIAPPS_APP_EMOJI) {
                 return `<span class="brand-fallback-emoji" style="display:none">${window.AIAPPS_APP_EMOJI} </span>`;
               }
+              if (window.AIAPPS_LOGO_BARS) {
+                return `<span class="logo-bars" aria-hidden="true"><svg viewBox="0 0 24 24">
+                  <rect class="lb-1" x="3" y="4" width="5" height="16" rx="1.4"/>
+                  <rect class="lb-2" x="9.5" y="4" width="5" height="16" rx="1.4"/>
+                  <rect class="lb-3" x="16" y="4" width="5" height="16" rx="1.4"/>
+                </svg></span> `;
+              }
               if (!window.AIAPPS_APP_EMOJI) return '';
               if (window.AIAPPS_LOGO_COINS) {
                 return `<span class="emoji-wrap">${window.AIAPPS_APP_EMOJI}<span class="coin">🪙</span><span class="coin">🪙</span><span class="coin">🪙</span></span> `;
+              }
+              if (window.AIAPPS_LOGO_PLANE) {
+                return `<span class="logo-plane" aria-hidden="true"><svg class="lp-cloud lp-cloud-1" viewBox="0 0 40 18"><ellipse cx="15" cy="11" rx="14" ry="5.5"/><ellipse cx="26" cy="8" rx="10" ry="5.5"/></svg><span class="lp-glyph">${window.AIAPPS_APP_EMOJI}</span><svg class="lp-cloud lp-cloud-2" viewBox="0 0 28 16"><ellipse cx="12" cy="10" rx="11" ry="5"/><ellipse cx="20" cy="7" rx="7" ry="4.5"/></svg></span>`;
               }
               return window.AIAPPS_APP_EMOJI + ' ';
             })()}<span style="color:${window.AIAPPS_APP_ACCENT || '#B8863B'}">${window.AIAPPS_APP_NAME}</span></div>
@@ -995,6 +1559,50 @@
     coverEl.addEventListener("mouseleave", () => {
       cardEl.style.transform = "perspective(800px) rotateX(0deg) rotateY(0deg)";
     });
+
+    // Cada 2 segundos, dos iconos al azar hacen el mismo zoom que al pasar el mouse,
+    // sin que el usuario tenga que tocarlos.
+    const focusables = Array.from(shadow.querySelectorAll(".interview-icon, .deco"));
+    if (focusables.length >= 2) {
+      host._aiappsTimers = host._aiappsTimers || [];
+      host._aiappsCleanups = host._aiappsCleanups || [];
+      const motionQuery = window.matchMedia ? window.matchMedia("(prefers-reduced-motion: reduce)") : null;
+      let focusTimer = null;
+
+      function startAutoFocus() {
+        if (focusTimer !== null) return;
+        focusTimer = setInterval(() => {
+          const pool = focusables.filter((el) => !el.classList.contains("auto-focus"));
+          if (pool.length < 2) return;
+          const first = Math.floor(Math.random() * pool.length);
+          let second = Math.floor(Math.random() * (pool.length - 1));
+          if (second >= first) second++;
+          [pool[first], pool[second]].forEach((el) => {
+            el.classList.add("auto-focus");
+            setTimeout(() => el.classList.remove("auto-focus"), 1200);
+          });
+        }, 2000);
+        host._aiappsTimers.push(focusTimer);
+      }
+
+      function stopAutoFocus() {
+        if (focusTimer === null) return;
+        clearInterval(focusTimer);
+        host._aiappsTimers = host._aiappsTimers.filter((id) => id !== focusTimer);
+        focusTimer = null;
+        focusables.forEach((el) => el.classList.remove("auto-focus"));
+      }
+
+      if (!(motionQuery && motionQuery.matches)) startAutoFocus();
+
+      // La preferencia se puede activar con el login ya abierto: sin este
+      // listener, el zoom que ya arrancó seguiría corriendo hasta recargar.
+      if (motionQuery && motionQuery.addEventListener) {
+        const onMotionChange = (e) => { if (e.matches) stopAutoFocus(); else startAutoFocus(); };
+        motionQuery.addEventListener("change", onMotionChange);
+        host._aiappsCleanups.push(() => motionQuery.removeEventListener("change", onMotionChange));
+      }
+    }
 
     const form = shadow.querySelector("form");
     const titleEl = shadow.querySelector(".title");
