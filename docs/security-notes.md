@@ -57,3 +57,40 @@ Pendiente (no bloqueante, no implementado hoy): el patrón `scopedKey`/`isSyncKe
 ### Histórico
 
 - **2026-07-23/24 — ventana de carrera en `save()` antes de `cachedUserId`:** ver "Actualización 2026-07-24" arriba. Corregido en `a4a2d10`.
+
+## Revisión 2026-07-24 — commit `ba88936` (`hub-header-apps-label-lp-logo`)
+
+**Alcance:** único cambio bajo revisión, `auth-gate.js` (fondo decorativo del login de StaffGate: nueva `scatterCells(count)` para repartir los iconos por toda la pantalla en vez de solo las esquinas, nueva clase `.auto-focus` + `setInterval` de 2s que la aplica a 2 iconos al azar, y `removeExistingOverlay()` ahora cancela `existing._aiappsTimers` antes de quitar el overlay) + `release-notes/2026-07-24-8.md`.
+
+### 1. Datos de usuario en el HTML generado
+
+**Sin nueva superficie de inyección.** Todo lo que `scatterCells()` interpola en `style="..."` (`auth-gate.js:1284`, `:1297`) son números (`cell.top`/`cell.left` vía `.toFixed(1)`, `size` vía `Math.random()`) — nunca texto de usuario. `window.AIAPPS_LOGIN_LAYOUT` (`auth-gate.js:59`) solo se compara con la cadena literal `'right'`, nunca se interpola en HTML.
+
+El único camino con texto controlado externamente que pasa por `scatterCells()` es `window.AIAPPS_LOGIN_DECORATIONS` (array de nombres de icono) vía `ICONS[iconName]` (`auth-gate.js:1293`). Es el mismo patrón de acceso a objeto por clave que ya existía **antes** de este commit (antes indexaba en `cells[i % cells.length]` con una rejilla fija de 6x6; ahora indexa en `scatterCells(decoNames.length)` — el cambio es de dónde sale la posición, no de cómo se valida `iconName`). Confirmado con `grep -rn "AIAPPS_LOGIN_DECORATIONS" *.html` en las 5 apps: **ninguna la define hoy** — es una rama muerta en el código actual, no alimentada por ningún input real. Detalle de la revisión teórica de `iconName` (incluida la pregunta de "¿`__proto__` como nombre de icono podría colarse?") en `docs/staffgate/requerimientos.md`, caso borde 13 — conclusión: no explotable ni siquiera en teoría, porque el peor resultado posible (`ICONS["__proto__"]` devolviendo `Object.prototype`) se interpola como texto inerte (`"[object Object]"`), sin etiquetas HTML.
+
+### 2. Flujo de auth / sesión / construcción-destrucción del overlay
+
+**Sin cambios de riesgo, con una mejora real.** Confirmado leyendo el archivo completo, no solo el diff:
+- `guard()` (`auth-gate.js:1687-1709`) no aparece en el diff; sigue llamando `buildConnectionErrorOverlay()` si `!window.supabaseClient` (fail-closed intacto) y `buildOverlay()` solo si `!session`.
+- El nuevo `setInterval` se crea dentro de `buildOverlay()` (`auth-gate.js:98`, confirmado mismo `host.id = "aiapps-auth-gate"` que usa `removeExistingOverlay()`) y solo manipula clases CSS (`auto-focus`) sobre los iconos decorativos capturados en `focusables` (`shadow.querySelectorAll(".interview-icon, .deco")`) — nunca referencia `emailInput`/`pwInput` ni ningún dato de sesión. No hay forma de que el timer filtre credenciales.
+- Al iniciar sesión con éxito, `signInWithPassword` (`auth-gate.js:1438`) va seguido de `location.reload()` (`auth-gate.js:1445`) — recarga completa de página, que destruye todo el estado JS (intervalos incluidos) sin depender de que `clearInterval` se haya llamado. `aiAppsSignOut()` (`auth-gate.js:1711-1714`) hace lo mismo.
+- El único camino donde `buildOverlay()` podría ser reemplazado *sin* recarga completa es el evento `PASSWORD_RECOVERY` → `buildSetNewPasswordOverlay()` (`auth-gate.js:1451`). Verificado: esa función también empieza con `removeExistingOverlay()` (`auth-gate.js:1452`) antes de crear su propio host con el mismo id `aiapps-auth-gate` — así que el intervalo de la pantalla de login anterior sí se cancela correctamente en ese caso, que es exactamente para lo que se agregó el guardado de `_aiappsTimers`. Antes de este commit no había timers que cancelar; ahora si los hay, se cancelan.
+- No se detectó ninguna ruta de guardado-antes-de-cargar (`save-before-load`) tocada por este diff — el diff no toca `load()`/`save()`/`cachedUserId` en ninguna de las 5 apps.
+
+### 3. `existing._aiappsTimers` como propiedad de un nodo DOM público
+
+**Observación de bajo riesgo, no bloqueante.** `host._aiappsTimers` (`auth-gate.js:952-953`) es una propiedad JS normal puesta sobre un elemento accesible vía `document.getElementById("aiapps-auth-gate")` — cualquier script que corra en la misma página podría leerla o sobrescribirla. En la práctica esto no abre una superficie nueva: cualquier script que comparta la página ya tiene acceso completo al DOM (incluidos los campos de email/contraseña reales, sin necesidad de tocar esta propiedad). Confirmado que StaffGate.html no carga ningún `<script src>` nuevo con este commit — sigue siendo solo Google Fonts, `unpkg.com/@supabase/supabase-js@2` (preexistente, sin pin de versión menor — riesgo de cadena de suministro ya conocido, no de este commit) y los 2 archivos locales (`grep -n "<script src\|<link" StaffGate.html`). No hay script de terceros no confiable que pueda aprovechar esto hoy.
+
+### 4. Secretos / dependencias nuevas
+
+Sin coincidencias de `service_role`, `BEGIN (RSA|PRIVATE)`, contraseñas embebidas, `apikey`/`secret` nuevos, ni `<script src>`/`<link>` nuevos en el diff (`git show ba88936 -- auth-gate.js | grep -iE "service_role|BEGIN|password\s*=|apikey|secret|<script src|<link"` sin resultados). No se corrió un escaneo adicional de historial completo para este commit puntual porque no introduce ningún archivo nuevo ni toca ninguna ruta de credenciales — el patrón ya se escaneó sobre todo el historial de `auth-gate.js` en la revisión de MyTravel del mismo día, sin hallazgos.
+
+### 5. Zoom automático y clickjacking sobre "Entrar"
+
+**No hay clickjacking, confirmado por análisis estático de CSS/stacking (no verificado visualmente en vivo — ver caso borde 14).** `.card` tiene `z-index:4` explícito (`auth-gate.js:117`); `.deco`/`.interview-icon` no declaran `z-index` (quedan en `auto`, por debajo de cualquier valor positivo explícito en el mismo contexto de apilamiento). Como ambos son hijos directos del mismo `.cover` (confirmado leyendo la estructura completa: `.cover` abre en `auth-gate.js:786`, los iconos se insertan en `auth-gate.js:1274-1301`, `<form class="card">` en `auth-gate.js:1302`), el navegador siempre entrega el clic al elemento con mayor `z-index` en ese punto — la tarjeta gana el hit-test incluso si un icono agrandado (`transform:scale(1.3)` del `.auto-focus`) se solapara visualmente. Además, `scatterCells()` excluye por diseño la columna de la tarjeta (`sameColumnAsCard`, `auth-gate.js:68`) y solo coloca iconos "arriba/abajo" en los extremos de pantalla (`top<=10`/`top>=88`, `auth-gate.js:69`), así que el solape ni siquiera debería ocurrir en desktop. Queda como caso borde 14 en `docs/staffgate/requerimientos.md` la verificación visual en viewport móvil real, que esta revisión no pudo hacer (limitación de herramienta ya documentada por otros agentes).
+
+**Actualización (tech lead, misma sesión):** el análisis de clickjacking (sin `z-index` en los iconos) sigue siendo correcto — nunca hubo riesgo de clic. Pero la premisa geométrica ("el solape ni siquiera debería ocurrir en desktop") resultó **falsa en móvil**: qa-lead confirmó en vivo que sí había solape real (ver `docs/staffgate/requerimientos.md`, caso 19) porque `scatterCells()` calculaba el ancho de la tarjeta sin contar su padding. Corregido — ver caso 19 para el detalle del fix y su reverificación.
+
+### Veredicto: APROBADO
+
+Cambio confinado a la construcción/estilo del fondo decorativo del login (posicionamiento y una animación CSS con clase toggleada por `setInterval`); sin nuevas superficies de inyección explotables hoy; auth/sesión/RLS intactos; `removeExistingOverlay()` cierra correctamente el único camino real donde el nuevo timer podría sobrevivir a un rebuild del overlay; sin secretos ni dependencias nuevas. Dos observaciones de bajo riesgo (no bloqueantes) documentadas como casos borde 13 y 14 en `docs/staffgate/requerimientos.md` — el caso 14 (geometría móvil) resultó ser un problema real, ya corregido.

@@ -109,7 +109,11 @@
     // que la esquina de un icono tampoco toque la tarjeta.
     const iconW = 46 / vw * 100;
     const iconH = 46 / vh * 100;
-    const cardW = Math.min(320, vw * 0.9) / vw * 100;
+    // `.card` no tiene `box-sizing:border-box`, así que a su `width` hay que
+    // sumarle los 28px de padding de cada lado: en un teléfono de 375px el
+    // ancho real es 376px — toda la pantalla, no el 85% que da la regla CSS
+    // sola. Calcularlo de menos fue lo que dejó iconos sobre el formulario.
+    const cardW = Math.min(Math.min(320, vw * 0.9) + 56, vw) / vw * 100;
     const cardH = Math.min(460 / vh * 100, 88);
     const cardRight = alignRight ? 92 : 50 + cardW / 2;
     const cardLeft = (alignRight ? 92 - cardW : 50 - cardW / 2);
@@ -1507,9 +1511,23 @@
       cardEl.style.transform = "perspective(800px) rotateX(0deg) rotateY(0deg)";
     });
 
+    // Red de seguridad: scatterCells() calcula la caja de la tarjeta a partir
+    // de su CSS, y ya se equivocó una vez (no contaba el padding). En vez de
+    // confiar de nuevo en el cálculo, acá se mide la tarjeta real ya pintada
+    // y se oculta cualquier icono que de verdad la toque.
+    const cardBox = cardEl.getBoundingClientRect();
+    if (cardBox.width > 0) {
+      shadow.querySelectorAll(".interview-icon, .deco").forEach((el) => {
+        const r = el.getBoundingClientRect();
+        if (r.right > cardBox.left && r.left < cardBox.right && r.bottom > cardBox.top && r.top < cardBox.bottom) {
+          el.style.display = "none";
+        }
+      });
+    }
+
     // Cada 2 segundos, dos iconos al azar hacen el mismo zoom que al pasar el mouse,
     // sin que el usuario tenga que tocarlos.
-    const focusables = Array.from(shadow.querySelectorAll(".interview-icon, .deco"));
+    const focusables = Array.from(shadow.querySelectorAll(".interview-icon, .deco")).filter((el) => el.style.display !== "none");
     if (focusables.length >= 2) {
       host._aiappsTimers = host._aiappsTimers || [];
       host._aiappsCleanups = host._aiappsCleanups || [];
