@@ -48,6 +48,7 @@
     const existing = document.getElementById("aiapps-auth-gate");
     if (!existing) return;
     if (existing._aiappsTimers) existing._aiappsTimers.forEach((id) => clearInterval(id));
+    if (existing._aiappsCleanups) existing._aiappsCleanups.forEach((fn) => fn());
     existing.remove();
   }
 
@@ -1116,7 +1117,7 @@
             const size = 1.7 + Math.random() * 1.0;
             const pos = `top:${cell.top.toFixed(1)}%; left:${cell.left.toFixed(1)}%; width:${size.toFixed(2)}rem; height:${size.toFixed(2)}rem;`;
             const delay = (i % 14) * 0.14 + Math.random() * 0.3;
-            return `<span class="interview-icon" style="${pos}"><span class="interview-icon-float" style="animation-delay:-${delay.toFixed(2)}s"><svg viewBox="0 0 24 24" style="stroke:${color}">${svgPath}</svg></span></span>`;
+            return `<span class="interview-icon" aria-hidden="true" style="${pos}"><span class="interview-icon-float" style="animation-delay:-${delay.toFixed(2)}s"><svg viewBox="0 0 24 24" style="stroke:${color}">${svgPath}</svg></span></span>`;
           }).join('');
         })() : ''}
         ${!window.AIAPPS_LOGIN_SCENE ? (() => {
@@ -1129,7 +1130,7 @@
             const size = 1.7 + Math.random() * 1.1;
             const pos = `top:${cell.top.toFixed(1)}%; left:${cell.left.toFixed(1)}%; width:${size.toFixed(2)}rem; height:${size.toFixed(2)}rem;`;
             const delay = (i % 8) * 0.55;
-            return `<span class="deco" style="${pos}"><span class="deco-float" style="animation-delay:${delay}s"><svg viewBox="0 0 24 24">${svgPath}</svg></span></span>`;
+            return `<span class="deco" aria-hidden="true" style="${pos}"><span class="deco-float" style="animation-delay:${delay}s"><svg viewBox="0 0 24 24">${svgPath}</svg></span></span>`;
           }).join('');
         })() : ''}
         <form class="card">
@@ -1193,20 +1194,45 @@
     // Cada 2 segundos, dos iconos al azar hacen el mismo zoom que al pasar el mouse,
     // sin que el usuario tenga que tocarlos.
     const focusables = Array.from(shadow.querySelectorAll(".interview-icon, .deco"));
-    const reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (focusables.length >= 2 && !reduceMotion) {
+    if (focusables.length >= 2) {
       host._aiappsTimers = host._aiappsTimers || [];
-      host._aiappsTimers.push(setInterval(() => {
-        const pool = focusables.filter((el) => !el.classList.contains("auto-focus"));
-        if (pool.length < 2) return;
-        const first = Math.floor(Math.random() * pool.length);
-        let second = Math.floor(Math.random() * (pool.length - 1));
-        if (second >= first) second++;
-        [pool[first], pool[second]].forEach((el) => {
-          el.classList.add("auto-focus");
-          setTimeout(() => el.classList.remove("auto-focus"), 1200);
-        });
-      }, 2000));
+      host._aiappsCleanups = host._aiappsCleanups || [];
+      const motionQuery = window.matchMedia ? window.matchMedia("(prefers-reduced-motion: reduce)") : null;
+      let focusTimer = null;
+
+      function startAutoFocus() {
+        if (focusTimer !== null) return;
+        focusTimer = setInterval(() => {
+          const pool = focusables.filter((el) => !el.classList.contains("auto-focus"));
+          if (pool.length < 2) return;
+          const first = Math.floor(Math.random() * pool.length);
+          let second = Math.floor(Math.random() * (pool.length - 1));
+          if (second >= first) second++;
+          [pool[first], pool[second]].forEach((el) => {
+            el.classList.add("auto-focus");
+            setTimeout(() => el.classList.remove("auto-focus"), 1200);
+          });
+        }, 2000);
+        host._aiappsTimers.push(focusTimer);
+      }
+
+      function stopAutoFocus() {
+        if (focusTimer === null) return;
+        clearInterval(focusTimer);
+        host._aiappsTimers = host._aiappsTimers.filter((id) => id !== focusTimer);
+        focusTimer = null;
+        focusables.forEach((el) => el.classList.remove("auto-focus"));
+      }
+
+      if (!(motionQuery && motionQuery.matches)) startAutoFocus();
+
+      // La preferencia se puede activar con el login ya abierto: sin este
+      // listener, el zoom que ya arrancó seguiría corriendo hasta recargar.
+      if (motionQuery && motionQuery.addEventListener) {
+        const onMotionChange = (e) => { if (e.matches) stopAutoFocus(); else startAutoFocus(); };
+        motionQuery.addEventListener("change", onMotionChange);
+        host._aiappsCleanups.push(() => motionQuery.removeEventListener("change", onMotionChange));
+      }
     }
 
     const form = shadow.querySelector("form");
