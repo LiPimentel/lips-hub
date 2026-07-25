@@ -2,6 +2,12 @@
 
 Hub personal con 5 apps HTML independientes (`index.html` + `bitacora-mentor.html`, `StaffGate.html`, `lpbag.html`, `mytravel-pro-v4.html`, `generador_gantt_2.html`), sincronizadas con Supabase.
 
+## Qué se publica en el sitio (importante)
+
+El sitio **no** publica la raíz del repo: publica lo que `build.sh` copia a `dist/` (las 6 páginas HTML, los 3 JS compartidos, `_headers`, y `assets/` si existe). `docs/`, `release-notes/` y `.claude/` quedan fuera a propósito — son memoria de trabajo, no contenido público.
+
+Consecuencia práctica: **cualquier archivo nuevo que el sitio necesite hay que agregarlo a `build.sh`**, o funcionará en local y no en producción. Imágenes y CSS propios van en `assets/`, que ya se copia solo. Ver `docs/hosting-cloudflare-pages.md`.
+
 ## Notas de versión (obligatorio)
 
 Cada vez que se haga un cambio en el código de este proyecto, generar una nota de versión y guardarla en la carpeta `release-notes/` (en la raíz del proyecto), con nombre `YYYY-MM-DD.md` (usar `YYYY-MM-DD-2.md`, `-3.md`, etc. si ya hay una nota ese mismo día).
