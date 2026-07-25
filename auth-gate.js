@@ -322,7 +322,7 @@
         }
         .travel-skyline{
           position:absolute; left:0; right:0; bottom:0; height:46%;
-          filter:blur(2px); opacity:0.6; pointer-events:none;
+          filter:blur(1.2px); opacity:0.66; pointer-events:none;
         }
         .travel-skyline svg{ width:100%; height:100%; display:block; }
         .travel-cloud-drift{
@@ -387,6 +387,46 @@
           10%{ opacity:0.85; }
           88%{ opacity:0.85; }
           100%{ left:10%; top:-10%; transform:rotate(323deg); opacity:0; }
+        }
+        /* Avion del logo de MyTravel: flota en su sitio, con dos nubecitas. */
+        .logo-plane{
+          position:relative;
+          display:inline-block;
+          margin-right:0.18em;
+          padding:0 0.12em;
+        }
+        .logo-plane .lp-glyph{
+          display:inline-block;
+          animation:logo-plane-float 3.6s ease-in-out infinite;
+        }
+        .logo-plane .lp-cloud{
+          position:absolute;
+          height:auto;
+          fill:#A9BFC4;
+          opacity:0.6;
+          pointer-events:none;
+        }
+        .logo-plane .lp-cloud-1{
+          width:0.62em; top:-0.06em; left:-0.42em;
+          animation:logo-cloud-float 5s ease-in-out infinite;
+        }
+        .logo-plane .lp-cloud-2{
+          width:0.44em; bottom:0.02em; right:-0.3em; opacity:0.45;
+          animation:logo-cloud-float 6.4s ease-in-out infinite reverse;
+        }
+        @keyframes logo-plane-float{
+          0%, 100%{ transform:translateY(0); }
+          50%{ transform:translateY(-0.16em); }
+        }
+        @keyframes logo-cloud-float{
+          0%, 100%{ transform:translateY(0); }
+          50%{ transform:translateY(-0.08em); }
+        }
+        @media (prefers-reduced-motion: reduce){
+          /* Sin movimiento: aviones y nubes se quedan quietos en su posicion. */
+          .plane{ animation:none !important; opacity:0.85; }
+          .cloud-el, .travel-cloud-drift{ animation:none !important; }
+          .logo-plane .lp-glyph, .logo-plane .lp-cloud{ animation:none; }
         }
         .growth-scene{
           position:absolute; left:3%; top:9%; width:min(72%,420px); height:82%;
@@ -790,7 +830,158 @@
           }).join('');
           return `<div class="gantt-scene">${rows}</div>`;
         })() : ''}
-        ${window.AIAPPS_LOGIN_SCENE === 'travel-sky' ? `
+        ${window.AIAPPS_LOGIN_SCENE === 'travel-sky' ? (() => {
+          const n = (v) => Number(v).toFixed(1);
+          const groundY = 108;
+
+          // --- Ciudad: mas edificios, con formas y alturas distintas.
+          // Los mas altos (h >= 78) rebasan las cimas de las montanas.
+          const buildings = [
+            { x: -4, w: 18, h: 28, type: 'flat' },
+            { x: 12, w: 12, h: 44, type: 'antenna' },
+            { x: 23, w: 16, h: 20, type: 'pitch' },
+            { x: 37, w: 14, h: 34, type: 'step' },
+            { x: 49, w: 18, h: 62, type: 'setback' },
+            { x: 65, w: 12, h: 26, type: 'flat' },
+            { x: 75, w: 16, h: 38, type: 'slant' },
+            { x: 89, w: 11, h: 18, type: 'dome' },
+            { x: 97, w: 20, h: 52, type: 'step' },
+            { x: 115, w: 12, h: 30, type: 'flat' },
+            { x: 125, w: 13, h: 88, type: 'antenna' },
+            { x: 139, w: 16, h: 32, type: 'pitch' },
+            { x: 153, w: 12, h: 24, type: 'flat' },
+            { x: 163, w: 18, h: 46, type: 'setback' },
+            { x: 181, w: 12, h: 20, type: 'flat' },
+            { x: 191, w: 15, h: 36, type: 'step' },
+            { x: 205, w: 20, h: 80, type: 'setback' },
+            { x: 223, w: 12, h: 22, type: 'dome' },
+            { x: 233, w: 16, h: 40, type: 'slant' },
+            { x: 247, w: 11, h: 28, type: 'flat' },
+            { x: 256, w: 18, h: 58, type: 'antenna' },
+            { x: 273, w: 14, h: 24, type: 'pitch' },
+            { x: 285, w: 12, h: 34, type: 'flat' },
+            { x: 295, w: 20, h: 92, type: 'setback' },
+            { x: 313, w: 13, h: 26, type: 'step' },
+            { x: 325, w: 16, h: 44, type: 'slant' },
+            { x: 339, w: 12, h: 20, type: 'flat' },
+            { x: 349, w: 18, h: 64, type: 'antenna' },
+            { x: 365, w: 14, h: 30, type: 'dome' },
+            { x: 377, w: 16, h: 38, type: 'step' },
+            { x: 391, w: 16, h: 22, type: 'flat' }
+          ];
+          const rect = (x, y, w, h) => `<rect x="${n(x)}" y="${n(y)}" width="${n(w)}" height="${n(h)}"/>`;
+          const buildingShape = (b) => {
+            const top = groundY - b.h;
+            switch (b.type) {
+              case 'step':
+                return rect(b.x, top + 7, b.w, b.h - 7) + rect(b.x + b.w * 0.22, top, b.w * 0.56, 8);
+              case 'antenna':
+                return rect(b.x, top, b.w, b.h) + rect(b.x + b.w / 2 - 0.7, top - 11, 1.4, 11);
+              case 'pitch':
+                return rect(b.x, top + 6, b.w, b.h - 6) +
+                  `<path d="M${n(b.x - 1)} ${n(top + 6.5)} L${n(b.x + b.w / 2)} ${n(top)} L${n(b.x + b.w + 1)} ${n(top + 6.5)} Z"/>`;
+              case 'dome':
+                return rect(b.x, top, b.w, b.h) +
+                  `<path d="M${n(b.x + 1)} ${n(top + 0.5)} a ${n(b.w / 2 - 1)} ${n(b.w / 2 - 1)} 0 0 1 ${n(b.w - 2)} 0 Z"/>`;
+              case 'slant':
+                return `<path d="M${n(b.x)} ${n(groundY)} L${n(b.x)} ${n(top + 9)} L${n(b.x + b.w)} ${n(top)} L${n(b.x + b.w)} ${n(groundY)} Z"/>`;
+              case 'setback':
+                return rect(b.x, groundY - b.h * 0.55, b.w, b.h * 0.55) +
+                  rect(b.x + b.w * 0.15, groundY - b.h * 0.85, b.w * 0.7, b.h * 0.3) +
+                  rect(b.x + b.w * 0.29, top, b.w * 0.42, b.h * 0.15) +
+                  rect(b.x + b.w / 2 - 0.6, top - 8, 1.2, 8);
+              default:
+                return rect(b.x, top, b.w, b.h);
+            }
+          };
+          const cityPath = rect(-2, groundY, 404, 140 - groundY) + buildings.map(buildingShape).join('');
+
+          // Ventanas encendidas, solo dentro del cuerpo solido de cada edificio.
+          const lights = buildings.map((b) => {
+            if (b.h < 16) return '';
+            const bodyH = b.h * (b.type === 'setback' ? 0.5 : 0.8);
+            const cols = Math.max(1, Math.floor((b.w - 4) / 6));
+            const rows = Math.max(1, Math.floor((bodyH - 8) / 6));
+            const x0 = b.x + (b.w - (cols - 1) * 6) / 2;
+            let out = '';
+            for (let c = 0; c < cols; c++) {
+              for (let r = 0; r < rows; r++) {
+                if (Math.random() > 0.42) continue;
+                out += `<circle cx="${n(x0 + c * 6)}" cy="${n(groundY - 6 - r * 6)}" r="1.1"/>`;
+              }
+            }
+            return out;
+          }).join('');
+
+          // --- Semi bosque al pie de las montanas: dos franjas de arboles.
+          const tree = (cx, base, h, kind) => {
+            const w = h * 0.55;
+            if (kind === 0) {
+              return `<path d="M${n(cx)} ${n(base - h)} L${n(cx + w * 0.34)} ${n(base - h * 0.5)} L${n(cx + w * 0.16)} ${n(base - h * 0.5)} L${n(cx + w * 0.5)} ${n(base)} L${n(cx - w * 0.5)} ${n(base)} L${n(cx - w * 0.16)} ${n(base - h * 0.5)} L${n(cx - w * 0.34)} ${n(base - h * 0.5)} Z"/>`;
+            }
+            if (kind === 1) {
+              return `<rect x="${n(cx - 0.6)}" y="${n(base - h * 0.45)}" width="1.2" height="${n(h * 0.45)}"/>` +
+                `<ellipse cx="${n(cx)}" cy="${n(base - h * 0.68)}" rx="${n(w * 0.62)}" ry="${n(h * 0.36)}"/>`;
+            }
+            return `<ellipse cx="${n(cx)}" cy="${n(base - h * 0.3)}" rx="${n(w * 0.8)}" ry="${n(h * 0.34)}"/>` +
+              `<ellipse cx="${n(cx - w * 0.45)}" cy="${n(base - h * 0.2)}" rx="${n(w * 0.5)}" ry="${n(h * 0.24)}"/>`;
+          };
+          const forestBand = (step, baseMin, baseVar, hMin, hVar) => {
+            let out = '';
+            for (let x = -6; x < 406; x += step) {
+              const cx = x + (Math.random() - 0.5) * step * 0.7;
+              const base = baseMin + Math.random() * baseVar;
+              const h = hMin + Math.random() * hVar;
+              const r = Math.random();
+              out += tree(cx, base, h, r < 0.6 ? 0 : r < 0.88 ? 1 : 2);
+            }
+            return out;
+          };
+          // Franja alta: el bosque que se ve al pie de las montanas, por encima
+          // de los edificios bajos. Franja baja: arboles a nivel de la ciudad.
+          const forestFar = forestBand(4.5, 92, 6, 7, 9);
+          const forestNear = forestBand(6, 102, 6, 10, 14);
+
+          const planeIcon = '<path d="M22 16v-2l-8.5-5V3.5c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5V9L2 14v2l8.5-2.5V19L8 20.5V22l4-1 4 1v-1.5L13.5 19v-5.5L22 16z"/>';
+          const planes = [
+            { anim: 'fly-1', dur: 15, delay: 0, layer: 'plane-behind', x: 12, y: 62, rot: 55 },
+            { anim: 'fly-2', dur: 18, delay: 3, layer: 'plane-front', x: 86, y: 22, rot: 243 },
+            { anim: 'fly-3', dur: 13, delay: 7, layer: 'plane-front', x: 18, y: 18, rot: 78 },
+            { anim: 'fly-4', dur: 20, delay: 1, layer: 'plane-behind', x: 78, y: 70, rot: 31 },
+            { anim: 'fly-5', dur: 17, delay: 5, layer: 'plane-front', x: 8, y: 34, rot: 286 },
+            { anim: 'fly-6', dur: 22, delay: 9, layer: 'plane-front', x: 90, y: 52, rot: 323 }
+          ];
+          const planeEls = planes.map((p) => `<span class="plane ${p.layer}" style="left:${p.x}%; top:${p.y}%; transform:rotate(${p.rot}deg); animation:${p.anim} ${p.dur}s linear infinite; animation-delay:${p.delay}s;"><svg viewBox="0 0 24 24">${planeIcon}</svg></span>`).join('');
+
+          // --- Nubes de pantalla: varias formas distintas, no siempre la misma.
+          const cloudShapes = {
+            wide: { ratio: 48 / 22, svg: '<svg viewBox="0 0 48 22" fill="#e8f4f2"><ellipse cx="18" cy="14" rx="17" ry="7.5"/><ellipse cx="31" cy="10" rx="12" ry="7"/></svg>' },
+            puffy: { ratio: 48 / 24, svg: '<svg viewBox="0 0 48 24" fill="#e8f4f2"><ellipse cx="14" cy="16" rx="12" ry="7"/><ellipse cx="25" cy="11" rx="13" ry="9"/><ellipse cx="36" cy="16" rx="11" ry="6.5"/></svg>' },
+            wispy: { ratio: 48 / 14, svg: '<svg viewBox="0 0 48 14" fill="#e8f4f2"><ellipse cx="24" cy="9" rx="23" ry="4"/><ellipse cx="30" cy="6" rx="12" ry="3"/></svg>' },
+            puff: { ratio: 24 / 20, svg: '<svg viewBox="0 0 24 20" fill="#e8f4f2"><ellipse cx="12" cy="12" rx="11" ry="7"/><ellipse cx="15" cy="8" rx="7" ry="5"/></svg>' },
+            tower: { ratio: 40 / 28, svg: '<svg viewBox="0 0 40 28" fill="#e8f4f2"><ellipse cx="18" cy="21" rx="16" ry="6.5"/><ellipse cx="20" cy="14" rx="12" ry="8"/><ellipse cx="24" cy="8" rx="8" ry="6"/></svg>' },
+            flat: { ratio: 56 / 18, svg: '<svg viewBox="0 0 56 18" fill="#e8f4f2"><ellipse cx="20" cy="12" rx="19" ry="5.5"/><ellipse cx="34" cy="9" rx="14" ry="6"/><ellipse cx="46" cy="12" rx="9" ry="4.5"/></svg>' }
+          };
+          const clouds = [
+            { s: 'puffy', left: 6, top: 7, w: 44, dur: 24, delay: 0, op: 0.55 },
+            { s: 'wide', left: 26, top: 3, w: 32, dur: 19, delay: -4, op: 0.4 },
+            { s: 'wispy', left: 44, top: 9, w: 52, dur: 28, delay: -11, op: 0.32 },
+            { s: 'flat', left: 64, top: 4, w: 58, dur: 25, delay: -7, op: 0.5 },
+            { s: 'puff', left: 84, top: 11, w: 22, dur: 17, delay: -2, op: 0.42 },
+            { s: 'tower', left: 14, top: 19, w: 34, dur: 30, delay: -13, op: 0.45 },
+            { s: 'wide', left: 72, top: 20, w: 40, dur: 21, delay: -5, op: 0.5 },
+            { s: 'puff', left: 16, top: 29, w: 18, dur: 15, delay: -9, op: 0.3 },
+            { s: 'wispy', left: 2, top: 40, w: 46, dur: 33, delay: -3, op: 0.28 },
+            { s: 'puffy', left: 88, top: 30, w: 30, dur: 26, delay: -16, op: 0.4 },
+            { s: 'flat', left: 78, top: 41, w: 44, dur: 29, delay: -6, op: 0.25 },
+            { s: 'puff', left: 6, top: 60, w: 16, dur: 18, delay: -12, op: 0.22 }
+          ];
+          const cloudEls = clouds.map((c) => {
+            const shape = cloudShapes[c.s];
+            return `<span class="cloud-el" style="left:${c.left}%; top:${c.top}%; width:${c.w}px; height:${n(c.w / shape.ratio)}px; animation-duration:${c.dur}s; animation-delay:${c.delay}s; opacity:${c.op};">${shape.svg}</span>`;
+          }).join('');
+
+          return `
           <div class="travel-skyline">
             <svg viewBox="0 0 400 140" preserveAspectRatio="none">
               <g opacity="0.22" fill="#0e7c7b">
@@ -808,42 +999,25 @@
                 <ellipse cx="300" cy="20" rx="18" ry="7"/>
                 <ellipse cx="312" cy="16" rx="11" ry="6"/>
               </g>
-              <g fill="#08121c">
-                <path d="M0 140 L0 105 L20 105 L20 88 L36 88 L36 105 L52 105 L52 70 L70 70 L70 105 L88 105 L88 95 L106 95 L106 105 L124 105 L124 80 L142 80 L142 105 L160 105 L160 92 L178 92 L178 105 L400 105 L400 140Z"/>
+              <g class="travel-cloud-drift" style="transform-origin:180px 14px; animation-delay:-9s;" opacity="0.3" fill="#e8f4f2">
+                <ellipse cx="176" cy="14" rx="24" ry="5"/>
+                <ellipse cx="188" cy="10" rx="13" ry="5"/>
               </g>
-              <g fill="#F4C060">
-                <circle cx="24" cy="94" r="1.1"/><circle cx="30" cy="94" r="1.1"/><circle cx="24" cy="99" r="1.1"/><circle cx="30" cy="99" r="1.1"/>
-                <circle cx="58" cy="78" r="1.1"/><circle cx="64" cy="78" r="1.1"/><circle cx="58" cy="84" r="1.1"/><circle cx="64" cy="84" r="1.1"/><circle cx="58" cy="90" r="1.1"/><circle cx="64" cy="90" r="1.1"/><circle cx="58" cy="96" r="1.1"/><circle cx="64" cy="96" r="1.1"/>
-                <circle cx="76" cy="99" r="1.1"/><circle cx="82" cy="99" r="1.1"/>
-                <circle cx="110" cy="99" r="1.1"/><circle cx="116" cy="99" r="1.1"/>
-                <circle cx="128" cy="84" r="1.1"/><circle cx="134" cy="84" r="1.1"/><circle cx="128" cy="90" r="1.1"/><circle cx="134" cy="90" r="1.1"/><circle cx="128" cy="96" r="1.1"/><circle cx="134" cy="96" r="1.1"/>
-                <circle cx="164" cy="96" r="1.1"/><circle cx="170" cy="96" r="1.1"/>
+              <g class="travel-cloud-drift" style="transform-origin:355px 44px; animation-delay:-14s;" opacity="0.28" fill="#e8f4f2">
+                <ellipse cx="352" cy="44" rx="16" ry="6"/>
+                <ellipse cx="362" cy="40" rx="10" ry="5"/>
+                <ellipse cx="341" cy="41" rx="9" ry="4.5"/>
               </g>
+              <g opacity="0.34" fill="#12857f">${forestFar}</g>
+              <g opacity="0.62" fill="#0a5152">${forestNear}</g>
+              <g fill="#08121c">${cityPath}</g>
+              <g fill="#F4C060">${lights}</g>
             </svg>
           </div>
-          ${(() => {
-            const planeIcon = '<path d="M22 16v-2l-8.5-5V3.5c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5V9L2 14v2l8.5-2.5V19L8 20.5V22l4-1 4 1v-1.5L13.5 19v-5.5L22 16z"/>';
-            const planes = [
-              { anim: 'fly-1', dur: 15, delay: 0, layer: 'plane-behind' },
-              { anim: 'fly-2', dur: 18, delay: 3, layer: 'plane-front' },
-              { anim: 'fly-3', dur: 13, delay: 7, layer: 'plane-front' },
-              { anim: 'fly-4', dur: 20, delay: 1, layer: 'plane-behind' },
-              { anim: 'fly-5', dur: 17, delay: 5, layer: 'plane-front' },
-              { anim: 'fly-6', dur: 22, delay: 9, layer: 'plane-front' }
-            ];
-            return planes.map(p => `<span class="plane ${p.layer}" style="animation:${p.anim} ${p.dur}s linear infinite; animation-delay:${p.delay}s;"><svg viewBox="0 0 24 24">${planeIcon}</svg></span>`).join('');
-          })()}
-          ${(() => {
-            const cloudSvg = '<svg viewBox="0 0 40 20"><ellipse cx="16" cy="12" rx="15" ry="7" fill="#e8f4f2"/><ellipse cx="26" cy="9" rx="10" ry="6" fill="#e8f4f2"/></svg>';
-            const clouds = [
-              { left: 8, top: 8, w: 34, h: 16, dur: 22, delay: 0, op: 0.55 },
-              { left: 45, top: 5, w: 26, h: 13, dur: 18, delay: -3, op: 0.4 },
-              { left: 68, top: 14, w: 40, h: 19, dur: 26, delay: -9, op: 0.55 },
-              { left: 20, top: 24, w: 22, h: 11, dur: 16, delay: -6, op: 0.35 }
-            ];
-            return clouds.map(c => `<span class="cloud-el" style="left:${c.left}%; top:${c.top}%; width:${c.w}px; height:${c.h}px; animation-duration:${c.dur}s; animation-delay:${c.delay}s; opacity:${c.op};">${cloudSvg}</span>`).join('');
-          })()}
-        ` : ''}
+          ${planeEls}
+          ${cloudEls}
+        `;
+        })() : ''}
         ${window.AIAPPS_LOGIN_SCENE === 'mentor-people' ? `
           <div class="growth-scene">
             <svg class="growth-path" viewBox="0 0 100 100" preserveAspectRatio="none">
@@ -910,6 +1084,9 @@
               if (!window.AIAPPS_APP_EMOJI) return '';
               if (window.AIAPPS_LOGO_COINS) {
                 return `<span class="emoji-wrap">${window.AIAPPS_APP_EMOJI}<span class="coin">🪙</span><span class="coin">🪙</span><span class="coin">🪙</span></span> `;
+              }
+              if (window.AIAPPS_LOGO_PLANE) {
+                return `<span class="logo-plane" aria-hidden="true"><svg class="lp-cloud lp-cloud-1" viewBox="0 0 40 18"><ellipse cx="15" cy="11" rx="14" ry="5.5"/><ellipse cx="26" cy="8" rx="10" ry="5.5"/></svg><span class="lp-glyph">${window.AIAPPS_APP_EMOJI}</span><svg class="lp-cloud lp-cloud-2" viewBox="0 0 28 16"><ellipse cx="12" cy="10" rx="11" ry="5"/><ellipse cx="20" cy="7" rx="7" ry="4.5"/></svg></span>`;
               }
               return window.AIAPPS_APP_EMOJI + ' ';
             })()}<span style="color:${window.AIAPPS_APP_ACCENT || '#B8863B'}">${window.AIAPPS_APP_NAME}</span></div>
