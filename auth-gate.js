@@ -603,6 +603,29 @@
           0%, 100% { transform:translateY(0) rotate(0deg); }
           50% { transform:translateY(-9px) rotate(5deg); }
         }
+
+        /* Preferencia del sistema "reducir movimiento" (mareo, vértigo,
+           sensibilidad al movimiento). Apagar las animaciones y ya no
+           alcanza: casi todo elemento animado de estas escenas arranca en
+           opacity:0 y sus keyframes TAMBIÉN terminan en 0 — son ciclos que
+           aparecen y desaparecen. Un "animation:none" parejo, o un salto al
+           estado final, dejaría las escenas vacías en vez de quietas. Así
+           que cada elemento se fija a mano en su estado visible, y solo se
+           ocultan los que existen únicamente para moverse (las monedas en
+           caída, los aviones en vuelo, las monedas que saltan del logo). */
+        @media (prefers-reduced-motion: reduce){
+          .cover *{ animation:none !important; }
+          .coin, .coin-rain, .plane{ display:none !important; }
+          /* coins-rain: queda el montón del suelo, con sus destellos quietos. */
+          .floor-sparkle{ opacity:1; }
+          /* gantt-build: barras completas, con su punto, bandera y fecha. */
+          .gantt-bar{ width:var(--w,70%); }
+          .gantt-dot{ opacity:1; left:var(--w,70%); }
+          .gantt-flag{ opacity:1; transform:scale(1) rotate(-4deg); }
+          .gantt-date{ opacity:0.85; transform:translateY(0); }
+          /* mentor-people / travel-sky: hitos del camino visibles. */
+          .milestone{ opacity:1; }
+        }
       </style>
       <div class="cover ${window.AIAPPS_LOGIN_LAYOUT === 'right' ? 'align-right' : ''}">
         ${window.AIAPPS_LOGIN_SCENE === 'coins-rain' ? (() => {
@@ -954,7 +977,11 @@
 
     const coverEl = shadow.querySelector(".cover");
     const cardEl = shadow.querySelector(".card");
-    coverEl.addEventListener("mousemove", (e) => {
+    // El CSS no puede desactivar la inclinación de la tarjeta porque la aplica
+    // este handler; con "reducir movimiento" activo no se engancha siquiera.
+    const quietMotion = window.matchMedia
+      && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (!quietMotion) coverEl.addEventListener("mousemove", (e) => {
       const rect = coverEl.getBoundingClientRect();
       coverEl.style.setProperty("--mx", ((e.clientX - rect.left) / rect.width) * 100 + "%");
       coverEl.style.setProperty("--my", ((e.clientY - rect.top) / rect.height) * 100 + "%");
