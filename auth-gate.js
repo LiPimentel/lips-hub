@@ -58,14 +58,35 @@
     const cols = [4, 12, 21, 30, 40, 50, 60, 70, 79, 88, 94];
     const rows = [4, 11, 22, 34, 46, 58, 70, 82, 89, 95];
     const alignRight = window.AIAPPS_LOGIN_LAYOUT === 'right';
-    const cardLeft = alignRight ? 58 : 31;
-    const cardRight = alignRight ? 99 : 69;
+    // La tarjeta mide `min(320px, 90vw)` de ancho y unos 460px de alto, así que
+    // en porcentaje ocupa muchísimo más en un teléfono que en un monitor: la
+    // zona a esquivar hay que calcularla, no dejarla fija, o en pantalla
+    // angosta los iconos caen encima del formulario.
+    const vw = window.innerWidth || 1280;
+    const vh = window.innerHeight || 720;
+    // El icono más grande mide 2.7rem; se cuenta su tamaño (más un margen) para
+    // que la esquina de un icono tampoco toque la tarjeta.
+    const iconW = 46 / vw * 100;
+    const iconH = 46 / vh * 100;
+    const cardW = Math.min(320, vw * 0.9) / vw * 100;
+    const cardH = Math.min(460 / vh * 100, 88);
+    const cardRight = alignRight ? 92 : 50 + cardW / 2;
+    const cardLeft = (alignRight ? 92 - cardW : 50 - cardW / 2);
+    const cardTop = 50 - cardH / 2;
+    const cardBottom = 50 + cardH / 2;
+    const maxLeft = 99 - iconW;
+    const maxTop = 99 - iconH;
+    const touchesCard = (left, top) => (
+      left + iconW > cardLeft && left < cardRight &&
+      top + iconH > cardTop && top < cardBottom
+    );
     const sides = [];
     const overUnder = [];
     rows.forEach((top) => cols.forEach((left) => {
-      const sameColumnAsCard = left > cardLeft && left < cardRight;
-      if (!sameColumnAsCard) sides.push({ top, left });
-      else if (top <= 10 || top >= 88) overUnder.push({ top, left });
+      if (touchesCard(left, top)) return;
+      const sameColumnAsCard = left + iconW > cardLeft && left < cardRight;
+      if (sameColumnAsCard) overUnder.push({ top, left });
+      else sides.push({ top, left });
     }));
     if (!sides.length && !overUnder.length) return [];
 
@@ -80,20 +101,30 @@
         return pool[Math.min(pool.length - 1, start + Math.floor(Math.random() * (end - start)))];
       });
     };
-    // Una quinta parte va arriba y abajo de la tarjeta, para que esa franja
-    // del centro no quede vacía.
-    const centerCount = Math.min(overUnder.length, Math.round(count * 0.2));
-    const picked = sample(overUnder, centerCount).concat(sample(sides, count - centerCount));
+    // Una quinta parte va arriba y abajo de la tarjeta, para que esa franja del
+    // centro no quede vacía. En pantalla angosta la tarjeta se come casi todo el
+    // ancho y quedan pocas celdas a los costados, así que ahí la proporción se
+    // invierte sola en vez de amontonar 29 iconos en una sola columna.
+    const fromCenter = Math.min(overUnder.length, Math.max(Math.round(count * 0.2), count - sides.length));
+    const fromSides = Math.min(sides.length, count - fromCenter);
+    const picked = sample(overUnder, fromCenter).concat(sample(sides, fromSides));
     for (let i = picked.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [picked[i], picked[j]] = [picked[j], picked[i]];
     }
     // Se le suma un desvío al azar a cada celda para que no se note la rejilla,
-    // sin dejar que ningún icono se salga del borde de la pantalla.
-    return picked.map((cell) => ({
-      top: Math.min(92, Math.max(1.5, cell.top + (Math.random() - 0.5) * 6)),
-      left: Math.min(94, Math.max(1.5, cell.left + (Math.random() - 0.5) * 6))
-    }));
+    // sin dejar que ningún icono se salga del borde. Si el desvío empujó la
+    // posición sobre la tarjeta, se vuelve a la celda original; y si la celda
+    // tampoco entra (pantalla muy chica), ese icono no se dibuja: es preferible
+    // que haya menos iconos que uno encima del formulario.
+    return picked.map((cell) => {
+      const top = Math.min(maxTop, Math.max(1, cell.top + (Math.random() - 0.5) * 6));
+      const left = Math.min(maxLeft, Math.max(1, cell.left + (Math.random() - 0.5) * 6));
+      if (!touchesCard(left, top)) return { top, left };
+      const rawTop = Math.min(maxTop, Math.max(1, cell.top));
+      const rawLeft = Math.min(maxLeft, Math.max(1, cell.left));
+      return touchesCard(rawLeft, rawTop) ? null : { top: rawTop, left: rawLeft };
+    }).filter(Boolean);
   }
 
   function buildOverlay() {
@@ -1122,11 +1153,12 @@
         })() : ''}
         ${!window.AIAPPS_LOGIN_SCENE ? (() => {
           const decoNames = window.AIAPPS_LOGIN_DECORATIONS || [];
-          const decoCells = scatterCells(decoNames.length);
-          return decoNames.map((iconName, i) => {
+          // Se itera sobre las celdas, no sobre los nombres: `scatterCells` puede
+          // devolver menos posiciones de las pedidas si no todas entran.
+          return scatterCells(decoNames.length).map((cell, i) => {
+            const iconName = decoNames[i];
             const svgPath = ICONS[iconName];
             if (!svgPath) return '';
-            const cell = decoCells[i];
             const size = 1.7 + Math.random() * 1.1;
             const pos = `top:${cell.top.toFixed(1)}%; left:${cell.left.toFixed(1)}%; width:${size.toFixed(2)}rem; height:${size.toFixed(2)}rem;`;
             const delay = (i % 8) * 0.55;
