@@ -1,4 +1,6 @@
-# Mudanza de Netlify a Cloudflare Pages
+# Mudanza de Netlify a Cloudflare (Workers)
+
+> **Estado: hecha y funcionando desde el 26/07/2026.** Dirección de producción: **https://lips-hub.lissette2402.workers.dev**. Verificado en vivo: el hub carga, el inicio de sesión funciona contra Supabase, y `/docs/team-memory.md` responde 404. En Supabase quedaron registradas las dos direcciones en *Redirect URLs* (la nueva y la de Netlify como respaldo).
 
 Guía para publicar LIPS-HUB en Cloudflare Pages. Escrita para seguirse paso a paso, sin conocimiento técnico previo. Lo que ya está listo en el repo está marcado como hecho; lo que requiere entrar a un panel web lo tiene que hacer una persona.
 
