@@ -38,14 +38,27 @@ jobs:
             -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
             "$SUPABASE_URL/rest/v1/app_data?select=app_id&limit=1")
           echo "HTTP $code"
-          head -c 400 respuesta.txt || true
-          echo
+          cuerpo=$(head -c 400 respuesta.txt || true)
+          echo "$cuerpo"
           case "$code" in
-            # 200/206: respondió con datos. 401/403: respondió y RLS bloqueó la
-            # lectura anónima, que es justamente lo que debe pasar — la consulta
-            # llegó a la base igual, y eso es lo que cuenta como actividad.
-            200|206|401|403)
-              echo "Proyecto activo (HTTP $code)."
+            200|206)
+              # Con la llave anon pura, auth.uid() es NULL. Si RLS está activo
+              # la respuesta correcta es 200 con una lista vacía. Si vuelve con
+              # filas dentro, significa que la tabla se puede leer sin sesión
+              # — es decir, RLS apagado, y los datos de todas las apps quedan
+              # legibles por cualquiera que tenga la llave pública del código.
+              # Aprovechamos esta tarea como centinela de eso.
+              if [ "$(echo "$cuerpo" | tr -d '[:space:]')" = "[]" ]; then
+                echo "Proyecto activo y RLS respondiendo como debe (200 con lista vacía)."
+              else
+                echo "::error::El proyecto respondió, pero la consulta anónima devolvió DATOS en vez de una lista vacía. Eso indica que RLS podría estar desactivado en la tabla app_data: revisar en el panel de Supabase (Table Editor -> app_data -> RLS enabled)."
+                exit 1
+              fi
+              ;;
+            401|403)
+              # También cuenta como actividad: la consulta llegó a la base y
+              # fue rechazada por política.
+              echo "Proyecto activo (HTTP $code, lectura anónima rechazada)."
               ;;
             000)
               echo "::error::No se pudo conectar con Supabase. Si el proyecto ya está pausado, hay que restaurarlo a mano desde el panel de Supabase."

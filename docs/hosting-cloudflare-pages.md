@@ -1,4 +1,6 @@
-# Mudanza de Netlify a Cloudflare Pages
+# Mudanza de Netlify a Cloudflare (Workers)
+
+> **Estado: hecha y funcionando desde el 26/07/2026.** Dirección de producción: **https://lips-hub.lissette2402.workers.dev**. Verificado en vivo: el hub carga, el inicio de sesión funciona contra Supabase, y `/docs/team-memory.md` responde 404. En Supabase quedaron registradas las dos direcciones en *Redirect URLs* (la nueva y la de Netlify como respaldo).
 
 Guía para publicar LIPS-HUB en Cloudflare Pages. Escrita para seguirse paso a paso, sin conocimiento técnico previo. Lo que ya está listo en el repo está marcado como hecho; lo que requiere entrar a un panel web lo tiene que hacer una persona.
 
@@ -18,15 +20,18 @@ Verificado antes de subir: las 6 páginas cargan con esas cabeceras puestas sin 
 
 ## Pasos en el panel de Cloudflare
 
+**Importante: ya no se usa Pages, se usa Workers.** Las cuentas nuevas de Cloudflare no ofrecen crear proyectos de Pages — el asistente solo deja crear Workers. Un Worker que solo declara `assets` sirve archivos estáticos igual que Pages; la configuración vive en `wrangler.toml`, en la raíz del repo.
+
 1. Crear cuenta en https://dash.cloudflare.com/sign-up (gratis, no pide tarjeta).
-2. En el menú lateral: **Workers & Pages** → **Create** → pestaña **Pages** → **Connect to Git**.
+2. En el menú lateral: **Compute → Workers & Pages** → **Create application** → importar un repositorio de Git.
 3. Autorizar el acceso a GitHub y elegir el repositorio `LiPimentel/lips-hub`.
-4. En la configuración de compilación, poner exactamente:
-   - **Framework preset:** `None`
+4. En la pantalla "Set up your application":
+   - **Project name:** `lips-hub`
    - **Build command:** `bash build.sh`
-   - **Build output directory:** `dist`
-   - **Production branch:** `master`
-5. **Save and Deploy.** Al terminar da una dirección tipo `lips-hub.pages.dev`.
+   - **Deploy command:** `npx wrangler deploy` (viene puesto por defecto; dejarlo)
+   - Dejar marcado **"Builds for non-production branches"**: eso es lo que da la vista previa de cada rama y cada PR.
+   - No hay campo "Build output directory": esa información sale de `wrangler.toml`.
+5. **Deploy.** Al terminar da una dirección tipo `lips-hub.<tu-subdominio>.workers.dev`.
 
 ## Verificación después del primer despliegue
 

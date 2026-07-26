@@ -20,7 +20,11 @@
   # apps usan CDNs (unpkg, cdnjs, jsdelivr, fonts.googleapis) y todo su código
   # va en línea dentro del HTML, así que una CSP completa hay que probarla app
   # por app con sesión real antes de activarla. Ver docs/hosting-cloudflare-pages.md.
-  Content-Security-Policy: frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'
+  Content-Security-Policy: frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests
+  # Un año de HTTPS obligatorio para este host. A propósito SIN
+  # includeSubDomains ni preload: en un dominio compartido como *.pages.dev
+  # eso afectaría a sitios de terceros que no controlamos.
+  Strict-Transport-Security: max-age=31536000
 
 # El sitio no versiona los nombres de archivo: si el navegador guarda en caché
 # el HTML o auth-gate.js, la persona sigue viendo la versión vieja después de

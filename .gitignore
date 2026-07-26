@@ -3,3 +3,7 @@
 
 # Carpeta que arma build.sh para publicar; se genera en cada despliegue.
 dist/
+
+# Dependencias instaladas por agentes al probar; nunca van al repo.
+node_modules/
+package-lock.json
