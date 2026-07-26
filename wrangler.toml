@@ -1,0 +1,20 @@
+# Configuración para publicar el sitio en Cloudflare Workers.
+#
+# Por qué Workers y no Pages: las cuentas nuevas de Cloudflare ya no ofrecen
+# crear proyectos de Pages — el panel solo deja crear Workers. Un Worker que
+# solo declara "assets" y no tiene código sirve archivos estáticos igual que
+# lo hacía Pages, y las peticiones a esos archivos no consumen la cuota de
+# peticiones del plan gratuito.
+#
+# La carpeta que se publica la arma build.sh (ver CLAUDE.md): solo las 6
+# páginas HTML, los 3 JS compartidos y _headers. El resto del repo (docs/,
+# release-notes/) queda fuera a propósito.
+
+name = "lips-hub"
+compatibility_date = "2026-07-26"
+
+[assets]
+directory = "./dist"
+# Una ruta que no existe devuelve 404 en vez de servir el index. Es lo que
+# queremos: /docs/team-memory.md tiene que dar "no encontrado".
+not_found_handling = "none"
