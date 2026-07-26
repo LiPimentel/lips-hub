@@ -22,6 +22,12 @@ Reglas de este proceso:
 - Excepción única: cambios que no tocan código de las apps (por ejemplo, solo notas de versión o documentación) no requieren correr QA ni seguridad.
 - Si un agente no está disponible como `subagent_type` en la sesión actual, correr `general-purpose` pegando el contenido de `.claude/agents/{nombre}.md` en el prompt — el rol se cumple igual, no se omite.
 
+## Dónde vive producción (importante)
+
+**Producción es Cloudflare Workers: https://lips-hub.lissette2402.workers.dev** (desde el 26/07/2026). Netlify **ya no es la referencia**: sigue conectado al repo unos días como respaldo, así que se actualiza en paralelo, pero se va a apagar — no verificar nada contra `*.netlify.app` ni mandar al usuario ahí.
+
+Cada fusión a `master` dispara la construcción y publicación automática. La configuración vive en `wrangler.toml`; las cuentas nuevas de Cloudflare ya no ofrecen crear proyectos de Pages, solo Workers.
+
 ## Qué se publica en el sitio (importante)
 
 El sitio **no** publica la raíz del repo: publica lo que `build.sh` copia a `dist/` (las 6 páginas HTML, los 3 JS compartidos, `_headers`, y `assets/` si existe). `docs/`, `release-notes/` y `.claude/` quedan fuera a propósito — son memoria de trabajo, no contenido público.
