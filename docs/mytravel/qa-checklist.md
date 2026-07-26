@@ -28,5 +28,9 @@ Verificado:
 - [x] Ventana de carrera de `save()`/`cachedUserId` ya documentada por security-reviewer (caso borde 11 en `requerimientos.md`) — confirmada por lectura de código.
 - [ ] **NO verificado end-to-end:** sigue sin credenciales de prueba disponibles.
 
+## 2026-07-26 — Revisión: commit `40c43f5`, fixes de `prefers-reduced-motion` en `auth-gate.js` (compartido)
+
+Cambio ajeno a esta app (solo `auth-gate.js`), probado explícitamente en la escena `travel-sky` como parte de la ronda de 6 escenas. Con la preferencia activa: resplandor sigue al cursor, inclinación fija en plano, `shadow.getAnimations({subtree:true}).length === 0`. Sin errores de consola. Detalle completo y veredicto en `docs/staffgate/qa-checklist.md` ("2026-07-26 — Revisión: commit `40c43f5`").
+
 ## Histórico
 _(sin entradas previas antes de 2026-07-23)_

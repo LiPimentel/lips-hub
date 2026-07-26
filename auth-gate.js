@@ -197,6 +197,13 @@
           transition:transform 0.15s ease-out;
           will-change:transform;
         }
+        @media (prefers-reduced-motion: reduce){
+          /* La inclinacion se apaga desde el JS. Esto cubre el instante en que
+             se activa la preferencia con la tarjeta ya inclinada: sin esto
+             volveria a plano con una transicion de 0.15s, es decir con
+             movimiento, justo cuando se acaba de pedir menos movimiento. */
+          .card{ transition:none; }
+        }
         h1{
           font-size:1.1rem;
           margin:0 0 18px;
@@ -1541,14 +1548,36 @@
 
     const coverEl = shadow.querySelector(".cover");
     const cardEl = shadow.querySelector(".card");
-    // El CSS no puede desactivar la inclinación de la tarjeta porque la aplica
-    // este handler; con "reducir movimiento" activo no se engancha siquiera.
-    const quietMotion = window.matchMedia
-      && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (!quietMotion) coverEl.addEventListener("mousemove", (e) => {
+    /* El CSS no puede desactivar la inclinación de la tarjeta porque la aplica
+       este handler, así que hay que apagarla desde aquí. Pero solo la
+       inclinación: este mismo handler mueve además el resplandor que sigue al
+       cursor (--mx/--my), que es una luz pegada al puntero y no un objeto con
+       movimiento propio. Por eso el handler se engancha siempre y la
+       preferencia se consulta adentro — si no se enganchara, el resplandor se
+       quedaría clavado en el centro de la pantalla.
+       La consulta va en cada movimiento (no una sola vez al construir el
+       candado) para que activar la preferencia con el login ya abierto surta
+       efecto sin recargar, igual que ya hace el zoom automático de abajo. */
+    const FLAT_CARD = "perspective(800px) rotateX(0deg) rotateY(0deg)";
+    const tiltQuery = window.matchMedia
+      ? window.matchMedia("(prefers-reduced-motion: reduce)")
+      : null;
+    if (tiltQuery && typeof tiltQuery.addEventListener === "function") {
+      const onTiltPrefChange = (e) => { if (e.matches) cardEl.style.transform = FLAT_CARD; };
+      tiltQuery.addEventListener("change", onTiltPrefChange);
+      host._aiappsCleanups = host._aiappsCleanups || [];
+      host._aiappsCleanups.push(() => tiltQuery.removeEventListener("change", onTiltPrefChange));
+    }
+
+    coverEl.addEventListener("mousemove", (e) => {
       const rect = coverEl.getBoundingClientRect();
       coverEl.style.setProperty("--mx", ((e.clientX - rect.left) / rect.width) * 100 + "%");
       coverEl.style.setProperty("--my", ((e.clientY - rect.top) / rect.height) * 100 + "%");
+
+      if (tiltQuery && tiltQuery.matches) {
+        cardEl.style.transform = FLAT_CARD;
+        return;
+      }
 
       const cardRect = cardEl.getBoundingClientRect();
       const dx = (e.clientX - (cardRect.left + cardRect.width / 2)) / (cardRect.width / 2);
@@ -1557,7 +1586,7 @@
       cardEl.style.transform = `perspective(800px) rotateX(${(-dy * maxTilt).toFixed(2)}deg) rotateY(${(dx * maxTilt).toFixed(2)}deg)`;
     });
     coverEl.addEventListener("mouseleave", () => {
-      cardEl.style.transform = "perspective(800px) rotateX(0deg) rotateY(0deg)";
+      cardEl.style.transform = FLAT_CARD;
     });
 
     // Cada 2 segundos, dos iconos al azar hacen el mismo zoom que al pasar el mouse,

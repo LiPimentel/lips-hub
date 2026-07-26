@@ -48,5 +48,9 @@ Verificado:
 - [ ] Comportamiento en Firefox/Safari real (`transform-box:fill-box` en SVG) — esta sesión solo tiene un navegador Chromium disponible.
 - [ ] Round-trip de datos con credenciales reales — no aplica a este cambio (es puramente decorativo/login, no toca persistencia).
 
+## 2026-07-26 — Revisión: commit `40c43f5`, fixes de `prefers-reduced-motion` en `auth-gate.js` (compartido)
+
+Cambio ajeno a esta app (solo `auth-gate.js`), probado explícitamente en la escena `gantt-build` como parte de la ronda de 6 escenas. Con la preferencia activa, confirmado con `getAnimations()` que `shadow.getAnimations({subtree:true}).length === 0` (0 animaciones vivas, contra 39 con la preferencia apagada como sanity check) y que el resplandor del cursor sigue moviéndose mientras la inclinación 3D de la tarjeta queda fija en plano. Sin fuga de listeners (`host._aiappsCleanups`). Detalle completo y veredicto en `docs/staffgate/qa-checklist.md` ("2026-07-26 — Revisión: commit `40c43f5`").
+
 ## Histórico
 _(sin entradas previas — primera revisión de este agente para esta app)_

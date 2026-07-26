@@ -16,5 +16,9 @@ Verificado:
 - [ ] **NO verificado end-to-end:** no se pudo iniciar sesión real (sin credenciales de prueba), por lo que no se confirmó en vivo que una cuenta nueva sin fila en la nube efectivamente aísle su caché de otra cuenta ya usada en el mismo navegador — la verificación fue por lectura de código + pruebas de la función pura `scopedKey` en consola, no por dos logins reales distintos.
 - [ ] **NO verificado:** persistencia real en Supabase (no hay credenciales de prueba para esta app).
 
+## 2026-07-26 — Revisión: commit `40c43f5`, fixes de `prefers-reduced-motion` en `auth-gate.js` (compartido)
+
+Cambio ajeno a esta app (solo `auth-gate.js`), probado explícitamente en la escena `mentor-people` como parte de la ronda de 6 escenas, incluyendo mobile (375×812 real, `window.innerWidth===375` en el arnés de prueba). Con la preferencia activa: resplandor sigue al cursor, inclinación fija en plano, `shadow.getAnimations({subtree:true}).length === 0`. Ciclo en vivo (activar/desactivar sin recargar) probado en esta escena con éxito en ambos sentidos. Detalle completo y veredicto en `docs/staffgate/qa-checklist.md` ("2026-07-26 — Revisión: commit `40c43f5`").
+
 ## Histórico
 _(sin entradas previas — primera revisión de este agente para esta app)_
