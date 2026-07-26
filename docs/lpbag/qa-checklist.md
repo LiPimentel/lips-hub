@@ -41,5 +41,9 @@ NO verificado en esta sesión:
 - [ ] La cifra exacta que afirma el PR de destellos ocultos antes/después (31 de 41 vs 2 de 29) — no remedí esto con un análisis de orden de pintado propio; estructuralmente es plausible (los destellos se agregan al final del SVG, así que deberían pintar siempre por encima), pero no lo confirmé con evidencia directa propia.
 - [ ] Deploy preview de Netlify / producción real — proxy de este contenedor bloquea `*.netlify.app` (ya documentado por release-manager en `docs/infra-watch.md`).
 
+## 2026-07-26 — Revisión: commit `40c43f5`, fixes de `prefers-reduced-motion` en `auth-gate.js` (compartido)
+
+Cambio ajeno a esta app (solo `auth-gate.js`), probado explícitamente en la escena `coins-rain` de LPBag como parte de la ronda de 6 escenas. Confirmado con evidencia medida en vivo (no lectura de código): con la preferencia activa, el resplandor sigue al cursor (`--mx`/`--my` cambian con cada `mousemove`) mientras la inclinación de la tarjeta se queda plana (`card.style.transform` fijo en `rotateX(0deg) rotateY(0deg)`), y `shadow.getAnimations({subtree:true}).length === 0` (nada se mueve). Detalle completo, metodología y veredicto en `docs/staffgate/qa-checklist.md` ("2026-07-26 — Revisión: commit `40c43f5`").
+
 ## Histórico
 _(sin entradas previas antes de la revisión de arriba)_
