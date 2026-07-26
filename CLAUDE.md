@@ -36,7 +36,11 @@ Consecuencia práctica: **cualquier archivo nuevo que el sitio necesite hay que 
 
 ## Notas de versión (obligatorio)
 
-Cada vez que se haga un cambio en el código de este proyecto, generar una nota de versión y guardarla en la carpeta `release-notes/` (en la raíz del proyecto), con nombre `YYYY-MM-DD.md` (usar `YYYY-MM-DD-2.md`, `-3.md`, etc. si ya hay una nota ese mismo día).
+Cada vez que se haga un cambio en el código de este proyecto, generar una nota de versión y guardarla en la carpeta `release-notes/` (en la raíz del proyecto), con nombre **`YYYY-MM-DD-{nombre-de-la-rama}.md`** — por ejemplo `2026-07-26-login-glow-y-preferencia-en-vivo.md`. Si la rama lleva prefijo (`claude/`, `feature/`), usar solo la parte final; si el nombre queda larguísimo, acortarlo a las 3-5 palabras que lo identifiquen.
+
+**Por qué por rama y no por número:** la convención anterior era `YYYY-MM-DD.md` más `-2`, `-3`, etc. para el mismo día, y **falla cuando hay varios hilos trabajando en paralelo**, que es lo normal en este proyecto. Dos ramas eligen el mismo número sin verse (cada una mira solo los archivos de su propio checkout, que no incluye lo que la otra aún no ha fusionado), y el resultado es un conflicto *add/add* en GitHub: dos archivos distintos creados en la misma ruta, que Git no puede fusionar solo y que **bloquea el merge del PR** aunque el código no tenga ningún conflicto. Pasó tres veces en tres días (una de ellas dejó el PR #21 bloqueado). El nombre de la rama no colisiona nunca, porque dos hilos nunca comparten rama.
+
+Consecuencia práctica: si un PR se queda bloqueado por conflicto en un archivo de `release-notes/`, **no hay que resolver el texto** — se renombra la nota propia y el conflicto desaparece.
 
 Cada nota debe estar en español, dirigida a una persona no técnica, e incluir:
 - Fecha
