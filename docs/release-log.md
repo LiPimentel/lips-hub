@@ -4,6 +4,35 @@ Mantenido por release-manager. Registro de cada verificación previa al merge (d
 
 **Este archivo no existía hasta hoy (2026-07-24).** Primera entrada.
 
+## 2026-07-26 — Verificación previa a la fusión de `claude/login-glow-y-preferencia-en-vivo` y `claude/notas-de-version-por-rama`
+
+**Hallazgo principal, antes que nada: LAS DOS RAMAS YA ESTÁN FUSIONADAS EN `master`.** El encargo asumía que la usuaria estaba a punto de abrir los dos PRs a mano; al hacer `git fetch origin` confirmo que `origin/master` ya tiene:
+- `572a981` — Merge pull request #28 from `claude/notas-de-version-por-rama`
+- `62481ed` — Merge pull request #29 from `claude/login-glow-y-preferencia-en-vivo`
+
+Es decir, en algún momento de esta misma sesión (master avanzó ~24 commits mientras se trabajaba, según el encargo) otro hilo o la propia usuaria ya abrió y fusionó ambos PRs. No hay nada que "abrir a mano" para el contenido que ya se describe abajo — abrir un PR nuevo desde cualquiera de las dos ramas tal como están hoy **no añadiría el cambio de código ya descrito**, porque ya está en `master`.
+
+### Rama `claude/login-glow-y-preferencia-en-vivo`
+
+- **El commit de código (`40c43f5`, el fix de resplandor + preferencia reactiva) SÍ está en `master`** — confirmado con `git merge-base --is-ancestor 40c43f5 origin/master` → sí. Los 3 agentes de revisión requeridos ya dieron veredicto sobre este commit exacto: `qa-lead` APROBADO, `accessibility-reviewer` APROBADO, y `security-reviewer` (que el encargo decía "corriendo en paralelo ahora mismo") **ya terminó y dio APROBADO** — su reporte apareció en el working tree local (`docs/security-notes.md`, `docs/team-memory.md`) como cambios sin commitear mientras yo revisaba, consistente con que corrió en paralelo a esta misma verificación. Ningún hallazgo de los tres fue bloqueante.
+- **Pero la rama (tanto local como `origin/claude/login-glow-y-preferencia-en-vivo`) tiene un commit más, `37620ea`** ("docs: cerrar los casos borde 16 y 18 como descartados por la usuaria"), que **NO está en `master`** todavía. Es un cambio de 4 líneas en `docs/lpbag/requerimientos.md`, sin código de app — no requiere QA/seguridad según la excepción de `CLAUDE.md`.
+- **Divergencia real con `master` (verificada con `git merge-base`, no solo comparando tips):** el ancestro común es `001718d`. Desde ahí, la rama solo agregó las 4 líneas de `37620ea` (sin tocar `CLAUDE.md` ni `release-notes/`); `master` agregó, por su lado, el cambio de convención de nombres de `CLAUDE.md` y `release-notes/2026-07-26-notas-de-version-por-rama.md` (de la otra rama, PR #28). **Ningún archivo se toca en ambos lados** — si se abre un PR nuevo desde esta rama hoy, fusionaría limpio, sin conflicto y sin revertir nada de `master` (verificado con `git diff <merge-base> <cada-lado>` en ambas direcciones, no solo con el diff directo entre tips, que por sí solo habría sugerido erróneamente una reversión de `CLAUDE.md`).
+- **Higiene de rama:** working tree del worktree (`claude/login-glow-y-preferencia-en-vivo` checked out) sin cambios sin commitear propios de la rama; solo los dos archivos temporales `_rmX-auth-gate-on.js` y `_rmX-test.html` sin trackear (confirmado que NUNCA aparecen en el historial de commits de ninguna de las dos ramas, `git log --all -- <archivo>` vacío) y las modificaciones locales de `security-reviewer` corriendo en paralelo (`docs/security-notes.md`, `docs/team-memory.md`), que no son mías y no se tocan aquí. Sin `node_modules` ni nada similar en ningún commit.
+- **Nota de versión:** existe, `release-notes/2026-07-26-login-glow-y-preferencia-en-vivo.md`, ya en `master`. Contenido correcto y claro, pero el campo "Estado" sigue diciendo "aún no publicado a producción" — desactualizado, porque ya se fusionó y ya está sirviéndose (ver abajo). No bloqueante, pero vale la pena corregirlo si se vuelve a tocar ese archivo.
+- **Migraciones Supabase:** no aplica — el diff no toca esquema ni RLS, solo `auth-gate.js` (CSS/JS de la tarjeta de login) y docs.
+- **Despliegue real verificado (no solo "debería andar"):** abrí `https://lips-hub.lissette2402.workers.dev` (producción real, Cloudflare Workers) — carga el hub sin errores de consola. `auth-gate.js` se sirve con `200` y su contenido en este worktree (que coincide con `origin/master`) contiene el fix exacto: `mousemove` sobre `.cover` enganchado siempre (línea 1572), `matchMedia("(prefers-reduced-motion: reduce)")` con listener de `"change"` que aplana la tarjeta en vivo (líneas 1562-1570). `docs/team-memory.md` responde `404` en ese dominio (correcto, `build.sh` no lo copia a `dist/`). Netlify (`https://dapper-sunflower-c4c010.netlify.app`) también respondió `200` hoy (a diferencia del `403` de rondas anteriores) y sigue publicando la raíz completa, incluido `docs/` — ver `docs/infra-watch.md`.
+- **Veredicto: LISTO PARA FUSIONAR, pero ya no aplica como acción — el contenido relevante ya está en `master` y en producción.** Lo único pendiente de esta rama es el commit suelto `37620ea` (casos borde 16/18 cerrados); si la usuaria quiere llevarlo a `master`, puede abrir un PR nuevo desde esta misma rama (fusiona limpio, confirmado arriba) o cherry-pickearlo. No hace falta QA/seguridad para eso por ser solo docs.
+
+### Rama `claude/notas-de-version-por-rama`
+
+- **Ya fusionada por completo** — `git merge-base --is-ancestor origin/claude/notas-de-version-por-rama origin/master` → sí. El tip de la rama (`10178b5`) es idéntico a lo que hay en `master`. No hay nada pendiente en esta rama.
+- Exenta de QA/seguridad por regla de `CLAUDE.md` (solo `CLAUDE.md` + nota de versión, sin código de apps). Nota de versión presente y clara (`release-notes/2026-07-26-notas-de-version-por-rama.md`), aunque también con el campo "Estado" desactualizado ("aún no fusionado").
+- **Riesgo verificado y descartado:** cambiar `CLAUDE.md` no afecta el sitio publicado — `build.sh` no copia `CLAUDE.md` a `dist/` (confirmado leyendo `build.sh`: solo copia `*.html`, `*.js`, `_headers` y `assets/`). Sin impacto en producción.
+
+### Caso borde nuevo encontrado en esta ronda (agregado a `docs/lpbag/requerimientos.md`)
+
+Una rama cuyo PR ya se fusionó puede seguir recibiendo commits nuevos sin que quien la trabaja se dé cuenta de que el merge ya ocurrió — el estado de GitHub (PR cerrado/fusionado) y el estado local de la rama (que sigue viva y aceptando commits) pueden divergir en la percepción de quien la usa. Ver Caso borde 19 en `docs/lpbag/requerimientos.md`.
+
 ## 2026-07-24 — PR #18 (`claude/lpbag-login-background-cg4med` → `master`): LPBag, rehacer fondo de login
 
 **Veredicto: RECHAZADO.** Ver detalle completo en el reporte de esta sesión (entregado a la tech lead). Resumen:
