@@ -1785,7 +1785,18 @@
   function buildAccountWidget() {
     const host = document.createElement("div");
     host.id = "aiapps-account-widget";
-    host.style.cssText = "position:fixed;top:14px;right:14px;z-index:2147483646;";
+    /* Antes iba arriba a la derecha, y ahí cada app tiene su barra de
+       herramientas: medido en vivo, tapaba la pestaña "Reportes" de Bitácora y
+       los botones "Import"/"Salir" de LP-Bag. Ninguna esquina superior es
+       segura porque cada app pone cosas distintas arriba.
+       Ahora se ancla abajo a la derecha, apilado justo encima de la insignia
+       de carpeta (que mide 33px de alto): las dos piezas compartidas quedan
+       juntas, en el mismo sitio en las 5 apps, fuera de las barras de cada
+       una. `--aiapps-chrome-bottom` es el escape para las apps que tienen algo
+       propio pegado abajo — MyTravel y su barra de navegación móvil. */
+    host.style.cssText =
+      "position:fixed;right:14px;z-index:2147483646;" +
+      "bottom:calc(61px + var(--aiapps-chrome-bottom, 0px));";
     const shadow = host.attachShadow({ mode: "open" });
 
     shadow.innerHTML = `
