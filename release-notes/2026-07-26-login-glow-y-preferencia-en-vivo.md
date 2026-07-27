@@ -1,6 +1,6 @@
 # Notas de versión — 26 de julio de 2026
 
-**Estado:** en la rama `claude/login-glow-y-preferencia-en-vivo`, aún no publicado a producción.
+**Estado:** **publicado en producción** (PR #29, 26/07/2026). Verificado en vivo en `https://lips-hub.lissette2402.workers.dev`: la página carga sin errores y `auth-gate.js` sirve el cambio.
 
 ## Las 5 apps + el hub — dos retoques a "reducir movimiento" en la pantalla de inicio de sesión
 
