@@ -574,16 +574,32 @@
     }
   });
 
+  /* Deshabilitar el botón no basta como candado: un botón de envío
+     deshabilitado no impide que el formulario se envíe pulsando Enter desde
+     el campo, así que dos Enter seguidos llamarían a Supabase dos veces.
+     Esta bandera sí lo impide, pase lo que pase con el botón. */
+  let guardandoPw = false;
+
   pwForm.addEventListener('submit', async function(e){
     e.preventDefault();
+    if (guardandoPw) return;
     const nueva = pwInput.value;
     if (nueva.length < 6) { setPwMsg('Mínimo 6 caracteres.', 'err'); pwInput.focus(); return; }
     if (!window.supabaseClient) { setPwMsg('No hay conexión con el servidor. Recarga la página.', 'err'); return; }
 
+    guardandoPw = true;
     pwBtn.disabled = true;
     pwBtn.textContent = 'Guardando...';
     setPwMsg('', '');
-    const { error } = await window.supabaseClient.auth.updateUser({ password: nueva });
+    let error = null;
+    try {
+      ({ error } = await window.supabaseClient.auth.updateUser({ password: nueva }));
+    } catch (err) {
+      // Si la promesa se rompe (red caída, por ejemplo) hay que liberar igual
+      // el formulario; si no, se quedaría bloqueado hasta recargar la página.
+      error = { message: 'No se pudo conectar. Revisa tu conexión e inténtalo de nuevo.' };
+    }
+    guardandoPw = false;
     pwBtn.disabled = false;
     pwBtn.textContent = 'Guardar';
 
