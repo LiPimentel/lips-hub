@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rescate de datos — LIPS-HUB</title>
+<style>
+  :root{ --tinta:#1B2430; --papel:#F1EDE4; --dorado:#B8863B; --verde:#3E7A5E; --rojo:#B8433B; }
+  *{ box-sizing:border-box; }
+  body{ margin:0; padding:24px 16px 64px; background:var(--papel); color:var(--tinta);
+        font-family:system-ui,-apple-system,'Segoe UI',sans-serif; line-height:1.55; }
+  main{ max-width:760px; margin:0 auto; }
+  h1{ font-size:1.5rem; margin:0 0 4px; }
+  h2{ font-size:1.05rem; margin:32px 0 8px; }
+  .sub{ color:#5A6473; margin:0 0 24px; font-size:0.95rem; }
+  .caja{ background:#fff; border:1px solid #DCD5C4; border-radius:12px; padding:18px; margin:16px 0; }
+  .origen{ font-family:ui-monospace,monospace; font-size:0.85rem; background:#F7F4EC;
+           border:1px solid #E3DCCB; border-radius:8px; padding:8px 10px; word-break:break-all; }
+  button{ font:inherit; font-weight:600; padding:12px 18px; border-radius:10px; border:none;
+          background:var(--dorado); color:#fff; cursor:pointer; margin:6px 6px 6px 0; }
+  button.sec{ background:#fff; color:var(--tinta); border:1.5px solid var(--tinta); }
+  button:disabled{ opacity:0.45; cursor:not-allowed; }
+  table{ border-collapse:collapse; width:100%; font-size:0.88rem; margin-top:10px; }
+  th,td{ text-align:left; padding:7px 8px; border-bottom:1px solid #EAE4D6; }
+  th{ font-size:0.75rem; text-transform:uppercase; letter-spacing:0.04em; color:#5A6473; }
+  .vacio{ color:#8A93A0; font-style:italic; }
+  .ok{ color:var(--verde); font-weight:600; }
+  .mal{ color:var(--rojo); font-weight:600; }
+  .aviso{ background:#FDF6E3; border-left:4px solid var(--dorado); padding:12px 14px;
+          border-radius:0 8px 8px 0; margin:16px 0; font-size:0.92rem; }
+  #resultado{ white-space:pre-wrap; font-size:0.9rem; margin-top:12px; }
+  label.chk{ display:block; margin:10px 0; font-size:0.9rem; }
+  ol{ padding-left:22px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Rescate de datos</h1>
+  <p class="sub">Herramienta de recuperación de LIPS-HUB. Todo pasa dentro de tu navegador: nada se envía a internet ni a ningún servidor.</p>
+
+  <div class="caja">
+    <strong>Estás en esta dirección:</strong>
+    <div class="origen" id="origen"></div>
+    <p style="margin:10px 0 0; font-size:0.9rem; color:#5A6473;">
+      Los datos que guardan las apps quedan amarrados a la dirección exacta donde se guardaron.
+      Por eso hay que <strong>descargar</strong> en la dirección vieja y <strong>restaurar</strong> en la nueva.
+    </p>
+  </div>
+
+  <h2>1. Qué hay guardado aquí</h2>
+  <div class="caja" id="inventario">Revisando…</div>
+
+  <h2>2. Descargar una copia</h2>
+  <div class="caja">
+    <p style="margin:0 0 10px;">Guarda en un archivo todo lo que esta dirección tenga guardado. Hazlo en la dirección <strong>vieja</strong> (la de Netlify) o abriendo esta página desde tu carpeta de AI APPs.</p>
+    <button id="btn-bajar">Descargar copia de seguridad</button>
+  </div>
+
+  <h2>3. Restaurar desde un archivo</h2>
+  <div class="caja">
+    <p style="margin:0 0 10px;">Toma el archivo del paso anterior y lo escribe en esta dirección. Hazlo en la dirección <strong>nueva</strong>.</p>
+    <label class="chk"><input type="checkbox" id="forzar"> Sobrescribir lo que ya exista aquí (por defecto se conserva lo que ya hay)</label>
+    <input type="file" id="archivo" accept="application/json,.json">
+    <div id="resultado"></div>
+  </div>
+
+  <div class="aviso">
+    <strong>Después de restaurar:</strong> abre la app (Bitácora, StaffGate…), inicia sesión y confirma que tus datos aparecen.
+    En cuanto hagas cualquier cambio pequeño, la app los sube a la nube y quedan a salvo en cualquier dirección.
+  </div>
+
+  <h2>Si no aparece nada guardado</h2>
+  <ol style="font-size:0.92rem;">
+    <li>Confirma que estás en la <strong>misma dirección</strong> donde usabas la app (Netlify, o el archivo en tu carpeta).</li>
+    <li>Confirma que es el <strong>mismo navegador y la misma computadora</strong>. Los datos no viajan entre navegadores.</li>
+    <li>Si usabas la app abriendo el archivo del disco, guarda esta página en esa misma carpeta y ábrela desde ahí.</li>
+  </ol>
+</main>
+
+<script>
+// Claves que usan las apps del hub. Se listan con nombre entendible; igual se
+// descarga todo lo que haya, no solo estas.
+const CONOCIDAS = [
+  ['ledger-data',   'Bitácora del Mentor'],
+  ['staffgate',     'StaffGate (entrevistas)'],
+  ['LPBag_db',      'LPBag (presupuesto)'],
+  ['mytravel',      'MyTravel'],
+  ['gantt',         'Generador de Gantt']
+];
+
+function nombreAmable(clave){
+  for (const [prefijo, nombre] of CONOCIDAS){
+    if (clave.toLowerCase().startsWith(prefijo.toLowerCase())) return nombre;
+  }
+  return null;
+}
+
+function tamano(txt){
+  const b = new Blob([txt]).size;
+  return b < 1024 ? b + ' B' : (b / 1024).toFixed(1) + ' KB';
+}
+
+function leerTodo(){
+  const out = {};
+  for (let i = 0; i < localStorage.length; i++){
+    const k = localStorage.key(i);
+    out[k] = localStorage.getItem(k);
+  }
+  return out;
+}
+
+function pintarInventario(){
+  document.getElementById('origen').textContent = location.origin === 'null'
+    ? 'archivo local en tu computadora (' + location.pathname + ')'
+    : location.origin;
+
+  const datos = leerTodo();
+  const claves = Object.keys(datos);
+  const caja = document.getElementById('inventario');
+
+  if (!claves.length){
+    caja.innerHTML = '<p class="vacio">No hay nada guardado en esta dirección.</p>';
+    document.getElementById('btn-bajar').disabled = true;
+    return;
+  }
+
+  const filas = claves.sort().map(k => {
+    const amable = nombreAmable(k);
+    const esApp = amable !== null;
+    return '<tr>'
+      + '<td>' + (esApp ? '<strong>' + amable + '</strong>' : '<span class="vacio">otro</span>') + '</td>'
+      + '<td style="font-family:ui-monospace,monospace;font-size:0.8rem;word-break:break-all;">' + k + '</td>'
+      + '<td>' + tamano(datos[k]) + '</td>'
+      + '</tr>';
+  }).join('');
+
+  const deApps = claves.filter(k => nombreAmable(k)).length;
+  caja.innerHTML = '<p style="margin:0 0 4px;"><strong>' + claves.length + '</strong> cosas guardadas, '
+    + '<strong>' + deApps + '</strong> de apps del hub.</p>'
+    + '<table><thead><tr><th>App</th><th>Clave</th><th>Tamaño</th></tr></thead><tbody>'
+    + filas + '</tbody></table>';
+}
+
+document.getElementById('btn-bajar').onclick = function(){
+  const paquete = {
+    formato: 'lips-hub-rescate-1',
+    origen: location.origin === 'null' ? 'archivo local' : location.origin,
+    fecha: new Date().toISOString(),
+    datos: leerTodo()
+  };
+  const nombre = 'rescate-lips-hub-' + new Date().toISOString().slice(0, 10) + '.json';
+  const url = URL.createObjectURL(new Blob([JSON.stringify(paquete, null, 2)], { type: 'application/json' }));
+  const a = document.createElement('a');
+  a.href = url; a.download = nombre; a.click();
+  URL.revokeObjectURL(url);
+};
+
+document.getElementById('archivo').onchange = function(e){
+  const file = e.target.files[0];
+  const res = document.getElementById('resultado');
+  if (!file) return;
+  const lector = new FileReader();
+  lector.onload = function(){
+    let paquete;
+    try { paquete = JSON.parse(lector.result); }
+    catch (err){ res.innerHTML = '<span class="mal">Ese archivo no se pudo leer. ¿Es el que descargó esta misma página?</span>'; return; }
+    if (!paquete || !paquete.datos || typeof paquete.datos !== 'object'){
+      res.innerHTML = '<span class="mal">El archivo no tiene el formato esperado.</span>';
+      return;
+    }
+    const forzar = document.getElementById('forzar').checked;
+    const escritas = [], saltadas = [];
+    Object.keys(paquete.datos).forEach(function(k){
+      const yaHay = localStorage.getItem(k) !== null;
+      if (yaHay && !forzar){ saltadas.push(k); return; }
+      try { localStorage.setItem(k, paquete.datos[k]); escritas.push(k); }
+      catch (err){ saltadas.push(k + ' (no se pudo escribir)'); }
+    });
+    let msg = '<span class="ok">Restauradas ' + escritas.length + ' cosas.</span>';
+    if (saltadas.length){
+      msg += '\n' + saltadas.length + ' se conservaron como estaban (ya existían aquí). '
+           + 'Si quieres reemplazarlas, marca la casilla de sobrescribir y vuelve a elegir el archivo.';
+    }
+    msg += '\n\nOrigen del archivo: ' + (paquete.origen || 'desconocido')
+         + '\nFecha de la copia: ' + (paquete.fecha ? paquete.fecha.slice(0, 10) : 'desconocida');
+    msg += '\n\nAhora abre la app, inicia sesión y confirma que tus datos están.';
+    res.innerHTML = msg;
+    pintarInventario();
+  };
+  lector.readAsText(file);
+};
+
+pintarInventario();
+</script>
+</body>
+</html>
