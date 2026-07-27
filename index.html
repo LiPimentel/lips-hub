@@ -94,6 +94,28 @@
 
   .ledger-meta span{ color:var(--teal); }
 
+  /* Son <button> y no <a href="#"> porque no navegan a ningún sitio: uno
+     despliega un panel y el otro cierra la sesión. El aspecto de enlace se
+     mantiene; lo que cambia es lo que anuncia un lector de pantalla. */
+  .meta-link{
+    display:inline;
+    padding:0;
+    border:none;
+    background:none;
+    font-family:inherit;
+    font-size:inherit;
+    line-height:inherit;
+    color:var(--teal);
+    cursor:pointer;
+    text-align:left;
+  }
+  .meta-link:hover{ text-decoration:underline; }
+  .meta-link:focus-visible{
+    outline:2px solid var(--teal);
+    outline-offset:2px;
+    border-radius:2px;
+  }
+
   main{
     max-width:1040px;
     margin:0 auto;
@@ -234,7 +256,9 @@
     border:none;
     border-radius:4px;
     background:var(--brass);
-    color:#fff;
+    /* Texto oscuro, no blanco: blanco sobre este dorado da 3.23:1 y no llega
+       al 4.5:1 que pide WCAG AA. Con --text-dark sube a 4.85:1. */
+    color:var(--text-dark);
     font-family:'Inter', sans-serif;
     font-size:0.85rem;
     font-weight:600;
@@ -410,8 +434,8 @@
   <div class="ledger-meta">
     APPS: <span id="count">5</span><br>
     ESTADO: <span>activo</span><br>
-    <a href="#" id="password-link" style="color:var(--teal); text-decoration:none;" aria-expanded="false" aria-controls="account-panel">Cambiar contraseña</a><br>
-    <a href="#" id="logout-link" style="color:var(--teal); text-decoration:none;">Cerrar sesión</a>
+    <button type="button" class="meta-link" id="password-link" aria-expanded="false" aria-controls="account-panel">Cambiar contraseña</button><br>
+    <button type="button" class="meta-link" id="logout-link">Cerrar sesión</button>
   </div>
 </header>
 
@@ -455,8 +479,7 @@
 <script src="./supabase-client.js"></script>
 <script src="./auth-gate.js"></script>
 <script>
-  document.getElementById('logout-link').addEventListener('click', function(e){
-    e.preventDefault();
+  document.getElementById('logout-link').addEventListener('click', function(){
     if (window.aiAppsSignOut) window.aiAppsSignOut();
   });
 
@@ -542,7 +565,9 @@
     const apps = APPS.filter(a => a.group === sec.group);
     const grid = document.getElementById(sec.gridId);
     apps.forEach(app => grid.appendChild(cardFor(app)));
-    document.getElementById(sec.countId).textContent = apps.length;
+    // Con el número suelto ("3"), el nombre accesible de la cabecera queda
+    // ambiguo: se lee "Apps profesionales 3". La palabra lo resuelve.
+    document.getElementById(sec.countId).textContent = apps.length + (apps.length === 1 ? ' app' : ' apps');
     // Si algún día una sección se queda sin apps, no dejar la cabecera suelta.
     if (apps.length === 0) document.getElementById(sec.sectionId).hidden = true;
   });
@@ -558,12 +583,15 @@
   const pwMsg   = document.getElementById('account-msg');
 
   function setPwMsg(text, kind){
+    /* Un error usa role="alert" y un éxito role="status": lo primero se
+       anuncia de inmediato, lo segundo espera a que el lector termine.
+       El rol se cambia ANTES del texto, o el anuncio se pierde. */
+    pwMsg.setAttribute('role', kind === 'err' ? 'alert' : 'status');
     pwMsg.textContent = text;
     pwMsg.className = 'account-msg' + (kind ? ' ' + kind : '');
   }
 
-  pwLink.addEventListener('click', function(e){
-    e.preventDefault();
+  pwLink.addEventListener('click', function(){
     const abrir = pwPanel.hidden;
     pwPanel.hidden = !abrir;
     pwLink.setAttribute('aria-expanded', String(abrir));
@@ -571,6 +599,10 @@
       setPwMsg('', '');
       pwInput.value = '';
       pwInput.focus();
+    } else {
+      // Al ocultar el panel el foco caería al <body>: se devuelve al botón
+      // que lo abrió, para no perder el sitio al navegar con teclado.
+      pwLink.focus();
     }
   });
 
