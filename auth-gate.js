@@ -388,7 +388,14 @@
         }
         .cover.align-right{ justify-content:flex-end; padding-right:8vw; }
         .gantt-scene{
-          position:absolute; left:6%; top:20%; width:min(38%, 420px); height:60%;
+          /* El ancho estaba topado en 420px, asi que en un monitor ancho el
+             cronograma quedaba diminuto contra una franja enorme de fondo
+             vacio. Ahora crece hasta donde empieza la tarjeta de login (que va
+             a la derecha, con padding-right:8vw y 320px de ancho), dejando un
+             respiro. El max() evita que la resta se vuelva negativa en
+             pantallas angostas. */
+          position:absolute; left:6%; top:20%; height:60%;
+          width:min(62%, 1200px, max(130px, calc(86vw - 416px)));
           display:flex; flex-direction:column; justify-content:space-between;
           pointer-events:none;
         }
@@ -532,21 +539,101 @@
           opacity:0.6;
           pointer-events:none;
         }
+        /* Nubecitas un punto mas grandes (0.62 -> 0.78 y 0.44 -> 0.56 em) y
+           corridas un pelin para que no se peguen al avion al crecer. */
         .logo-plane .lp-cloud-1{
-          width:0.62em; top:-0.06em; left:-0.42em;
+          width:0.78em; top:-0.1em; left:-0.5em;
           animation:logo-cloud-float 5s ease-in-out infinite;
         }
         .logo-plane .lp-cloud-2{
-          width:0.44em; bottom:0.02em; right:-0.3em; opacity:0.45;
+          width:0.56em; bottom:0em; right:-0.36em; opacity:0.45;
           animation:logo-cloud-float 6.4s ease-in-out infinite reverse;
         }
+        /* Flote del avion mas perceptible: el recorrido pasa de 0.16em a
+           0.26em y se le suma una inclinacion leve, que es lo que hace que
+           se lea como "vuela" y no como "sube y baja". */
         @keyframes logo-plane-float{
-          0%, 100%{ transform:translateY(0); }
-          50%{ transform:translateY(-0.16em); }
+          0%, 100%{ transform:translateY(0) rotate(0deg); }
+          50%{ transform:translateY(-0.26em) rotate(-4deg); }
         }
         @keyframes logo-cloud-float{
           0%, 100%{ transform:translateY(0); }
           50%{ transform:translateY(-0.08em); }
+        }
+
+        /* ===== Logo de Bitacora: monigote hojeando un libro =====
+           Va antes del emoji del libro. La pagina se dobla sobre el lomo
+           (scaleX hacia 0 con el origen en el lomo) y la cabeza acompana el
+           gesto: es lo que hace que se lea como "esta pasando la hoja" y no
+           como una figura quieta. */
+        .logo-reader{
+          display:inline-block;
+          width:1.15em; height:1.15em;
+          vertical-align:-0.18em;
+          margin-right:0.18em;
+        }
+        .logo-reader svg{ width:100%; height:100%; overflow:visible; }
+        .logo-reader .lr-body,
+        .logo-reader .lr-head{ fill:#3E4757; }
+        .logo-reader .lr-book{ fill:#4E8B8B; }
+        .logo-reader .lr-page{
+          fill:#9FCFCF;
+          transform-box:fill-box;
+          transform-origin:left center;
+          animation:lr-flip 3s ease-in-out infinite;
+        }
+        .logo-reader .lr-head{
+          transform-box:fill-box;
+          transform-origin:center bottom;
+          animation:lr-nod 3s ease-in-out infinite;
+        }
+        @keyframes lr-flip{
+          0%, 28%{ transform:scaleX(1); }
+          44%{ transform:scaleX(0.06); }
+          60%, 100%{ transform:scaleX(1); }
+        }
+        @keyframes lr-nod{
+          0%, 100%{ rotate:0deg; }
+          44%{ rotate:-5deg; }
+        }
+
+        /* ===== Logo de StaffGate: el dardo llega volando =====
+           Todo va anclado al emoji de la diana (no a la tarjeta), asi que el
+           recorrido funciona igual sea cual sea el ancho del nombre: el dardo
+           entra por la derecha, rodea el texto y termina clavado en la diana. */
+        .logo-dart-wrap{ position:relative; display:inline-block; }
+        .logo-dart{
+          position:absolute; left:0; top:0;
+          width:0.8em; height:0.8em;
+          pointer-events:none;
+          animation:dart-fly 6.5s ease-in-out infinite;
+        }
+        .logo-dart svg{ width:100%; height:100%; overflow:visible; }
+        .logo-dart .ld-shaft{ stroke:#3E4757; stroke-width:2.4; stroke-linecap:round; fill:none; }
+        .logo-dart .ld-tip{ fill:#3E4757; }
+        .logo-dart .ld-fletch{ fill:#E03B2E; }
+        @keyframes dart-fly{
+          0%{   transform:translate(9.6em, -2.8em) rotate(26deg); opacity:0; }
+          7%{   opacity:1; }
+          22%{  transform:translate(6.4em, -3.1em) rotate(8deg); opacity:1; }
+          38%{  transform:translate(4.2em, 0.9em) rotate(-16deg); }
+          54%{  transform:translate(2.5em, -2.8em) rotate(6deg); }
+          70%{  transform:translate(1em, -1.5em) rotate(-4deg); }
+          82%{  transform:translate(0.1em, 0.05em) rotate(0deg) scale(1); }
+          86%{  transform:translate(0.1em, 0.05em) rotate(0deg) scale(0.86); }
+          92%{  transform:translate(0.1em, 0.05em) rotate(0deg) scale(1); opacity:1; }
+          100%{ transform:translate(0.1em, 0.05em) rotate(0deg) scale(1); opacity:0; }
+        }
+        @media (prefers-reduced-motion: reduce){
+          /* El monigote se queda con el libro abierto y el dardo, clavado en
+             la diana: los dos estados finales que la animacion busca contar. */
+          .logo-reader .lr-page,
+          .logo-reader .lr-head{ animation:none; }
+          .logo-dart{
+            animation:none;
+            transform:translate(0.1em, 0.05em);
+            opacity:1;
+          }
         }
         @media (prefers-reduced-motion: reduce){
           /* Sin movimiento: aviones y nubes se quedan quietos en su posicion. */
@@ -1301,19 +1388,23 @@
             tower: { ratio: 40 / 28, svg: '<svg viewBox="0 0 40 28" fill="#e8f4f2"><ellipse cx="18" cy="21" rx="16" ry="6.5"/><ellipse cx="20" cy="14" rx="12" ry="8"/><ellipse cx="24" cy="8" rx="8" ry="6"/></svg>' },
             flat: { ratio: 56 / 18, svg: '<svg viewBox="0 0 56 18" fill="#e8f4f2"><ellipse cx="20" cy="12" rx="19" ry="5.5"/><ellipse cx="34" cy="9" rx="14" ry="6"/><ellipse cx="46" cy="12" rx="9" ry="4.5"/></svg>' }
           };
+          /* Anchos deliberadamente parejos. Antes iban de 16 a 58px — una
+             diferencia de 3.6x que hacia que unas nubes se leyeran como motas
+             al lado de otras enormes. Ahora el rango es 28-48px (1.7x): sigue
+             habiendo variedad, pero ninguna desentona con su vecina. */
           const clouds = [
-            { s: 'puffy', left: 6, top: 7, w: 44, dur: 24, delay: 0, op: 0.55 },
-            { s: 'wide', left: 26, top: 3, w: 32, dur: 19, delay: -4, op: 0.4 },
-            { s: 'wispy', left: 44, top: 9, w: 52, dur: 28, delay: -11, op: 0.32 },
-            { s: 'flat', left: 64, top: 4, w: 58, dur: 25, delay: -7, op: 0.5 },
-            { s: 'puff', left: 84, top: 11, w: 22, dur: 17, delay: -2, op: 0.42 },
-            { s: 'tower', left: 14, top: 19, w: 34, dur: 30, delay: -13, op: 0.45 },
+            { s: 'puffy', left: 6, top: 7, w: 42, dur: 24, delay: 0, op: 0.55 },
+            { s: 'wide', left: 26, top: 3, w: 34, dur: 19, delay: -4, op: 0.4 },
+            { s: 'wispy', left: 44, top: 9, w: 48, dur: 28, delay: -11, op: 0.32 },
+            { s: 'flat', left: 64, top: 4, w: 46, dur: 25, delay: -7, op: 0.5 },
+            { s: 'puff', left: 84, top: 11, w: 30, dur: 17, delay: -2, op: 0.42 },
+            { s: 'tower', left: 14, top: 19, w: 36, dur: 30, delay: -13, op: 0.45 },
             { s: 'wide', left: 72, top: 20, w: 40, dur: 21, delay: -5, op: 0.5 },
-            { s: 'puff', left: 16, top: 29, w: 18, dur: 15, delay: -9, op: 0.3 },
-            { s: 'wispy', left: 2, top: 40, w: 46, dur: 33, delay: -3, op: 0.28 },
-            { s: 'puffy', left: 88, top: 30, w: 30, dur: 26, delay: -16, op: 0.4 },
-            { s: 'flat', left: 78, top: 41, w: 44, dur: 29, delay: -6, op: 0.25 },
-            { s: 'puff', left: 6, top: 60, w: 16, dur: 18, delay: -12, op: 0.22 }
+            { s: 'puff', left: 16, top: 29, w: 30, dur: 15, delay: -9, op: 0.3 },
+            { s: 'wispy', left: 2, top: 40, w: 44, dur: 33, delay: -3, op: 0.28 },
+            { s: 'puffy', left: 88, top: 30, w: 34, dur: 26, delay: -16, op: 0.4 },
+            { s: 'flat', left: 78, top: 41, w: 42, dur: 29, delay: -6, op: 0.25 },
+            { s: 'puff', left: 6, top: 60, w: 28, dur: 18, delay: -12, op: 0.22 }
           ];
           const cloudEls = clouds.map((c) => {
             const shape = cloudShapes[c.s];
@@ -1519,6 +1610,21 @@
               if (!window.AIAPPS_APP_EMOJI) return '';
               if (window.AIAPPS_LOGO_COINS) {
                 return `<span class="emoji-wrap">${window.AIAPPS_APP_EMOJI}<span class="coin">🪙</span><span class="coin">🪙</span><span class="coin">🪙</span></span> `;
+              }
+              if (window.AIAPPS_LOGO_READER) {
+                return `<span class="logo-reader" aria-hidden="true"><svg viewBox="0 0 24 24">
+                  <ellipse class="lr-body" cx="12" cy="17.6" rx="6.4" ry="5.1"/>
+                  <circle class="lr-head" cx="12" cy="7.4" r="4.4"/>
+                  <path class="lr-book" d="M3.9 14.9 L12 13.2 L20.1 14.9 L20.1 20.5 L12 18.8 L3.9 20.5 Z"/>
+                  <path class="lr-page" d="M12 13.2 L20.1 14.9 L20.1 20.5 L12 18.8 Z"/>
+                </svg></span>${window.AIAPPS_APP_EMOJI} `;
+              }
+              if (window.AIAPPS_LOGO_DART) {
+                return `<span class="logo-dart-wrap">${window.AIAPPS_APP_EMOJI}<span class="logo-dart" aria-hidden="true"><svg viewBox="0 0 24 24">
+                  <path class="ld-shaft" d="M20 4 L9.6 14.4"/>
+                  <path class="ld-tip" d="M9.6 14.4 L5.8 18.2 L7.4 12.6 Z"/>
+                  <path class="ld-fletch" d="M20 4 L15.2 5.4 L18.6 8.8 Z"/>
+                </svg></span></span> `;
               }
               if (window.AIAPPS_LOGO_PLANE) {
                 return `<span class="logo-plane" aria-hidden="true"><svg class="lp-cloud lp-cloud-1" viewBox="0 0 40 18"><ellipse cx="15" cy="11" rx="14" ry="5.5"/><ellipse cx="26" cy="8" rx="10" ry="5.5"/></svg><span class="lp-glyph">${window.AIAPPS_APP_EMOJI}</span><svg class="lp-cloud lp-cloud-2" viewBox="0 0 28 16"><ellipse cx="12" cy="10" rx="11" ry="5"/><ellipse cx="20" cy="7" rx="7" ry="4.5"/></svg></span>`;
