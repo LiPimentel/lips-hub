@@ -92,7 +92,7 @@
   function makeBadge(){
     const el = document.createElement('div');
     el.id = 'aiapps-folder-badge';
-    el.style.cssText = 'position:fixed;bottom:14px;right:14px;z-index:999999;font-family:system-ui,-apple-system,sans-serif;font-size:12.5px;line-height:1;display:inline-flex;align-items:center;gap:7px;background:#1B2430;color:#F1EDE4;padding:9px 14px;border-radius:999px;box-shadow:0 6px 20px rgba(0,0,0,0.35);border:1px solid rgba(255,255,255,0.12);user-select:none;';
+    el.style.cssText = 'position:fixed;bottom:calc(14px + min(var(--aiapps-chrome-bottom, 0px), 40vh));right:14px;z-index:999999;font-family:system-ui,-apple-system,sans-serif;font-size:12.5px;line-height:1;display:inline-flex;align-items:center;gap:7px;background:#1B2430;color:#F1EDE4;padding:9px 14px;border-radius:999px;box-shadow:0 6px 20px rgba(0,0,0,0.35);border:1px solid rgba(255,255,255,0.12);user-select:none;';
     document.body.appendChild(el);
     return el;
   }
@@ -186,7 +186,7 @@
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3E%3Crect width='30' height='30' rx='8' fill='%2323281F'/%3E%3Ctext x='15' y='22' font-size='16' text-anchor='middle'%3E%F0%9F%93%96%3C/text%3E%3C/svg%3E">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-<script>window.AIAPPS_APP_ID = 'mentor'; window.AIAPPS_SHOW_ACCOUNT_WIDGET = true; window.AIAPPS_APP_NAME = 'Bitácora del Mentor'; window.AIAPPS_APP_EMOJI = '📖'; window.AIAPPS_APP_TAGLINE = 'Registro de mentorías'; window.AIAPPS_APP_ACCENT = '#4E8B8B'; window.AIAPPS_APP_BG = '#1B2420'; window.AIAPPS_APP_GLOW = 'rgba(78,139,139,0.22)'; window.AIAPPS_LOGIN_SCENE = 'mentor-people'; window.AIAPPS_LOGIN_LAYOUT = 'right';</script>
+<script>window.AIAPPS_APP_ID = 'mentor'; window.AIAPPS_SHOW_ACCOUNT_WIDGET = true; window.AIAPPS_APP_NAME = 'Bitácora del Mentor'; window.AIAPPS_APP_EMOJI = '📖'; window.AIAPPS_LOGO_READER = true; window.AIAPPS_APP_TAGLINE = 'Registro de mentorías'; window.AIAPPS_APP_ACCENT = '#4E8B8B'; window.AIAPPS_APP_BG = '#1B2420'; window.AIAPPS_APP_GLOW = 'rgba(78,139,139,0.22)'; window.AIAPPS_LOGIN_SCENE = 'mentor-people'; window.AIAPPS_LOGIN_LAYOUT = 'right';</script>
 <script src="./supabase-client-app.js"></script>
 <script src="./auth-gate.js"></script>
 <style>
@@ -248,12 +248,15 @@
   .mentee-area{font-size:11px;color:var(--muted);margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .no-results{font-size:12.5px;color:var(--muted);padding:8px 2px;}
 
-  .btn-add-mentee{width:100%;padding:9px;background:transparent;border:1px dashed var(--muted);border-radius:8px;color:var(--muted);font-size:13px;cursor:pointer;font-family:'Inter',sans-serif;margin-top:6px;}
-  .btn-add-mentee:hover{border-color:var(--ink);color:var(--ink);}
+  /* Estos botones eran transparentes con borde gris claro sobre un fondo
+     crema: se leian como texto apagado, no como algo pulsable. Pasan al lila
+     que la app ya usa (--sage / --sage-light / --slate), sin colores nuevos. */
+  .btn-add-mentee{width:100%;padding:9px;background:var(--sage-light);border:1px dashed var(--brass);border-radius:8px;color:var(--slate);font-size:13px;cursor:pointer;font-family:'Inter',sans-serif;margin-top:6px;}
+  .btn-add-mentee:hover{background:var(--slate-light);border-color:var(--slate);color:var(--violet-deep);}
 
   .export-block{margin-top:22px;padding-top:16px;border-top:1px solid var(--line);display:flex;gap:8px;}
-  .btn-export{flex:1;padding:8px 6px;background:transparent;border:1px solid var(--line);border-radius:7px;font-size:11.5px;cursor:pointer;color:var(--ink);font-family:'Inter',sans-serif;}
-  .btn-export:hover{background:var(--surface);}
+  .btn-export{flex:1;padding:8px 6px;background:var(--sage-light);border:1px solid var(--brass);border-radius:7px;font-size:11.5px;cursor:pointer;color:var(--slate);font-family:'Inter',sans-serif;}
+  .btn-export:hover{background:var(--slate-light);border-color:var(--slate);color:var(--violet-deep);}
 
   .main{flex:1;padding:28px 32px;min-width:0;}
   .empty{margin-top:80px;text-align:center;color:var(--muted);}
@@ -269,7 +272,15 @@
   .status-badge.activo{background:var(--status-activo-light);color:var(--status-activo);}
   .status-badge.pausa{background:var(--status-pausa-light);color:var(--status-pausa);}
   .status-badge.cerrado{background:var(--status-cerrado-light);color:var(--status-cerrado);}
-  .pending-badge{font-size:11px;font-weight:500;padding:3px 10px;border-radius:20px;background:var(--rust-light);color:var(--rust);}
+  /* Rojo mas firme y texto en negrita: decia "1 pendiente" en un tono suave y
+     no se leia como algo que reclama atencion. --rust sobre --rust-light da
+     4.6:1, por encima del minimo AA. */
+  /* El texto NO usa --rust: ese tono sobre --rust-light da 4.44:1 y se queda
+     justo por debajo del 4.5:1 de WCAG AA (medido, no estimado). Un rojo un
+     punto mas oscuro sube a 4.88:1 sin cambiar el caracter del color. El
+     borde si puede seguir en --rust: como elemento de interfaz le basta 3:1 y
+     da 4.0:1. --rust no se toca porque lo usan otras partes de la app. */
+  .pending-badge{font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;background:var(--rust-light);color:#9E4534;border:1px solid var(--rust);}
   .profile-area{font-size:13px;color:var(--brass);font-weight:500;margin:4px 0 0;}
   .profile-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin-top:16px;padding-top:16px;border-top:1px solid var(--line);}
   .profile-field-label{font-size:10.5px;text-transform:uppercase;letter-spacing:0.04em;color:var(--muted);margin:0 0 3px;}
@@ -796,7 +807,7 @@ function renderMentoriaView(body){
               <option value="pausa" ${status==='pausa'?'selected':''}>En pausa</option>
               <option value="cerrado" ${status==='cerrado'?'selected':''}>Cerrado</option>
             </select>
-            ${pendCount ? `<span class="pending-badge">${pendCount} pendiente${pendCount===1?'':'s'}</span>` : ''}
+            ${pendCount ? `<span class="pending-badge">${pendCount} actividad${pendCount===1?'':'es'} pendiente${pendCount===1?'':'s'}</span>` : ''}
           </div>
           <p class="profile-area">${esc(mentee.area)} ${mentee.type==='puntual' ? '· consulta puntual' : '· seguimiento continuo'}</p>
         </div>
@@ -1016,7 +1027,7 @@ function renderGroupsView(body){
         <div>
           <div class="profile-name-row">
             <p class="profile-name">${esc(group.name)}</p>
-            ${groupPendCount ? `<span class="pending-badge">${groupPendCount} pendiente${groupPendCount===1?'':'s'}</span>` : ''}
+            ${groupPendCount ? `<span class="pending-badge">${groupPendCount} actividad${groupPendCount===1?'':'es'} pendiente${groupPendCount===1?'':'s'}</span>` : ''}
           </div>
           ${group.description ? `<p class="profile-area">${esc(group.description)}</p>` : ''}
         </div>

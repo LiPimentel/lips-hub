@@ -52,5 +52,32 @@ Verificado:
 
 Cambio ajeno a esta app (solo `auth-gate.js`), probado explícitamente en la escena `gantt-build` como parte de la ronda de 6 escenas. Con la preferencia activa, confirmado con `getAnimations()` que `shadow.getAnimations({subtree:true}).length === 0` (0 animaciones vivas, contra 39 con la preferencia apagada como sanity check) y que el resplandor del cursor sigue moviéndose mientras la inclinación 3D de la tarjeta queda fija en plano. Sin fuga de listeners (`host._aiappsCleanups`). Detalle completo y veredicto en `docs/staffgate/qa-checklist.md` ("2026-07-26 — Revisión: commit `40c43f5`").
 
+## 2026-07-28 — Revisión: rama `claude/widget-cuenta-y-botones-mentor` (4 commits: `bbeeac1`, `62e7128`, `3a778ca`, `ac591c7`)
+
+**Contexto:** escena de login (`.gantt-scene`) ensanchada de `min(38%,420px)` a `min(62%,1200px,max(130px,calc(86vw-416px)))`; barras del cronograma en cápsula (`border-radius:999px`) + paleta pastel `--c1..--c8`; se quita "PES"/"Opción 1" de la data de prueba; widget de Cuenta reposicionado (compartido, ver `docs/lpbag/qa-checklist.md` para el detalle transversal).
+
+- [x] **Ancho del `.gantt-scene` vs `.card` del login, medido con `getBoundingClientRect` en los 5 anchos pedidos: 960, 1280, 1440, 1600, 1920px — SIN solape en ninguno**, con huelgo de 40px (960-1600px) creciendo a 84.8px (1920px). Card confirmado en 376px de ancho total (`box-sizing:content-box`, 320px + padding 28×2 — el mismo dato ya conocido de la corrección anterior de Bitácora, no repetido aquí como error).
+- [ ] ⚠️ **Pero SÍ hay solape real en un rango no pedido explícitamente (~500-589px de ancho), y en un tamaño de dispositivo real (568×320, iPhone SE horizontal).** Ver caso borde 17 en `docs/gantt/requerimientos.md` para el detalle completo con las 4 mediciones (585px: -2.9px; 500px: -76px; 568×320: -17.5px). No es una regresión nueva (la fórmula vieja solapaba aún más en ese mismo rango), pero el objetivo explícito de "no debe solapar en ningún ancho" no queda cumplido fuera del rango de 960-1920px que se pidió verificar.
+- [x] Sample data (`loadSample`/"Cargar data de prueba", ítem renombrado desde "Cargar ejemplo (Opción 1 — Odoo PES)"): confirmado con clic real (`btn.click()`, sin sesión, función pura de UI) que carga 16 filas (`rows.length===16`), mensaje de estado correcto ("Data de prueba cargada: 16 filas..."), y **generación real del cronograma** al hacer clic en "Generar Gantt" (`document.getElementById('generate').click()`): 16 `.gantt-bar` renderizados, `border-radius:999px` confirmado por `getComputedStyle`, colores computados `rgb(127,200,174)`/`rgb(154,147,224)` = `#7FC8AE`/`#9A93E0` (coinciden exactamente con `--c1`/`--c2` de la paleta pastel nueva).
+- [x] Confirmado por `document.body.textContent` que no queda ninguna mención a "PES" ni "Opción 1" en ningún lugar de la página tras cargar la data de prueba.
+- [x] Sin errores de consola en ningún punto (carga, cambios de viewport, carga de sample data, generación del Gantt).
+- [x] Widget de Cuenta / insignia de carpeta: mismo patrón de verificación que las otras 4 apps (clon del CSS literal), 14.5px de separación sin overlap a 1280px.
+- [ ] **NO verificado end-to-end con sesión real:** sin credenciales de prueba; no se confirmó que la data de prueba sobreviva un reload con sesión autenticada real (solo se confirmó el estado en memoria y el DOM renderizado).
+
+## 2026-07-28 — Reverificación: commit `228043a` (corrección del RECHAZADO anterior)
+
+**Contexto:** corrige el piso de `130px` de `.gantt-scene` (`width:min(62%,1200px,max(130px,calc(86vw-416px)))` → piso `0px`) que causaba solape con `.card` entre ~500 y 589px. Servidor real `http://localhost:8796/`, medición con `getBoundingClientRect` real sobre el shadow DOM del overlay de login (`#aiapps-auth-gate`), no aritmética sobre el CSS.
+
+Fórmula de solape usada: `overlap = max(0, min(card.right, scene.right) - max(card.left, scene.left))` — la fórmula de la ronda anterior (`scene.right - card.left`) daba falsos positivos cuando `scene.width===0` (la escena colapsada a un punto no es un solape visual real); esta corrección de método se aplicó a todas las mediciones de abajo.
+
+Verificado con evidencia medida en vivo (no lectura de código, no aritmética sola):
+- [x] **Barrido real en el navegador de 320 a 1920px, con foco denso en el rango antes roto (480-600px):** 320, 480, 490, 500, 550, 568×320 (iPhone SE horizontal, el caso puntual que antes daba -17.5px), 585 (antes -2.9px), 700, 1100, 1280, 1920 — **overlap = 0px en los 11 anchos**, incluidos los dos puntos exactos que la ronda anterior había reportado con solape negativo.
+- [x] **La escena deja de tener ancho (`scene.width===0`) por debajo de ~490-500px** en vez de invadir la tarjeta — confirma el comportamiento descrito ("se encoge hasta desaparecer") con datos reales, no solo con la fórmula.
+- [x] **Anchos grandes conservan el ancho amplio de antes:** a 1920px, `.gantt-scene` mide 1190.4px (cerca del tope de 1200px); a 1280px, 684.8px — coincide con el valor ya medido en la ronda del 2026-07-28 anterior (el piso solo afecta el rango angosto, no debía cambiar nada arriba de ~590px, y en efecto no cambió).
+- [x] Sin errores de consola en ningún punto del barrido.
+- [ ] Captura de pantalla real: intentada y fallida (`"the Browser pane is not displayed, so the page is not compositing frames"`), trampa de entorno ya confirmada — toda la verificación de arriba es por geometría real (`getBoundingClientRect`), no por inspección visual.
+
+**Veredicto: el punto 2 del encargo (solape del login de Gantt) queda CERRADO — 0 anchos con solape visible en un barrido real de 11 puntos, incluidos los dos que antes fallaban exactamente. Se levanta la parte de RECHAZADO de esta app.**
+
 ## Histórico
 _(sin entradas previas — primera revisión de este agente para esta app)_

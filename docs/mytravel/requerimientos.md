@@ -296,3 +296,5 @@ requieren un cambio; esta persona (BA) no los resuelve.
     también en el respaldo de carpeta local, quedando expuesto a cualquier
     otra cuenta que conecte esa carpeta. *Decisión pendiente: ¿deshabilitar
     los controles de guardado hasta que `cachedUserId` esté confirmado?*
+
+12. **(accessibility-reviewer, 2026-07-28, rama `claude/widget-cuenta-y-botones-mentor`) El widget compartido de Cuenta salta ~190px hacia arriba al abrir su panel, desde que cambió de ancla `top` a `bottom` para apilarse sobre la insignia de carpeta.** Mismo hallazgo transversal que las otras 4 apps (código 100% compartido en `auth-gate.js`) — detalle completo, aritmética del modelo de caja, y recomendación de arreglo (una sola regla CSS) en `docs/staffgate/accessibility-notes.md` §2. En MyTravel específicamente esto interactúa con `--aiapps-chrome-bottom` (la variable que esta app declara para no chocar con su barra de navegación móvil): el salto ocurre igual en móvil y escritorio, solo cambia el punto de partida. *Decisión pendiente: aplicar el arreglo sugerido o aceptar el salto.*

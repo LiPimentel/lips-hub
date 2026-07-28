@@ -45,5 +45,36 @@ NO verificado en esta sesión:
 
 Cambio ajeno a esta app (solo `auth-gate.js`), probado explícitamente en la escena `coins-rain` de LPBag como parte de la ronda de 6 escenas. Confirmado con evidencia medida en vivo (no lectura de código): con la preferencia activa, el resplandor sigue al cursor (`--mx`/`--my` cambian con cada `mousemove`) mientras la inclinación de la tarjeta se queda plana (`card.style.transform` fijo en `rotateX(0deg) rotateY(0deg)`), y `shadow.getAnimations({subtree:true}).length === 0` (nada se mueve). Detalle completo, metodología y veredicto en `docs/staffgate/qa-checklist.md` ("2026-07-26 — Revisión: commit `40c43f5`").
 
+## 2026-07-28 — Revisión: rama `claude/widget-cuenta-y-botones-mentor` (4 commits: `bbeeac1`, `62e7128`, `3a778ca`, `ac591c7`)
+
+**Contexto:** cambio de posición del widget de Cuenta (compartido, `auth-gate.js`), moneda `US$`/`RD$` con `currencyDisplay:'code'`, y eliminación de la sección propia "Seguridad de Acceso" (duplicaba el widget compartido). Servidor real en `http://localhost:8796/`, no `file://` — a diferencia de revisiones anteriores de esta app, esta vez sí hay servidor HTTP y el candado de login se comportó con normalidad (se confirmó `hasOverlay:true` tras un `navigate` forzado; una lectura inicial sin `force:true` mostró el dashboard ya renderizado, indicio de que el `preview_start` reutilizó un estado anterior de la pestaña compartida — se descartó y se repitió con recarga real).
+
+Verificado con evidencia medida en vivo (no lectura de código):
+
+- [x] **BUG confirmado — el cambio de moneda quedó incompleto.** Inyectando gastos de prueba reales en `appData.expenses` (in-memory, sin sesión, sin tocar Supabase) y llamando a `render()`: la columna "Vista"/convertida (`sym`) y los totales (`Intl.NumberFormat` con `currencyDisplay:'code'`) sí muestran `US$`/`RD$`/`"USD 488.73"` correctamente — pero la columna del monto ORIGINAL (`oSym`, líneas 1160 y 1187) sigue mostrando `$15.00` para gastos en USD, tanto en la tabla de escritorio como en las tarjetas móviles a 375px. Confirmado con `render()` real produciendo el HTML de ambas columnas lado a lado en la misma fila: `<span class="ao">$15.00</span>` junto a `<span class="ac">US$15.00</span>`. Ver caso borde 21 en `docs/lpbag/requerimientos.md` — esto contradice directamente lo que el encargo pedía verificar ("¿quedó algún $ ambiguo?" — sí quedó).
+- [x] Leyenda del gráfico circular (`renderChart`/`chartLegend`) confirmada correcta: `USD&nbsp;423.73`, `USD&nbsp;50.00`, etc. — sin ambigüedad, `currencyDisplay:'code'` funciona ahí.
+- [x] Totales mensual/anual/split confirmados correctos en DOP y en USD (`DOP 28,835.00 /mes`, `USD 488.73 /mes`), sin overflow de texto a 375px (`scrollWidth === clientWidth` en los tres elementos).
+- [x] **Eliminación de "Seguridad de Acceso" confirmada limpia:** 0 referencias a `.sec-alert`/`.btn-sec`/`changeCredentials`/`newPassword`/`securityAlert` en el DOM ni en el HTML fuente. `.sec-title` sigue presente exactamente en 4 secciones reales (Panel General, Distribución por Categoría, Registrar Gasto Fijo, Desglose de Gastos) — coincide con lo que el tech lead dijo haber conservado a propósito. Coincide también con la verificación independiente de security-reviewer el mismo día.
+- [x] **Widget de Cuenta reposicionado (abajo-derecha) sin overlap real, medido con `getBoundingClientRect`:** como el widget solo se construye tras una sesión real (no disponible, ver más abajo), se inyectó un clon con el `host.style.cssText` exacto copiado de `auth-gate.js` (mismo texto literal, no reimplementado) para medir la geometría real de apilado. Resultado: 14.5px de separación entre el botón "👤 Cuenta" y la insignia de carpeta, sin overlap, tanto a 1280px como a 375px de ancho.
+- [x] Botones "Import"/"Salir" (los que antes tapaba el widget) confirmados **sin overlap** con la insignia de carpeta ni con el widget clonado, en desktop (1280px) y mobile (375px): siguen arriba (y:11.5-47.5), badge/widget quedaron abajo (y:705-798).
+- [x] Sin errores de consola en ningún punto de la sesión (`read_console_messages` → "No console logs.", antes y después de las pruebas).
+- [ ] **NO verificado end-to-end con sesión real:** no hay credenciales de prueba para esta app. Todo lo de arriba se probó con datos inyectados directamente en `appData` (funciones puras `render()`/`renderChart()`), sin pasar por Supabase — válido para confirmar el bug de formato, no para confirmar persistencia real. El widget de Cuenta real (con sesión) tampoco se pudo montar; la verificación de su posición usó un clon con el CSS literal del archivo, no el componente real ejecutándose tras un login.
+
+**Veredicto de esta app: el cambio de posición del widget y la limpieza de la sección de seguridad están APROBADOS; el cambio de moneda está INCOMPLETO (bug confirmado, ver arriba) — no se puede dar por cerrado el punto 8 del encargo hasta corregir `oSym`.**
+
+## 2026-07-28 — Reverificación: commit `228043a` (corrección del RECHAZADO anterior)
+
+**Contexto:** corrige el bug de `oSym` que motivó el RECHAZADO de la revisión previa (dos líneas, `lpbag.html:1160` y `1187`, `'$'` → `'US$'`). Servidor real `http://localhost:8796/`, mismo método que la ronda anterior: datos inyectados directamente en `appData.expenses` (funciones puras `render()`/`renderChart()`, sin sesión).
+
+Verificado con evidencia medida en vivo (no lectura de código):
+- [x] **Bug de `oSym` CERRADO.** Con un gasto USD (15.00) y uno DOP (5000.00) inyectados: columna original (`.ao`/`.mob-orig`) da `US$15.00` / `RD$5000.00`; columna convertida (`.ac`/`.mob-conv`) da `RD$885.00` / `RD$5000.00` — mismo estándar en ambas columnas de la misma fila, en tabla de escritorio (1280px) y tarjetas móviles (375px).
+- [x] **Barrido de "¿queda algún `$` suelto?" con regex sobre el DOM real (excluyendo `<script>`/`<style>`), no solo las dos líneas del diff:** `0` coincidencias de un `$` no precedido por `S` o `D` (es decir, ni `US$` ni `RD$` rotos) en toda la página, en desktop y en 375px.
+- [x] **Repetido con moneda de destino (`globalCurrency`) cambiada a USD en vivo** (`select.value='USD'` + evento `change` + `render()` real): columna original sigue en `US$15.00`/`RD$5000.00`, columna convertida pasa a `US$15.00`/`US$84.75` — coherente, sin `$` ambiguo tampoco en este modo.
+- [x] Leyenda del gráfico (`chartLegend`) revisada de nuevo tras el fix: `DOP 490.42` (con `currencyDisplay:'code'`, sin símbolo `$`) — sin cambios respecto a la ronda anterior, sigue correcta.
+- [x] Grep en el archivo fuente: `oSym` solo aparece en las dos líneas corregidas (1160, 1187), ambas ya con `'US$'`; sin ningún literal `'$'` suelto restante en todo `lpbag.html`; `sym`/`oSym` son las únicas dos rutas que producen símbolo de moneda en el archivo (verificado por grep de `toFixed(2)`, 5 sitios, los 5 usan `sym` u `oSym`); `exportJSON()` es la única función de exportación y no formatea moneda como texto.
+- [x] Sin errores de consola en toda la sesión (antes y después de las pruebas, desktop y 375px).
+
+**Veredicto: el punto 8 del encargo (moneda `US$`/`RD$` sin ambigüedad) queda CERRADO. Se levanta la parte de RECHAZADO de esta app.**
+
 ## Histórico
 _(sin entradas previas antes de la revisión de arriba)_

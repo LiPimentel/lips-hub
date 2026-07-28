@@ -92,7 +92,7 @@
   function makeBadge(){
     const el = document.createElement('div');
     el.id = 'aiapps-folder-badge';
-    el.style.cssText = 'position:fixed;bottom:14px;right:14px;z-index:999999;font-family:system-ui,-apple-system,sans-serif;font-size:12.5px;line-height:1;display:inline-flex;align-items:center;gap:7px;background:#1B2430;color:#F1EDE4;padding:9px 14px;border-radius:999px;box-shadow:0 6px 20px rgba(0,0,0,0.35);border:1px solid rgba(255,255,255,0.12);user-select:none;';
+    el.style.cssText = 'position:fixed;bottom:calc(14px + min(var(--aiapps-chrome-bottom, 0px), 40vh));right:14px;z-index:999999;font-family:system-ui,-apple-system,sans-serif;font-size:12.5px;line-height:1;display:inline-flex;align-items:center;gap:7px;background:#1B2430;color:#F1EDE4;padding:9px 14px;border-radius:999px;box-shadow:0 6px 20px rgba(0,0,0,0.35);border:1px solid rgba(255,255,255,0.12);user-select:none;';
     document.body.appendChild(el);
     return el;
   }
@@ -192,7 +192,12 @@
   :root{
     --navy:#0D1F3C; --navy-2:#16305a; --paper:#F7F7F4; --line:#DEDCD3;
     --ink:#1c1c1a; --muted:#6b6a63; --card:#ffffff;
-    --c1:#5DCAA5; --c2:#7F77DD; --c3:#F0997B; --c4:#ED93B1; --c5:#85B7EB; --c6:#EF9F27; --c7:#97C459; --c8:#B4B2A9;
+    /* Paleta pastel: los tonos anteriores eran bastante saturados (#EF9F27,
+       #5DCAA5) y competian entre si. Estos bajan la saturacion y suben la
+       luminosidad, asi las barras conviven mejor sin perder identidad. El
+       numero que va dentro de la barra es texto oscuro, y sobre estos tonos
+       claros gana contraste en vez de perderlo. */
+    --c1:#7FC8AE; --c2:#9A93E0; --c3:#F0AE93; --c4:#EDA8BF; --c5:#9DC4E8; --c6:#EFBB6B; --c7:#A9CE7E; --c8:#C2C0B8;
   }
   *{box-sizing:border-box;}
   html{-webkit-text-size-adjust:100%;}
@@ -233,7 +238,9 @@
   .axis .tick.month span{color:var(--navy);font-weight:700;}
   .gantt-row{position:relative;height:48px;border-bottom:1px solid #f0f0eb;}
   .gantt-row .gridline{position:absolute;top:0;bottom:0;border-left:1px solid #f5f5ef;}
-  .gantt-bar{position:absolute;top:12px;height:24px;border-radius:5px;cursor:pointer;display:flex;align-items:center;padding-left:6px;}
+  /* Extremos redondos (999px) en vez de esquinas de 5px: las barras se leen
+     como capsulas, que es lo que pidio la usuaria. */
+  .gantt-bar{position:absolute;top:12px;height:24px;border-radius:999px;cursor:pointer;display:flex;align-items:center;padding-left:10px;}
   .gantt-bar .num{font-size:11px;font-weight:700;color:#1a1a1a;background:rgba(255,255,255,0.55);border-radius:4px;padding:1px 6px;}
   .gantt-bar:hover{filter:brightness(0.94);}
   .gantt-bar-label{position:absolute;top:0;height:48px;display:flex;align-items:center;white-space:nowrap;font-size:11px;color:var(--muted);padding-left:8px;}
@@ -273,7 +280,7 @@
       <div style="margin-top:10px;"><input type="file" id="fileInput" accept=".xlsx,.xls,.csv,.pdf"></div>
     </div>
     <div class="row" style="margin-top:14px;">
-      <button class="btn secondary" id="loadSample">Cargar ejemplo (Opción 1 — Odoo PES)</button>
+      <button class="btn secondary" id="loadSample">Cargar data de prueba</button>
       <button class="btn secondary" id="clearAll">Limpiar todo</button>
     </div>
     <div style="margin-top:14px;">
@@ -615,9 +622,9 @@ document.getElementById('loadSample').addEventListener('click', ()=>{
     [4,"Desarrollo Core Académico y Admisiones","7/23/2026","7/28/2026","Portal del estudiante, niveles y programas, ciclos académicos, aulas, tandas"],
     [6,"Desarrollo Core Académico y Admisiones","7/29/2026","8/5/2026","Registro de Empresas, Evaluaciones de profesores"],
     [3,"Desarrollo Core Académico y Admisiones","8/5/2026","8/7/2026","Carga de documentos ficha de estudiante, sitio web + formulario web"],
-    [3,"Prepara ambiente de pruebas para PES","8/7/2026","8/11/2026","Ambiente de pruebas inicial"],
-    [11,"Pruebas iniciales para ajustes","8/11/2026","8/25/2026","Completación de pruebas por parte del equipo PES"],
-    [12,"Desarrollo Core Académico y Admisiones","8/26/2026","9/10/2026","Ajustes y correcciones de lo reportado por PES"],
+    [3,"Prepara ambiente de pruebas","8/7/2026","8/11/2026","Ambiente de pruebas inicial"],
+    [11,"Pruebas iniciales para ajustes","8/11/2026","8/25/2026","Completación de pruebas por parte del equipo"],
+    [12,"Desarrollo Core Académico y Admisiones","8/26/2026","9/10/2026","Ajustes y correcciones de lo reportado"],
     [40,"Integración Financiera y Automatizaciones","7/6/2026","8/28/2026","CRM (Odoo) + Módulo de facturación/contabilidad, automatización de cargos, pasarelas de pago"],
     [5,"Pruebas, Roles y Ajustes","8/17/2026","8/21/2026","Matriz de seguridad, autorizaciones por rol, acceso restringido"],
     [10,"Pruebas, Roles y Ajustes","8/17/2026","8/28/2026","UAT completo (landing, evaluación, inscripción, facturación, notas), bug fixing"],
@@ -626,8 +633,8 @@ document.getElementById('loadSample').addEventListener('click', ()=>{
     [15,"Capacitación y Salida en Vivo","9/21/2026","10/9/2026","Migración de datos finales, Go-Live, soporte Hypercare"]
   ];
   const sample = rawSample.map(s => ({dur:s[0], fase:s[1], ini:parseDateFlexible(s[2]), fin:parseDateFlexible(s[3]), ent:s[4]}));
-  mergeRows(sample, "Ejemplo Opción 1");
-  setStatus(`Ejemplo cargado: 16 filas de la Opción 1 (total ahora: ${rows.length}).`);
+  mergeRows(sample, "Data de prueba");
+  setStatus(`Data de prueba cargada: 16 filas (total ahora: ${rows.length}).`);
 });
 
 document.getElementById('parsePaste').addEventListener('click', ()=>{

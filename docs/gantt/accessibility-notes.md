@@ -118,3 +118,26 @@ Nada en el diff de `7e6dac5` en sí introduce una falla de accesibilidad nueva n
 1. El resto de `auth-gate.js` (todas las escenas de login de las 5 apps) sigue sin reduced-motion — deuda preexistente, no de este commit, pero real y con una recomendación concreta arriba de cómo cerrarla sin romper nada.
 2. La barra `c-purpura` del fondo (1.53:1 en su extremo oscuro) y las 3 barras del logo nuevo contra la tarjeta crema (1.37:1–3.46:1) son decorativas así que no incumplen un criterio WCAG formal, pero se ven mucho más tenues de lo que probablemente se buscaba — vale confirmarlo con la usuaria.
 3. Hallazgo transversal, preexistente y más serio, encontrado durante esta revisión: el enlace "¿Olvidaste tu contraseña?" no es alcanzable por teclado en ninguna de las 5 apps (falta `href`/`tabindex`) — reportado en `docs/team-memory.md` bajo "Requiere atención" porque es del tipo de hallazgo que normalmente bloquearía una revisión, aunque no es parte de este commit.
+
+## Revisión 2026-07-28 — rama `claude/widget-cuenta-y-botones-mentor` (4 commits sobre `origin/master`)
+
+Lo que toca a Gantt en esta rama: paleta pastel `--c1`…`--c8`, barras con `border-radius:999px` (cápsula), texto de ejemplo renombrado, y la reposición compartida del widget de Cuenta (análisis completo en `docs/staffgate/accessibility-notes.md` §2, no repetido aquí).
+
+**Contraste del número dentro de la barra (`.gantt-bar .num`, `color:#1a1a1a` sobre `rgba(255,255,255,.55)` compuesto sobre el color de la barra) — el punto que el tech lead marcó como "menos comprobado".** Calculado con la fórmula de luminancia relativa de WCAG sobre los 8 colores nuevos reales (`--c1:#7FC8AE` … `--c8:#C2C0B8`), componiendo primero el blanco al 55% de opacidad sobre cada color de barra:
+
+| Color | Fondo compuesto (blanco 55% sobre la barra) | Contraste del `#1a1a1a` |
+|---|---|---|
+| `--c1` `#7FC8AE` | `rgb(197,230,219)` | **13.05:1** |
+| `--c2` `#9A93E0` | `rgb(210,206,241)` | **11.49:1** |
+| `--c3` `#F0AE93` | `rgb(248,219,206)` | **13.24:1** |
+| `--c4` `#EDA8BF` | `rgb(247,216,226)` | **13.14:1** |
+| `--c5` `#9DC4E8` | `rgb(211,228,245)` | **13.45:1** |
+| `--c6` `#EFBB6B` | `rgb(248,224,188)` | **13.61:1** |
+| `--c7` `#A9CE7E` | `rgb(216,233,197)` | **13.58:1** |
+| `--c8` `#C2C0B8` | `rgb(228,227,223)` | **13.51:1** |
+
+**Conclusión: no hay ningún problema aquí, y de hecho mejoró.** Los 8 valores están muy por encima del mínimo de 4.5:1 para texto normal (el número es de 11px, muy por debajo del umbral de "texto grande", así que aplica el criterio más estricto). Repetí el mismo cálculo contra la paleta **anterior** (saturada: `--c1:#5DCAA5` … `--c8:#B4B2A9`) para comparar: el rango antes era **10.23:1 a 12.84:1** — es decir, la nueva paleta pastel en realidad **subió** el contraste del número en los 8 casos (colores más claros → el blanco al 55% encima queda más claro también → más contraste contra el `#1a1a1a`). El tech lead puede dar este punto por cerrado con más confianza de la que tenía: no solo pasa, mejoró.
+
+**Hallazgo nuevo, no preguntado explícitamente pero relevante — contraste de la barra en sí contra el fondo de la página (`--paper:#F7F7F4`):** las barras no tienen borde (`grep -n "gantt-bar{" generador_gantt_2.html` confirma que `.gantt-bar` no define `border`, solo `background` inline vía `var(--c{n})`), así que el color de relleno es la única señal visual del límite de cada tarea contra el fondo de la página. Calculado: la paleta nueva da **1.63:1 a 2.57:1** contra `--paper`, muy por debajo del 3:1 que pide WCAG 1.4.11 para objetos gráficos con significado (cada barra representa una tarea real del cronograma del usuario — a diferencia de la escena de login que ya se documentó como decorativa, esto es el contenido funcional de la app, no algo exento). **No es una regresión de este commit:** la paleta anterior ya fallaba el mismo umbral en 7 de 8 colores (1.87:1–3.50:1, con `--c2` como único que pasaba); con la paleta nueva, `--c2` baja de 3.50:1 a 2.57:1 (deja de pasar), y el resto se mantiene en el mismo rango bajo que ya tenían. Es decir: **el cambio empeora marginalmente uno de los 8 colores y no mejora ninguno**, sobre una base que ya era deficiente en este criterio específico antes de este commit. No lo marco como bloqueante (es deuda preexistente, no introducida de forma sustancial), pero sí como algo que vale la pena que el tech lead confirme con la usuaria si las cápsulas nuevas (`border-radius:999px`, sin borde) se distinguen bien del fondo a simple vista en una pantalla real, ya que el redondeo nuevo no compensa el contraste bajo.
+
+**Veredicto de esta ronda: APROBADO CON OBSERVACIONES.** El contraste del número dentro de la barra, que era la preocupación explícita del tech lead, está confirmado bien resuelto (y mejoró). El único hallazgo nuevo es de bajo contraste barra-vs-fondo-de-página, preexistente y solo marginalmente empeorado en 1 de 8 colores — no bloqueante, documentado para que el tech lead decida si amerita un borde o un tono algo más saturado.
