@@ -271,7 +271,10 @@
   .status-badge.activo{background:var(--status-activo-light);color:var(--status-activo);}
   .status-badge.pausa{background:var(--status-pausa-light);color:var(--status-pausa);}
   .status-badge.cerrado{background:var(--status-cerrado-light);color:var(--status-cerrado);}
-  .pending-badge{font-size:11px;font-weight:500;padding:3px 10px;border-radius:20px;background:var(--rust-light);color:var(--rust);}
+  /* Rojo mas firme y texto en negrita: decia "1 pendiente" en un tono suave y
+     no se leia como algo que reclama atencion. --rust sobre --rust-light da
+     4.6:1, por encima del minimo AA. */
+  .pending-badge{font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;background:var(--rust-light);color:var(--rust);border:1px solid var(--rust);}
   .profile-area{font-size:13px;color:var(--brass);font-weight:500;margin:4px 0 0;}
   .profile-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin-top:16px;padding-top:16px;border-top:1px solid var(--line);}
   .profile-field-label{font-size:10.5px;text-transform:uppercase;letter-spacing:0.04em;color:var(--muted);margin:0 0 3px;}
@@ -798,7 +801,7 @@ function renderMentoriaView(body){
               <option value="pausa" ${status==='pausa'?'selected':''}>En pausa</option>
               <option value="cerrado" ${status==='cerrado'?'selected':''}>Cerrado</option>
             </select>
-            ${pendCount ? `<span class="pending-badge">${pendCount} pendiente${pendCount===1?'':'s'}</span>` : ''}
+            ${pendCount ? `<span class="pending-badge">${pendCount} actividad${pendCount===1?'':'es'} pendiente${pendCount===1?'':'s'}</span>` : ''}
           </div>
           <p class="profile-area">${esc(mentee.area)} ${mentee.type==='puntual' ? '· consulta puntual' : '· seguimiento continuo'}</p>
         </div>
@@ -1018,7 +1021,7 @@ function renderGroupsView(body){
         <div>
           <div class="profile-name-row">
             <p class="profile-name">${esc(group.name)}</p>
-            ${groupPendCount ? `<span class="pending-badge">${groupPendCount} pendiente${groupPendCount===1?'':'s'}</span>` : ''}
+            ${groupPendCount ? `<span class="pending-badge">${groupPendCount} actividad${groupPendCount===1?'':'es'} pendiente${groupPendCount===1?'':'s'}</span>` : ''}
           </div>
           ${group.description ? `<p class="profile-area">${esc(group.description)}</p>` : ''}
         </div>

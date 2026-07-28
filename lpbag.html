@@ -752,19 +752,10 @@ td.ttl{font-weight:500;color:var(--text);}
       <div class="tbl-foot" id="tableCount"></div>
     </div>
 
-    <!-- SECURITY -->
-    <div class="sec-title">Seguridad de Acceso</div>
-    <div class="card" style="max-width:480px;">
-      <div class="card-title">🔑 Cambiar Contraseña</div>
-      <div id="securityAlert" class="sec-alert"></div>
-      <form onsubmit="changeCredentials(event)">
-        <div class="form-field" style="margin-bottom:10px;">
-          <label>Nueva Contraseña</label>
-          <input type="password" id="newPassword" class="form-inp" required placeholder="mínimo 6 caracteres">
-        </div>
-        <button type="submit" class="btn-sec">Actualizar Contraseña</button>
-      </form>
-    </div>
+    <!-- La seccion "Seguridad de Acceso" se quito: hacia lo mismo que el
+         widget compartido de Cuenta (arriba), que ademas es el unico camino en
+         las otras cuatro apps. Tener dos formularios para lo mismo confundia
+         y obligaba a mantener dos copias del flujo de cambio de contrasena. -->
 
   </div><!-- /main -->
 </div><!-- /appScreen -->
@@ -924,18 +915,9 @@ async function load(){
   // visualmente, no debe haber datos reales detrás mientras no hay sesión).
 }
 
-/* ── CAMBIAR CONTRASEÑA ── */
-async function changeCredentials(e){
-  e.preventDefault();
-  const p=document.getElementById('newPassword').value;
-  const el=document.getElementById('securityAlert');
-  if(p.length<6){el.textContent='Mínimo 6 caracteres.';el.className='sec-alert err';return;}
-  const { error } = await window.supabaseClient.auth.updateUser({ password: p });
-  if(error){el.textContent=error.message;el.className='sec-alert err';return;}
-  el.textContent='¡Contraseña actualizada!';el.className='sec-alert ok';
-  e.target.reset();setTimeout(()=>{el.className='sec-alert';},4000);
-  toast('Contraseña actualizada','success');
-}
+/* El cambio de contraseña vive en el widget compartido de Cuenta
+   (auth-gate.js), igual que en las otras cuatro apps. Aquí se eliminó el
+   formulario duplicado que hacía exactamente lo mismo. */
 
 /* ── DATA OPS ── */
 function updateRate(v){
@@ -1063,7 +1045,7 @@ function renderChart(expenses,tgt){
   });
   const cats=Object.entries(catMap).sort((a,b)=>b[1]-a[1]);
   const total=cats.reduce((s,c)=>s+c[1],0);
-  const fmt=new Intl.NumberFormat('en-US',{style:'currency',currency:tgt});
+  const fmt=new Intl.NumberFormat('en-US',{style:'currency',currency:tgt,currencyDisplay:'code'});
   const size=180;
   let cvs=document.getElementById('lpbagChart');
   if(!cvs){
@@ -1123,7 +1105,10 @@ function toast(msg,type=''){
 /* ── RENDER ── */
 function render(){
   const tgt=document.getElementById('globalCurrency').value;
-  const sym=tgt==='USD'?'$':'RD$';
+  /* US$ y no $ a secas: en RD el peso también se escribe con $, así que un
+     "$0.00" suelto es ambiguo. Con US$ / RD$ los dos lados quedan simétricos
+     y siempre se sabe qué moneda se está viendo. */
+  const sym=tgt==='USD'?'US$':'RD$';
 
   document.getElementById('exchangeRate').value=appData.rate;
   document.getElementById('thConverted').textContent='Vista ('+tgt+')';
@@ -1144,7 +1129,7 @@ function render(){
     const v=convert(exp.amount,exp.currency,tgt);
     if(exp.frecuency==='mensual'){totM+=v;totA+=v*12;totMo+=v;}else{totM+=v/12;totA+=v;totAo+=v;}
   });
-  const fmt=new Intl.NumberFormat('en-US',{style:'currency',currency:tgt});
+  const fmt=new Intl.NumberFormat('en-US',{style:'currency',currency:tgt,currencyDisplay:'code'});
   document.getElementById('totalMensualDisplay').textContent=fmt.format(totM)+' /mes';
   document.getElementById('totalAnualDisplay').textContent=fmt.format(totA)+' /año';
   document.getElementById('totalSplit').textContent=fmt.format(totMo)+' · '+fmt.format(totAo);
