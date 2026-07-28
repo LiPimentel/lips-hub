@@ -52,5 +52,29 @@ Verificado, con evidencia medida (no lectura de código):
 
 **Veredicto: APROBADO.** Los 3 puntos que el tech lead dijo haber corregido están confirmados con evidencia medida en vivo, en las 6 escenas donde aplica. No se encontró ninguna regresión sobre lo que `fc7dfc5` ya había resuelto, ni sobre el zoom automático de StaffGate. Sin fuga de listeners. Sin errores de consola. La única discrepancia notable (la limitación del arnés `?live=1` para probar el punto 3 en combinación con el toggle) es una limitación de la herramienta de prueba, no un defecto de `auth-gate.js`.
 
+## 2026-07-28 — Revisión: rama `claude/widget-cuenta-y-botones-mentor` (4 commits: `bbeeac1`, `62e7128`, `3a778ca`, `ac591c7`)
+
+**Contexto:** widget de Cuenta reposicionado (compartido); nuevo logo `AIAPPS_LOGO_DART` (dardo que rodea el nombre y se clava en la diana) en el login.
+
+- [x] **El dardo anima de verdad, con recorrido real, no solo declarado:** `getAnimations()[0].currentTime` muestreado en 11 puntos de un ciclo de 6.5s sobre `.logo-dart`: parte en `translate(230.4,-67.2)` con `opacity:0`, recorre varios puntos intermedios (incluye un giro de rotación cambiante en la matriz), llega a `translate(2.4,1.2)` (el punto "clavado", coincide con `0.1em,0.05em` del CSS) con un pequeño `scale(0.883)` de impacto a los 5.7s, y vuelve a `opacity:0` al cerrar el ciclo en 6.5s.
+- [x] Confirmado con `getComputedStyle`/chain de ancestros que ningún elemento en la cadena `.logo-dart → .logo-dart-wrap → .brand-mark → .brand → .card → .cover` tiene `overflow:hidden` — el dardo nunca se ve "cortado" a media animación, siempre entra y sale de forma completa.
+- [x] **Hallazgo menor, no bloqueante:** a 375px de ancho (mobile), durante buena parte del ciclo (t≈0.1s a 4.5s de los 6.5s) el dardo se renderiza con su `top` por encima del borde superior de `.card` (`outsideCard:true` en 8 de 11 muestras) — visualmente "vuela" sobre el fondo oscuro por encima de la tarjeta de login antes de descender a clavarse en la diana. Confirmado que esto **no** interfiere con el campo de correo (`top:347px`, la excursión máxima del dardo en Y solo llega a 260px) ni sale del viewport. Parece ser el comportamiento decorativo intencional ("el dardo entra desde lejos"), pero se documenta porque no estaba descrito explícitamente si debía quedar contenido dentro de la tarjeta o no.
+- [x] **Widget de Cuenta / insignia de carpeta sin overlap**, mismo patrón de verificación con clon del CSS literal: 14.5px de separación a 1280px.
+- [x] Sin errores de consola en ningún punto de la sesión.
+- [ ] **NO verificado:** `prefers-reduced-motion` sobre el dardo (el código fija su posición final "clavada" bajo la preferencia) — no se pudo forzar la preferencia real del SO en esta sesión.
+- [ ] **NO verificado con sesión real:** sin credenciales de prueba para esta app (ya documentado en revisiones previas).
+
+## 2026-07-28 — Regresión: commit `228043a` (verificación en app NO tocada, por ser `auth-gate.js` compartido)
+
+**Contexto:** el commit `228043a` no toca `auth-gate.js` directamente, pero la ronda anterior (`9383356`) sí lo hizo (acotar `--aiapps-chrome-bottom` con `min(...,40vh)`), y StaffGate no había sido recargada desde entonces en esta serie de revisiones. Carga real en `http://localhost:8796/StaffGate.html`.
+
+Verificado:
+- [x] El overlay de login (`#aiapps-auth-gate`, shadow DOM) carga con `.card` y el campo de correo/contraseña presentes.
+- [x] Formulario acepta tecleo real (`input.value` + evento `input`, valores confirmados leyendo `.value` después) en correo y contraseña.
+- [x] Insignia de "Conectar carpeta de datos" en la posición esperada (`bottom:14px` sin `--aiapps-chrome-bottom` definido en esta app) — el `min(...,40vh)` agregado en `9383356` no la movió, coincide con el valor ya documentado antes del cambio.
+- [x] Sin errores de consola.
+
+**Veredicto: sin regresión en StaffGate por los cambios compartidos de `auth-gate.js` de esta serie.**
+
 ## Histórico
 _(sin entradas previas antes de 2026-07-23)_

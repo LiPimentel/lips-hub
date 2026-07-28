@@ -18,6 +18,14 @@ Entorno: servidor local `http://localhost:8793/`. `index.html` real (sin sesión
 - [ ] **NO verificado: Tab real y activación con Enter/Espacio sobre los `<summary>`.** Limitación de herramienta ya documentada en `docs/team-memory.md` (ningún `keydown` sintético llega a la página en esta sesión). Sí confirmé que cada `<summary>` es programáticamente enfocable (`tabIndex===0`, `.focus()` funciona) — condición necesaria para que Tab funcione, pero no es lo mismo que probarlo. Es comportamiento nativo de `<details>/<summary>` (no JS propio), lo que da más margen de confianza que un manejador de teclado hecho a mano, pero no lo doy por "confirmado".
 - [ ] **NO verificado de forma concluyente: `:hover` real de las tarjetas.** Con la acción `hover` de la herramienta sobre una tarjeta, `card.matches(':hover')` reportó `true`, pero `getComputedStyle(card).transform` y `.boxShadow` se quedaron en los valores base (sin el `translateY(-5px)` ni la sombra ampliada de `.card:hover`) incluso 300ms después. Descarté que fuera `@media(hover:none)` (`matchMedia('(hover: hover)').matches === true`). Esto es nuevo — no hay hallazgo previo de este patrón en el proyecto — y tiene la forma del mismo tipo de límite ya documentado para `keydown` sintético (el estado se registra a nivel de CSSOM pero no dispara el recálculo/pintado real). El CSS de `.card:hover` es preexistente, no tocado por este diff, así que no lo trato como regresión de este commit — pero tampoco puedo confirmar que el hover realmente anime en un navegador real desde esta sesión. Anotado en `docs/team-memory.md` para que otro agente con herramienta de navegador distinta lo intente refutar.
 
+## 2026-07-28 — Chequeo cruzado: rama `claude/widget-cuenta-y-botones-mentor` (auth-gate.js compartido)
+
+**Contexto:** el diff de esta rama toca `auth-gate.js` (compartido) pero no `index.html`. Se verificó el hub como el "al menos una app más" que exige la regla de revisión cuando cambia un archivo compartido.
+
+- [x] `index.html` carga sin errores de consola contra el `auth-gate.js` nuevo (servidor real `http://localhost:8796/`, no `file://`).
+- [x] El candado sigue apareciendo con normalidad (`#aiapps-auth-gate` presente, `hasOverlay:true` tras recarga real) y, como se esperaba (el hub deliberadamente no define `AIAPPS_SHOW_ACCOUNT_WIDGET`), el widget de Cuenta reposicionado **no aparece** en el hub — el cambio de posición del widget no le afecta visualmente, solo a las 5 apps.
+- [x] Sin overlap ni artefacto visible relacionado a los nuevos logos (`AIAPPS_LOGO_READER`/`AIAPPS_LOGO_DART`) ni al ensanchado de `.gantt-scene` — ninguno de los tres aplica al hub (el hub no define `AIAPPS_LOGO_*` ni usa la escena `gantt-build`).
+
 ## Histórico
 
 (ninguno todavía — primera revisión de esta app)

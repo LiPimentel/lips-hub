@@ -32,5 +32,17 @@ Verificado:
 
 Cambio ajeno a esta app (solo `auth-gate.js`), probado explícitamente en la escena `travel-sky` como parte de la ronda de 6 escenas. Con la preferencia activa: resplandor sigue al cursor, inclinación fija en plano, `shadow.getAnimations({subtree:true}).length === 0`. Sin errores de consola. Detalle completo y veredicto en `docs/staffgate/qa-checklist.md` ("2026-07-26 — Revisión: commit `40c43f5`").
 
+## 2026-07-28 — Revisión: rama `claude/widget-cuenta-y-botones-mentor` (4 commits: `bbeeac1`, `62e7128`, `3a778ca`, `ac591c7`)
+
+**Contexto:** widget de Cuenta reposicionado (compartido) + nueva variable `--aiapps-chrome-bottom` definida SOLO en esta app (única con barra de navegación móvil fija); nubecitas del logo más grandes, flote del avión más marcado, nubes de fondo con rango 28-48px.
+
+- [x] **Fallo preexistente de la insignia de carpeta tapando la barra de navegación móvil, CONFIRMADO CORREGIDO con la cifra exacta que dijo el tech lead:** a 375×812, `.mobile-bottom-nav` ocupa y:751-812 y la insignia de carpeta y:705.5-738 — **13px exactos de holgura** entre ambos, medido con `getBoundingClientRect` real. `--aiapps-chrome-bottom` resuelve a `calc(60px + 0px)` en este viewport (confirmado leyendo `getComputedStyle(documentElement)`).
+- [x] **Widget de Cuenta (clon con el CSS literal del archivo) confirmado apilado correctamente sobre los otros dos elementos, sin overlap con ninguno:** a 375px, widget (y:659-691), insignia (y:705.5-738), barra de navegación (y:751-812) — 14.5px y 13px de separación respectivamente, orden correcto de abajo hacia arriba.
+- [x] En desktop (1280px), `.mobile-bottom-nav` confirmado `display:none` y `--aiapps-chrome-bottom` vacío (no se define fuera del `@media` móvil) — la insignia vuelve a su `bottom:14px` normal, sin necesidad del escalón.
+- [x] **Nubes de fondo del login confirmadas en el rango 28-48px pedido** (antes 16-58): medido el ancho real renderizado (`getBoundingClientRect().width`) de los 12 SVGs de nube — mínimo 28px, máximo 48px, ratio 1.71x (antes sería 3.6x) — coincide exactamente con lo declarado en el diff.
+- [x] **El avión del logo anima con recorrido real y más marcado:** `getAnimations()[0].currentTime` muestreado en el glyph del avión — `translateY` alcanza -6.09px hacia la mitad del ciclo con una rotación de matriz correspondiente a ≈-4° (antes el máximo era -0.16em≈-3.8px sin rotación) — confirma el "flote más perceptible" descrito. Nubecitas del logo (`.lp-cloud-1`/`.lp-cloud-2`) confirmadas en 18.7px/13.4px de ancho renderizado (0.78em/0.56em a este tamaño de fuente, coincide con el nuevo CSS).
+- [x] Sin errores de consola en ningún punto de la sesión.
+- [ ] **NO verificado con sesión real:** sin credenciales de prueba (ya documentado en revisiones previas).
+
 ## Histórico
 _(sin entradas previas antes de 2026-07-23)_
