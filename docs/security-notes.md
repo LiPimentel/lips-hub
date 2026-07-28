@@ -143,6 +143,42 @@ Este PR **no modifica** `lockBackground`/`unlockBackground`/`applyInert`/`remove
 
 - **2026-07-23/24 — ventana de carrera en `save()` antes de `cachedUserId`:** ver "Actualización 2026-07-24" arriba. Corregido en `a4a2d10`.
 
+## Revisión 2026-07-27 — commit `bdf722a` (`claude/bitacora-meta-viewport`): meta viewport faltante en `bitacora-mentor.html`
+
+**Alcance confirmado por diff completo** (`git diff origin/master..HEAD`, 2 archivos): `bitacora-mentor.html` (+1 línea) y `release-notes/2026-07-27-bitacora-meta-viewport.md` (nuevo, solo texto). Un único hunk en `bitacora-mentor.html` (`@@ -181,6 +181,7 @@`), que agrega:
+
+```
++<meta name="viewport" content="width=device-width, initial-scale=1.0">
+```
+
+justo después de `<meta charset="UTF-8">` (bitacora-mentor.html:184). No hay ningún otro hunk en el archivo — confirmado con `grep -E '^@@'` sobre el diff, una sola coincidencia. Los archivos `_vpX-antes.html`/`_vpX-despues.html` mencionados en el encargo están, como se avisó, sin trackear (`git status` los lista en "Untracked files") y no forman parte del commit.
+
+### 1. ¿Habilita algo que antes estaba de facto deshabilitado?
+
+**No hay superficie de seguridad nueva.** `width=device-width, initial-scale=1.0` no incluye `user-scalable=no` ni `maximum-scale` — el pinch-zoom del usuario sigue disponible igual que antes (sin regresión de accesibilidad tampoco). El meta viewport solo cambia el *layout viewport* que el navegador reporta (`window.innerWidth`); no habilita ni deshabilita gestos táctiles, `touch-action`, ni ningún listener de JS — los eventos táctiles funcionan independientemente de este meta tag. Confirmado con `grep` en `bitacora-mentor.html` que no existe ningún `matchMedia`/`window.innerWidth`/`screen.width` en el JS de la app (0 coincidencias) — es decir, ninguna lógica de la aplicación (no solo el CSS) estaba condicionada al ancho reportado, así que este cambio no activa ninguna rama de código nueva, solo reglas CSS.
+
+### 2. Las tres reglas de `@media` que pasan de `false` a `true`
+
+- `bitacora-mentor.html:396-407` (`@media (max-width:720px)`) y `:409-417` (`@media (max-width:420px)`): ambas solo reordenan layout de la app ya autenticada (`.app{flex-direction:column}`, `.sidebar{width:100%}`, `.rep-grid{grid-template-columns:...}`, `.modal{padding:...}`, etc. — leídas línea por línea). Ninguna regla oculta ni revela un control de seguridad/autenticación, ni cambia el orden de tabulación de un candado — es reflow puramente cosmético de tarjetas, pestañas y modales que ya eran visibles e interactivos antes. Sin implicación de seguridad.
+- `auth-gate.js:563-565` (`@media (max-width: 900px){ .growth-scene{ display:none; } }`): `.growth-scene` (auth-gate.js:557-561) es `position:absolute; pointer-events:none` — la escena decorativa de fondo del login ("cordillera", escena `mentor-people`, ya documentada en `docs/team-memory.md` 2026-07-24), sin controles interactivos ni datos de usuario dentro (confirmado que `pointer-events:none` impide que contenga nada clickeable/enfocable de forma funcional). Ocultarla o no en móvil no afecta el candado, el foco, ni ningún dato — es arte de fondo, igual que `coins-rain`/`travel-sky` en las otras apps. Sin implicación de seguridad.
+- Ninguna de las tres reglas toca el badge del Folder Bridge (`#aiapps-folder-badge`, ver punto 3) — verificado que ese id no aparece en ningún selector de los `@media` tocados por este cambio ni por los ya existentes en `auth-gate.js` alrededor de la línea 563.
+
+**Conclusión:** las tres reglas que "se activan" son 100% cosméticas (reflow y ocultar arte decorativo), tal como adelantaba el propio mensaje del commit. No hay ninguna donde `display:none`/`display:block` esté ocultando o revelando algo con relevancia de seguridad.
+
+### 3. Folder Bridge (permiso de escritura) — camino no tocado
+
+`grep` de `showDirectoryPicker|requestPermission|createWritable|aiapps-folder-badge` en `bitacora-mentor.html` ubica todo el bloque del Folder Bridge en las líneas 5-175 (script `AI APPs · Folder Bridge`), muy por encima del único hunk del diff (línea 181-187). El `git diff` no toca ninguna línea de ese bloque — confirmado por el hunk único ya citado arriba. El gating de permiso de escritura (`window.showDirectoryPicker({...mode:'readwrite'})` en la línea 128, `handle.requestPermission({mode:'readwrite'})` en la línea 129) permanece exactamente igual: sigue requiriendo gesto explícito del usuario sobre el badge (`badgeEl.onclick = connect`, líneas 112/122), sin cambio en cuándo se ofrece ni en qué permisos pide.
+
+### 4. Checklist estándar
+
+- **Secretos:** ninguno — el único texto nuevo es un atributo `content="width=device-width, initial-scale=1.0"` (literal, sin datos) y una nota de versión en español sin credenciales.
+- **`<script src>`/`<link>` nuevos:** ninguno — confirmado por lectura completa del diff (solo 1 línea de meta tag + un archivo `.md`).
+- **XSS/inyección:** no aplica — no hay interpolación de datos de usuario en este cambio.
+- **Historial de git:** no fue necesario un nuevo escaneo completo — `bitacora-mentor.html` ya fue cubierto en el escaneo `git log --all -p` de la revisión 2026-07-23 (ver arriba, "Revisión 2026-07-23... Historial de git"), sin secretos encontrados; este commit no agrega nada que cambie esa conclusión.
+
+### Veredicto
+
+**APROBADO.** El diff es exactamente lo descrito por el encargo (una línea de meta viewport + nota de versión), no toca el Folder Bridge ni su gating de permiso de escritura, y las tres reglas `@media` que pasan a activarse son puramente cosméticas (reflow de layout y ocultar una escena decorativa sin controles ni datos dentro) — ninguna oculta/revela algo con relevancia de seguridad. Sin secretos, sin dependencias nuevas, sin superficie de inyección. No se identificó ningún caso borde con implicación de seguridad nuevo derivado de este cambio específico (los ya conocidos sobre `growth-scene`/overlap y animaciones de Bitácora son preexistentes y ya están anotados en `docs/bitacora-mentor/requerimientos.md` por qa-lead).
 ## Revisión 2026-07-27 — commit `cf3bd49` (`claude/hub-secciones-y-contrasena`): secciones plegables + cambio de contraseña en el hub
 
 **Alcance:** `git diff origin/master -- index.html` (240 líneas añadidas/quitadas) + `release-notes/2026-07-27-hub-secciones-y-contrasena.md`. Un solo archivo de código. **`auth-gate.js`, `supabase-client.js` y `supabase-client-app.js` no están en el diff** (confirmado por `git show cf3bd49 --stat`), así que todo lo ya verificado en revisiones anteriores sobre `guard()`/`lockBackground()`/`applyInert()`/`onAuthStateChange` sigue vigente sin cambios.
