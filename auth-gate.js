@@ -395,7 +395,13 @@
              respiro. El max() evita que la resta se vuelva negativa en
              pantallas angostas. */
           position:absolute; left:6%; top:20%; height:60%;
-          width:min(62%, 1200px, max(130px, calc(86vw - 416px)));
+          /* El piso era 130px y ahi estaba el fallo: entre ~500 y 589px de
+             ancho ya no cabian 130px antes de la tarjeta, asi que la escena se
+             le montaba encima (hasta 76px de solape). Con piso 0 la escena se
+             encoge hasta desaparecer en vez de invadir; en esos anchos la
+             tarjeta ocupa casi todo, igual que hace la escena del Mentor, que
+             directamente se oculta por debajo de 900px. */
+          width:min(62%, 1200px, max(0px, calc(86vw - 416px)));
           display:flex; flex-direction:column; justify-content:space-between;
           pointer-events:none;
         }

@@ -1157,7 +1157,7 @@ function render(){
       const catT=exps.reduce((s,exp)=>s+convert(exp.amount,exp.currency,tgt),0);
       exps.forEach(exp=>{
         const cv=convert(exp.amount,exp.currency,tgt);
-        const oSym=exp.currency==='USD'?'$':'RD$';
+        const oSym=exp.currency==='USD'?'US$':'RD$';
         dRows+=`<tr>
           <td class="ttl">${escHtml(exp.title)}<span class="created-date">${exp.created||''}</span></td>
           <td><span class="badge bc">${escHtml(exp.category)}</span></td>
@@ -1184,7 +1184,7 @@ function render(){
   }else{
     mob.innerHTML=list.map(exp=>{
       const cv=convert(exp.amount,exp.currency,tgt);
-      const oSym=exp.currency==='USD'?'$':'RD$';
+      const oSym=exp.currency==='USD'?'US$':'RD$';
       return `<div class="mob-card">
         <div>
           <div class="mob-title">${escHtml(exp.title)}</div>

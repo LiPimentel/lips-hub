@@ -274,7 +274,12 @@
   /* Rojo mas firme y texto en negrita: decia "1 pendiente" en un tono suave y
      no se leia como algo que reclama atencion. --rust sobre --rust-light da
      4.6:1, por encima del minimo AA. */
-  .pending-badge{font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;background:var(--rust-light);color:var(--rust);border:1px solid var(--rust);}
+  /* El texto NO usa --rust: ese tono sobre --rust-light da 4.44:1 y se queda
+     justo por debajo del 4.5:1 de WCAG AA (medido, no estimado). Un rojo un
+     punto mas oscuro sube a 4.88:1 sin cambiar el caracter del color. El
+     borde si puede seguir en --rust: como elemento de interfaz le basta 3:1 y
+     da 4.0:1. --rust no se toca porque lo usan otras partes de la app. */
+  .pending-badge{font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;background:var(--rust-light);color:#9E4534;border:1px solid var(--rust);}
   .profile-area{font-size:13px;color:var(--brass);font-weight:500;margin:4px 0 0;}
   .profile-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin-top:16px;padding-top:16px;border-top:1px solid var(--line);}
   .profile-field-label{font-size:10.5px;text-transform:uppercase;letter-spacing:0.04em;color:var(--muted);margin:0 0 3px;}
