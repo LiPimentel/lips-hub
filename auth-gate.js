@@ -1900,9 +1900,14 @@
        juntas, en el mismo sitio en las 5 apps, fuera de las barras de cada
        una. `--aiapps-chrome-bottom` es el escape para las apps que tienen algo
        propio pegado abajo — MyTravel y su barra de navegación móvil. */
+    /* El escalon va acotado con min(): la variable la define cada app, y un
+       valor grande empujaria el widget fuera de la pantalla sin forma de
+       recuperarlo (position:fixed, sin scroll), dejando el cambio de
+       contrasena y el cierre de sesion inalcanzables. Con el tope, lo peor que
+       puede pasar es que suba mas de la cuenta pero siga siendo visible. */
     host.style.cssText =
       "position:fixed;right:14px;z-index:2147483646;" +
-      "bottom:calc(61px + var(--aiapps-chrome-bottom, 0px));";
+      "bottom:calc(61px + min(var(--aiapps-chrome-bottom, 0px), 40vh));";
     const shadow = host.attachShadow({ mode: "open" });
 
     shadow.innerHTML = `
