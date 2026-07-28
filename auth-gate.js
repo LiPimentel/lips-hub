@@ -1918,7 +1918,18 @@
 
     shadow.innerHTML = `
       <style>
-        :host{ font-family:system-ui,-apple-system,'Segoe UI',sans-serif; }
+        /* column-reverse: el widget va anclado por abajo, asi que al abrir el
+           panel la altura crecia hacia arriba y arrastraba consigo al boton
+           "Cuenta" — saltaba ~190px bajo el cursor. Invirtiendo el orden
+           visual, el boton se queda fijo en su sitio y es el panel el que se
+           despliega hacia arriba, que es lo que corresponde a un menu anclado
+           al borde inferior. Hallazgo de accessibility-reviewer. */
+        :host{
+          font-family:system-ui,-apple-system,'Segoe UI',sans-serif;
+          display:flex;
+          flex-direction:column-reverse;
+          align-items:flex-end;
+        }
         .toggle{
           background:#1B2430;
           color:#F1EDE4;
@@ -1931,7 +1942,7 @@
         }
         .panel{
           display:none;
-          margin-top:8px;
+          margin-bottom:8px;
           width:230px;
           background:#EFEADC;
           border-radius:8px;
