@@ -292,9 +292,32 @@
           animation:coin-fall var(--dur,7s) linear infinite;
           animation-delay:var(--delay,0s);
           animation-fill-mode:backwards;
-          pointer-events:none;
+          /* Clicable a proposito: al pulsarla estalla en moneditas. */
+          pointer-events:auto;
+          cursor:pointer;
           filter:drop-shadow(0 3px 5px rgba(0,0,0,0.45));
           perspective:190px;
+        }
+        /* Esquirlas del estallido: cada una sale disparada con su propio
+           angulo y distancia (--dx/--dy) y cae. */
+        .coin-bit{
+          position:fixed;
+          width:11px; height:11px;
+          pointer-events:none;
+          z-index:2;
+          animation:coin-burst 0.85s ease-out forwards;
+          filter:drop-shadow(0 2px 3px rgba(0,0,0,0.4));
+        }
+        .coin-bit svg{ width:100%; height:100%; display:block; }
+        @keyframes coin-burst{
+          0%{ transform:translate(0,0) scale(1) rotate(0deg); opacity:1; }
+          35%{ transform:translate(calc(var(--dx) * 0.75), calc(var(--dy) * 0.9)) scale(0.95) rotate(140deg); opacity:1; }
+          100%{ transform:translate(var(--dx), calc(var(--dy) + 90px)) scale(0.55) rotate(360deg); opacity:0; }
+        }
+        @media (prefers-reduced-motion: reduce){
+          /* Sin estallido: la moneda deja de ser clicable para no ofrecer algo
+             que no va a pasar. */
+          .coin-rain{ pointer-events:none; cursor:default; }
         }
         .coin-rain svg{ width:100%; height:100%; display:block; overflow:visible; }
         /* La caída y el giro van separados: aquí solo el descenso y el
@@ -603,43 +626,71 @@
           44%{ rotate:-5deg; }
         }
 
-        /* ===== Logo de StaffGate: el dardo llega volando =====
-           Todo va anclado al emoji de la diana (no a la tarjeta), asi que el
-           recorrido funciona igual sea cual sea el ancho del nombre: el dardo
-           entra por la derecha, rodea el texto y termina clavado en la diana. */
+        /* ===== Logo de StaffGate: el dardo sale de la diana y vuelve =====
+           La diana va DIBUJADA, no con el emoji: el emoji trae su propio dardo
+           pintado y no hay forma de sacarlo, asi que no se podia contar que el
+           dardo se despega, vuela y vuelve — que es justo lo que debe pasar.
+           Con la diana dibujada, el dardo empieza clavado en ella, se sale,
+           rodea el nombre, regresa y se clava en el mismo sitio; al acertar
+           aparece un check verde. Todo anclado a la diana, no a la tarjeta,
+           asi que el recorrido funciona con cualquier ancho de nombre. */
         .logo-dart-wrap{ position:relative; display:inline-block; }
+        .logo-target{
+          display:inline-block;
+          width:1.05em; height:1.05em;
+          vertical-align:-0.14em;
+        }
+        .logo-target svg{ width:100%; height:100%; display:block; }
         .logo-dart{
           position:absolute; left:0; top:0;
-          width:0.8em; height:0.8em;
+          width:1.05em; height:1.05em;
           pointer-events:none;
-          animation:dart-fly 6.5s ease-in-out infinite;
+          animation:dart-fly 7s ease-in-out infinite;
         }
         .logo-dart svg{ width:100%; height:100%; overflow:visible; }
-        .logo-dart .ld-shaft{ stroke:#3E4757; stroke-width:2.4; stroke-linecap:round; fill:none; }
-        .logo-dart .ld-tip{ fill:#3E4757; }
+        /* Mas grueso que antes (2.4 -> 3.4) porque casi no se veia a este
+           tamano: el logo mide ~24px en total. */
+        .logo-dart .ld-shaft{ stroke:#2F3947; stroke-width:3.4; stroke-linecap:round; fill:none; }
+        .logo-dart .ld-tip{ fill:#2F3947; }
         .logo-dart .ld-fletch{ fill:#E03B2E; }
+        .logo-dart-check{
+          position:absolute;
+          right:-0.32em; top:-0.28em;
+          width:0.62em; height:0.62em;
+          opacity:0;
+          pointer-events:none;
+          animation:dart-check 7s ease-in-out infinite;
+        }
+        .logo-dart-check svg{ width:100%; height:100%; display:block; }
         @keyframes dart-fly{
-          0%{   transform:translate(9.6em, -2.8em) rotate(26deg); opacity:0; }
-          7%{   opacity:1; }
-          22%{  transform:translate(6.4em, -3.1em) rotate(8deg); opacity:1; }
-          38%{  transform:translate(4.2em, 0.9em) rotate(-16deg); }
-          54%{  transform:translate(2.5em, -2.8em) rotate(6deg); }
-          70%{  transform:translate(1em, -1.5em) rotate(-4deg); }
-          82%{  transform:translate(0.1em, 0.05em) rotate(0deg) scale(1); }
-          86%{  transform:translate(0.1em, 0.05em) rotate(0deg) scale(0.86); }
-          92%{  transform:translate(0.1em, 0.05em) rotate(0deg) scale(1); opacity:1; }
-          100%{ transform:translate(0.1em, 0.05em) rotate(0deg) scale(1); opacity:0; }
+          /* Clavado en la diana, quieto */
+          0%, 10%{ transform:translate(0,0) rotate(0deg); }
+          /* Se despega hacia arriba */
+          18%{ transform:translate(1.4em, -1.6em) rotate(-18deg); }
+          /* Rodea el nombre por arriba */
+          34%{ transform:translate(5.2em, -2.6em) rotate(14deg); }
+          46%{ transform:translate(8.2em, -1.2em) rotate(46deg); }
+          /* Baja por la derecha y vuelve por debajo */
+          58%{ transform:translate(6.6em, 1.1em) rotate(150deg); }
+          70%{ transform:translate(3em, 1.3em) rotate(186deg); }
+          /* Encara la diana y se clava */
+          80%{ transform:translate(1.1em, 0.5em) rotate(214deg); }
+          88%, 100%{ transform:translate(0,0) rotate(0deg); }
+        }
+        @keyframes dart-check{
+          0%, 86%{ opacity:0; transform:scale(0.3); }
+          90%{ opacity:1; transform:scale(1.25); }
+          93%, 97%{ opacity:1; transform:scale(1); }
+          100%{ opacity:0; transform:scale(1); }
         }
         @media (prefers-reduced-motion: reduce){
-          /* El monigote se queda con el libro abierto y el dardo, clavado en
-             la diana: los dos estados finales que la animacion busca contar. */
+          /* El monigote se queda con el libro abierto, y el dardo clavado en
+             la diana con su check puesto: los estados finales que cada
+             animacion busca contar. */
           .logo-reader .lr-page,
           .logo-reader .lr-head{ animation:none; }
-          .logo-dart{
-            animation:none;
-            transform:translate(0.1em, 0.05em);
-            opacity:1;
-          }
+          .logo-dart{ animation:none; transform:translate(0,0) rotate(0deg); }
+          .logo-dart-check{ animation:none; opacity:1; transform:scale(1); }
         }
         @media (prefers-reduced-motion: reduce){
           /* Sin movimiento: aviones y nubes se quedan quietos en su posicion. */
@@ -1626,10 +1677,18 @@
                 </svg></span>${window.AIAPPS_APP_EMOJI} `;
               }
               if (window.AIAPPS_LOGO_DART) {
-                return `<span class="logo-dart-wrap">${window.AIAPPS_APP_EMOJI}<span class="logo-dart" aria-hidden="true"><svg viewBox="0 0 24 24">
-                  <path class="ld-shaft" d="M20 4 L9.6 14.4"/>
-                  <path class="ld-tip" d="M9.6 14.4 L5.8 18.2 L7.4 12.6 Z"/>
-                  <path class="ld-fletch" d="M20 4 L15.2 5.4 L18.6 8.8 Z"/>
+                return `<span class="logo-dart-wrap" aria-hidden="true"><span class="logo-target"><svg viewBox="0 0 24 24">
+                  <circle cx="12" cy="12" r="11" fill="#E03B2E"/>
+                  <circle cx="12" cy="12" r="8" fill="#F7F1E6"/>
+                  <circle cx="12" cy="12" r="5" fill="#E03B2E"/>
+                  <circle cx="12" cy="12" r="2.2" fill="#F7F1E6"/>
+                </svg></span><span class="logo-dart"><svg viewBox="0 0 24 24">
+                  <path class="ld-shaft" d="M21 3 L13.4 10.6"/>
+                  <path class="ld-tip" d="M13.4 10.6 L10.4 13.6 L11.4 9.2 Z"/>
+                  <path class="ld-fletch" d="M21 3 L15.4 4.4 L19.6 8.6 Z"/>
+                </svg></span><span class="logo-dart-check"><svg viewBox="0 0 24 24">
+                  <circle cx="12" cy="12" r="11" fill="#2E9E5B"/>
+                  <path d="M6.5 12.4 L10.3 16.2 L17.5 8.4" fill="none" stroke="#fff" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg></span></span> `;
               }
               if (window.AIAPPS_LOGO_PLANE) {
@@ -1680,6 +1739,46 @@
       host._aiappsCleanups = host._aiappsCleanups || [];
       host._aiappsCleanups.push(() => tiltQuery.removeEventListener("change", onTiltPrefChange));
     }
+
+    /* Al pulsar una moneda que cae, estalla en moneditas que salen disparadas
+       y caen. La original se esconde y vuelve sola en la siguiente vuelta de
+       su animacion (que es infinita), asi que no hay que reponerla a mano.
+       Un solo listener delegado en .cover en vez de uno por moneda. */
+    coverEl.addEventListener("click", (e) => {
+      const moneda = e.target.closest && e.target.closest(".coin-rain");
+      if (!moneda || moneda.dataset.estallada === "1") return;
+      if (tiltQuery && tiltQuery.matches) return;
+
+      const r = moneda.getBoundingClientRect();
+      const cx = r.left + r.width / 2;
+      const cy = r.top + r.height / 2;
+      moneda.dataset.estallada = "1";
+      moneda.style.visibility = "hidden";
+
+      const trozos = 7;
+      for (let i = 0; i < trozos; i++) {
+        const ang = (Math.PI * 2 * i) / trozos + Math.random() * 0.5;
+        const dist = 34 + Math.random() * 30;
+        const bit = document.createElement("span");
+        bit.className = "coin-bit";
+        bit.style.left = (cx - 5.5) + "px";
+        bit.style.top = (cy - 5.5) + "px";
+        bit.style.setProperty("--dx", (Math.cos(ang) * dist).toFixed(1) + "px");
+        bit.style.setProperty("--dy", (Math.sin(ang) * dist * 0.6).toFixed(1) + "px");
+        bit.innerHTML = '<svg viewBox="0 0 26 26" aria-hidden="true"><circle cx="13" cy="13" r="12.2" fill="url(#coinGrad)" stroke="#5c4009" stroke-width="1.4"/></svg>';
+        shadow.appendChild(bit);
+        /* Doble red: normalmente lo limpia animationend, pero ese evento NO
+           dispara si la pestana esta en segundo plano (las animaciones se
+           congelan), y sin el respaldo las esquirlas se irian acumulando. */
+        bit.addEventListener("animationend", () => bit.remove());
+        setTimeout(() => bit.remove(), 1400);
+      }
+      // Devolverla al ciclo cuando su vuelta actual termine.
+      setTimeout(() => {
+        moneda.style.visibility = "";
+        delete moneda.dataset.estallada;
+      }, 900);
+    });
 
     coverEl.addEventListener("mousemove", (e) => {
       const rect = coverEl.getBoundingClientRect();

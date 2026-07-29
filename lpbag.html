@@ -231,6 +231,32 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 }
 .navbar-logo{font-family:'DM Serif Display',serif;font-size:22px;color:var(--text);letter-spacing:-.5px;white-space:nowrap;flex-shrink:0;}
 .navbar-logo span{color:var(--accent2);}
+
+/* La bolsita brota moneditas, igual que en la pantalla de login. Es el mismo
+   keyframe (coin-pop) copiado de auth-gate.js: alli vive dentro de un shadow
+   DOM, asi que no se puede reutilizar desde aqui y hay que repetirlo. */
+.bag-wrap{position:relative;display:inline-block;}
+.bag-coin{
+  position:absolute;left:50%;bottom:0.15em;
+  font-size:0.55em;opacity:0;pointer-events:none;
+  animation:bag-coin-pop 1.6s ease-in infinite;
+}
+.bag-coin:nth-child(1){--cx:1.76em;animation-delay:0s;}
+.bag-coin:nth-child(2){--cx:-1.47em;animation-delay:.5s;}
+.bag-coin:nth-child(3){--cx:.44em;animation-delay:1s;}
+@keyframes bag-coin-pop{
+  0%{opacity:0;transform:translate(-50%,0) scale(.4) rotate(0deg);}
+  18%{opacity:1;transform:translate(-50%,-1.18em) scale(.9) rotate(70deg);}
+  100%{opacity:0;transform:translate(calc(-50% + var(--cx,1.5em)),2.06em) scale(.6) rotate(320deg);}
+}
+@media (prefers-reduced-motion: reduce){
+  /* Quietas y visibles alrededor de la bolsita, no ocultas: mismo criterio
+     que se uso en el login. */
+  .bag-coin{animation:none;opacity:.95;}
+  .bag-coin:nth-child(1){transform:translate(calc(-50% + 1.15em),-1.05em) rotate(22deg) scale(.85);}
+  .bag-coin:nth-child(2){transform:translate(calc(-50% - 1em),-.75em) rotate(-16deg) scale(.78);}
+  .bag-coin:nth-child(3){transform:translate(calc(-50% + .15em),-1.35em) rotate(6deg) scale(.72);}
+}
 .navbar-right{display:flex;align-items:center;gap:6px;flex-shrink:0;}
 
 /* currency select */
@@ -588,7 +614,7 @@ td.ttl{font-weight:500;color:var(--text);}
 <div id="appScreen">
 
   <nav class="navbar">
-    <div class="navbar-logo">💰 <span>LP</span>Bag</div>
+    <div class="navbar-logo"><span class="bag-wrap" aria-hidden="true">💰<span class="bag-coin">🪙</span><span class="bag-coin">🪙</span><span class="bag-coin">🪙</span></span> <span>LP</span>Bag</div>
     <div class="navbar-right">
       <div class="cview">
         <label>Vista</label>
