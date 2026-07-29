@@ -2216,11 +2216,15 @@ function importBackup(file){
         return;
       }
       state = parsed;
-      if(!state.mentees) state.mentees = [];
-      if(!state.sessions) state.sessions = [];
-      if(!state.groups) state.groups = [];
-      if(!state.groupSessions) state.groupSessions = [];
-      if(!state.templates) state.templates = [];
+      /* `if(!state.groups)` solo atrapaba lo falsy: un backup con groups en
+         forma de texto u objeto pasaba entero y rompia las pestanas Grupos y
+         Reportes de forma permanente (renderGroupsView hace .find/.filter como
+         primera instruccion), hasta corregir el JSON a mano. Se fuerza a
+         arreglo lo que no lo sea, en los cinco campos. Hallazgo de
+         security-reviewer. */
+      ['mentees','sessions','groups','groupSessions','templates'].forEach(k=>{
+        if(!Array.isArray(state[k])) state[k] = [];
+      });
       selectedMenteeId = state.mentees[0]?.id || null;
       selectedGroupId = state.groups[0]?.id || null;
       await saveData();
