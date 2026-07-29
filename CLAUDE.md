@@ -69,6 +69,17 @@ Los 5 agentes (no solo business-analyst) tienen instrucción de anotar cualquier
 
 qa-lead no es un trámite de confirmación — su objetivo es retar activamente lo que el tech lead dice haber hecho, no solo verificar una lista de puntos. Cuando qa-lead reporte un hallazgo que contradice lo que el tech lead esperaba encontrar, tratar esa discrepancia como la señal más importante del reporte, no como ruido a descartar — investigarla antes de continuar, no asumir que el tech lead tenía razón.
 
+## Eficiencia de contexto y tokens (obligatorio)
+
+Aplica siempre, sin que el usuario lo pida:
+
+1. **Explorar con subagentes, implementar en el hilo principal.** Para entender un módulo, buscar dependencias o mapear un flujo, usa un subagente (`Explore` o `general-purpose`) y quédate con su conclusión. En el hilo principal lee solo los archivos que vas a editar. Si la tarea es una edición puntual y ya sabes dónde, no explores.
+2. **Alcance acotado por defecto.** Interpreta cada petición en su mínima extensión razonable. Solo abarca un módulo o el proyecto completo si el usuario dice "todo el módulo" / "todo el proyecto". Si el alcance es ambiguo, **pregunta antes de leer o tocar archivos** — no explores "por si acaso".
+3. **Avisa al ~60% de contexto** sugiriendo `/compact`. No esperes a que se llene.
+4. **Sugiere `/clear`** cuando la sesión lleve muchos turnos o cuando se cambie de tema o de funcionalidad.
+5. **Este archivo, lo más corto posible.** Solo lo que cambia tu comportamiento: convenciones, decisiones de arquitectura, errores que no se deben repetir. Si crece con información redundante u obsoleta, dilo.
+6. **No arranques tareas complejas multiarchivo en el último 20% del contexto** (refactors grandes, depuración profunda, migraciones de datos). Avisa antes de llegar ahí para hacer `/compact` o partir la tarea.
+
 ## Tamaño de los PRs (obligatorio)
 
 Preferir PRs pequeños y frecuentes sobre uno grande acumulado al final de una sesión larga. Cuando un bloque de trabajo quede completo y verificado (un bug corregido, una funcionalidad, un fix de seguridad), empujar la rama y abrir/fusionar ese PR antes de seguir con el siguiente bloque — no esperar hasta el final de la sesión para juntar todo en un solo PR. Un PR de un solo tema es más fácil de revisar y de revertir si algo sale mal que uno que mezcla varios cambios no relacionados.
