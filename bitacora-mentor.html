@@ -623,7 +623,13 @@ function enfoquesDe(s){
   const lista = Array.isArray(s.approaches) && s.approaches.length
     ? s.approaches
     : (s.approach ? [s.approach] : ['directivo']);
-  return lista.filter(k => ENFOQUES[k]);
+  /* El filtro puede vaciar la lista si el dato guardado trae un enfoque que ya
+     no existe (renombrado, dato importado a mano). Sin este respaldo la sesion
+     se quedaria sin ninguna etiqueta en el historial y no se contaria en las
+     estadisticas — es decir, el dato malo se volveria invisible en vez de
+     degradarse. Se cae a 'directivo', que es el valor por defecto de siempre. */
+  const validos = lista.filter(k => ENFOQUES[k]);
+  return validos.length ? validos : ['directivo'];
 }
 
 async function loadData(){
