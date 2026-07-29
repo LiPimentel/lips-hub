@@ -119,3 +119,63 @@ Basado en `CLAUDE.md` y en `generador_gantt_2.html` (la app más simple del hub)
 - **Guardado frecuente por trackers en vivo:** si el cronómetro dispara `syncToCloud()` en cada tick (como hacen otras apps del hub al cambiar cualquier dato), un tracker corriendo varias horas podría generar muchas escrituras a Supabase. Con el plan gratuito, esto no debería acercarse a límites de cuota por sí solo, pero conviene que el guardado de un tracker activo sea por evento (start/pause/resume/stop) y no por temporizador, para no escribir de más.
 - **Auto-pausa de Supabase (plan gratuito):** si Hourglass fuera la única app que se usa activamente por un tiempo, no cambia el riesgo ya conocido de auto-pausa por inactividad — ver `docs/infra-watch.md`, es responsabilidad de `release-manager`, no algo nuevo que introduzca esta app.
 - **Sin backend, "reportes exportados consistentes con la pantalla" (criterio implícito del PRD §14) depende de que todos los cálculos vivan en una sola función de JavaScript reutilizada por dashboard y exportación** (cuando se construya en Fase 2) — riesgo de que se dupliquen fórmulas y diverjan si no se comparte código desde el principio.
+
+---
+
+# Decisiones cerradas con la usuaria (2026-07-29)
+
+Las 8 preguntas abiertas quedaron resueltas. **Esto manda sobre cualquier
+recomendación previa de este documento.**
+
+| # | Tema | Decisión |
+|---|---|---|
+| 1 | Meta de horas por proyecto | **Va en v1 completa**, incluida la comparación visual plan-vs-real. No se posterga a fase 2. |
+| 2 | Tracker que cruza medianoche | Se reparte entre los dos días calendario **solo al calcular totales**; el dato guardado conserva inicio y fin reales. |
+| 3 | Dos trackers del mismo proyecto a la vez | **Permitido**, y ambos suman al tiempo de ese proyecto. |
+| 4 | Dónde se calcula el solapamiento | En **JavaScript del navegador**, como el resto del hub. La usuaria evaluará un backend más adelante; no condiciona v1. |
+| 5 | Aviso de tracker olvidado (>6 h) | **Pop-up centrado en la ventana**, para llamar la atención. ⚠️ La usuaria eligió esto *en contra* de la recomendación de un banner no bloqueante: la prioridad es que no pase desapercibido. |
+| 6 | Ilustración del Gato de Cheshire | Referencia entregada (ver abajo). |
+| 7 | Nombre de archivo / `app_id` | `hourglass.html` / `AIAPPS_APP_ID='hourglass'`. Confirmado. |
+| 8 | Rango personalizado de fechas | Acotado a **un mismo año** en v1. |
+
+## Requisito adicional pedido por la usuaria
+
+**Filtros en toda vista donde apliquen.** No es una pantalla concreta: es un
+criterio transversal. Donde haya una lista o un informe, debe poder filtrarse.
+Como mínimo:
+
+- Registro de tiempos: por proyecto, por rango de fechas, y por texto libre.
+- Informes: por proyecto y por rango de fechas.
+- Lista de proyectos: por estado (activo / archivado) y por texto libre.
+
+Al implementar cada vista, decidir el filtro que corresponda y dejarlo, no
+esperar a que se pida.
+
+## Referencia visual del Gato de Cheshire
+
+La usuaria adjuntó una imagen en el chat. Estilo, descrito para poder
+reproducirlo o buscarlo:
+
+- Gato gris de rayas, cuerpo peludo y cola larga y esponjada, en pose sentada
+  con las dos patas delanteras juntas cerca del hocico.
+- **Sonrisa enorme de dientes grandes** ocupando casi todo el ancho de la cara
+  — es el rasgo dominante.
+- **Ojos muy grandes, azul turquesa brillante.**
+- Fondo **oscuro casi negro**, con **salpicaduras y círculos de turquesa /
+  cian** repartidos alrededor.
+- Estilo pintura digital, tipo Tim Burton / Alicia en el País de las
+  Maravillas. Paleta: negro, grises, y turquesa como único acento.
+
+**Pendiente práctico, a resolver antes de implementarla:** una imagen pegada
+en el chat no queda como archivo en disco. Para usarla en la app hay dos
+caminos:
+
+1. **La usuaria guarda el archivo en `assets/`** del repo. `build.sh` ya copia
+   esa carpeta entera, así que llegaría a producción sin tocar nada más. Es la
+   vía recomendada si se quiere *esa* ilustración exacta.
+2. **Dibujarla como SVG inline**, al estilo de los logos animados de
+   `auth-gate.js`. Encaja con el resto del hub y no depende de un archivo
+   externo, pero **no reproduce una pintura digital**: sería una
+   interpretación estilizada, no la imagen adjunta.
+
+No implementar el gato hasta que la usuaria elija camino.
