@@ -276,6 +276,10 @@
   @media (prefers-reduced-motion: reduce){ .enfoque-chip{transition:none;} }
 
   /* ── Compromisos como lista ── */
+  /* La casilla va DENTRO de un <label> junto a su texto: asi el texto es su
+     nombre accesible y ademas amplia la zona pulsable. Es el mismo patron que
+     la app ya usa en .member-check-row. */
+  .commit-lbl{display:flex;align-items:flex-start;gap:8px;cursor:pointer;}
   .commit-list{margin-top:10px;}
   .commit-title{display:block;margin-bottom:4px;}
   .commit-add{display:flex;gap:8px;margin-top:8px;}
@@ -995,12 +999,12 @@ function renderMentoriaView(body){
           ${s.whatWorked ? clampedEntryField(s.whatWorked, `entry-ww-${s.id}`, {label:'Qué funcionó'}) : ''}
           ${s.whatDidnt ? clampedEntryField(s.whatDidnt, `entry-wd-${s.id}`, {label:'Qué ajustar'}) : ''}
           ${s.nextSteps ? clampedEntryField(s.nextSteps, `entry-ns-${s.id}`, {label:'Próximos pasos'}) : ''}
-          ${compromisosDe(s).length ? `<div class="commit-list"><b class="commit-title">Compromisos:</b>${compromisosDe(s).map((c,i)=>`<div class="commit-row ${c.done?"done":""}"><input type="checkbox" data-commit-idx="${i}" ${c.done?"checked":""}><span>${esc(c.text)}</span></div>`).join("")}</div>` : ""}
+          ${compromisosDe(s).length ? `<div class="commit-list"><b class="commit-title">Compromisos:</b>${compromisosDe(s).map((c,i)=>`<div class="commit-row ${c.done?"done":""}"><label class="commit-lbl"><input type="checkbox" data-commit-idx="${i}" ${c.done?"checked":""}><span>${esc(c.text)}</span></label></div>`).join("")}</div>` : ""}
           ${renderChecklistReadonly(s.checklist)}
           <div class="entry-footer">
             ${isDraft ? `<button class="icon-btn" data-action="continue">continuar borrador</button>`
-                      : `<button class="icon-btn" data-action="edit">editar</button>`}
-            <button class="icon-btn" data-action="delete">eliminar</button>
+                      : `<button class="icon-btn" data-action="edit" aria-label="editar sesion del ${esc(s.date)}">editar</button>`}
+            <button class="icon-btn" data-action="delete" aria-label="eliminar sesion del ${esc(s.date)}">eliminar</button>
           </div>
         </div>
       `;
@@ -1196,10 +1200,10 @@ function renderGroupsView(body){
           ${s.whatWorked ? clampedEntryField(s.whatWorked, `gentry-ww-${s.id}`, {label:'Qué funcionó'}) : ''}
           ${s.whatDidnt ? clampedEntryField(s.whatDidnt, `gentry-wd-${s.id}`, {label:'Qué ajustar'}) : ''}
           ${s.nextSteps ? clampedEntryField(s.nextSteps, `gentry-ns-${s.id}`, {label:'Próximos pasos'}) : ''}
-          ${compromisosDe(s).length ? `<div class="commit-list"><b class="commit-title">Compromisos:</b>${compromisosDe(s).map((c,i)=>`<div class="commit-row ${c.done?"done":""}"><input type="checkbox" data-gcommit-idx="${i}" ${c.done?"checked":""}><span>${esc(c.text)}</span></div>`).join("")}</div>` : ""}
+          ${compromisosDe(s).length ? `<div class="commit-list"><b class="commit-title">Compromisos:</b>${compromisosDe(s).map((c,i)=>`<div class="commit-row ${c.done?"done":""}"><label class="commit-lbl"><input type="checkbox" data-gcommit-idx="${i}" ${c.done?"checked":""}><span>${esc(c.text)}</span></label></div>`).join("")}</div>` : ""}
           <div class="entry-footer">
-            ${isDraft ? `<button class="icon-btn" data-action="continue">continuar borrador</button>` : `<button class="icon-btn" data-action="edit">editar</button>`}
-            <button class="icon-btn" data-action="delete">eliminar</button>
+            ${isDraft ? `<button class="icon-btn" data-action="continue">continuar borrador</button>` : `<button class="icon-btn" data-action="edit" aria-label="editar sesion del ${esc(s.date)}">editar</button>`}
+            <button class="icon-btn" data-action="delete" aria-label="eliminar sesion del ${esc(s.date)}">eliminar</button>
           </div>
         </div>
       `;

