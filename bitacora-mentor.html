@@ -890,7 +890,8 @@ function renderMentoriaView(body){
           ${s.commitment ? `<div class="commit-row ${s.commitmentDone ? 'done':''}"><input type="checkbox" data-commit-id="${s.id}" ${s.commitmentDone?'checked':''}><span><b>Compromiso:</b> ${esc(s.commitment)}</span></div>` : ''}
           ${renderChecklistReadonly(s.checklist)}
           <div class="entry-footer">
-            ${isDraft ? `<button class="icon-btn" data-action="continue">continuar borrador</button>` : ''}
+            ${isDraft ? `<button class="icon-btn" data-action="continue">continuar borrador</button>`
+                      : `<button class="icon-btn" data-action="edit">editar</button>`}
             <button class="icon-btn" data-action="delete">eliminar</button>
           </div>
         </div>
@@ -903,7 +904,10 @@ function renderMentoriaView(body){
         };
       });
       entry.querySelector('[data-action="delete"]').onclick = ()=> deleteSession(s.id);
-      const contBtn = entry.querySelector('[data-action="continue"]');
+      /* "editar" reutiliza el mismo camino que "continuar borrador": la
+         maquinaria de edicion ya existia, solo estaba expuesta unicamente para
+         borradores, asi que una sesion ya guardada no se podia corregir. */
+      const contBtn = entry.querySelector('[data-action="continue"], [data-action="edit"]');
       if(contBtn) contBtn.onclick = ()=>{ editingSessionId = s.id; modal='session'; render(); renderModal(); };
       const commitBox = entry.querySelector('[data-commit-id]');
       if(commitBox) commitBox.onchange = async (e)=>{
@@ -1078,7 +1082,7 @@ function renderGroupsView(body){
           ${s.nextSteps ? clampedEntryField(s.nextSteps, `gentry-ns-${s.id}`, {label:'Próximos pasos'}) : ''}
           ${s.commitment ? `<div class="commit-row ${s.commitmentDone ? 'done':''}"><input type="checkbox" data-gcommit-id="${s.id}" ${s.commitmentDone?'checked':''}><span><b>Compromiso:</b> ${esc(s.commitment)}</span></div>` : ''}
           <div class="entry-footer">
-            ${isDraft ? `<button class="icon-btn" data-action="continue">continuar borrador</button>` : ''}
+            ${isDraft ? `<button class="icon-btn" data-action="continue">continuar borrador</button>` : `<button class="icon-btn" data-action="edit">editar</button>`}
             <button class="icon-btn" data-action="delete">eliminar</button>
           </div>
         </div>
@@ -1091,7 +1095,7 @@ function renderGroupsView(body){
         };
       });
       entry.querySelector('[data-action="delete"]').onclick = ()=> deleteGroupSession(s.id);
-      const contBtn = entry.querySelector('[data-action="continue"]');
+      const contBtn = entry.querySelector('[data-action="continue"], [data-action="edit"]');
       if(contBtn) contBtn.onclick = ()=>{ editingGroupSessionId = s.id; modal='groupSession'; render(); renderModal(); };
       const gcommitBox = entry.querySelector('[data-gcommit-id]');
       if(gcommitBox) gcommitBox.onchange = async (e)=>{
@@ -1541,7 +1545,7 @@ function renderModal(){
     const existingSession = editingGroupSessionId ? state.groupSessions.find(s=>s.id===editingGroupSessionId) : null;
     overlay.innerHTML = `
       <div class="modal">
-        <h3>${existingSession ? 'Continuar sesión grupal' : 'Registrar sesión grupal'}</h3>
+        <h3>${existingSession ? (existingSession.status === 'draft' ? 'Continuar sesión grupal' : 'Editar sesión grupal') : 'Registrar sesión grupal'}</h3>
         <div class="field"><label>Fecha</label><input type="date" id="gs-date" value="${existingSession ? existingSession.date : today}"></div>
         <div class="field"><label>Enfoque usado</label>
           <select id="gs-approach">
@@ -1802,7 +1806,7 @@ function renderModal(){
 
     overlay.innerHTML = `
       <div class="modal">
-        <h3>${existingSession ? 'Continuar sesión' : 'Registrar sesión'}</h3>
+        <h3>${existingSession ? (existingSession.status === 'draft' ? 'Continuar sesión' : 'Editar sesión') : 'Registrar sesión'}</h3>
         <div class="field"><label>Fecha</label><input type="date" id="s-date" value="${existingSession ? existingSession.date : today}"></div>
         <div class="field"><label>Enfoque usado</label>
           <select id="s-approach">
