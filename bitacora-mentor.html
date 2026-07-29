@@ -255,6 +255,38 @@
   .btn-add-mentee:hover{background:var(--slate-light);border-color:var(--slate);color:var(--violet-deep);}
 
   .export-block{margin-top:22px;padding-top:16px;border-top:1px solid var(--line);display:flex;gap:8px;}
+  /* ── Selección múltiple de enfoque ──
+     Botones y no checkboxes: son de encendido/apagado y se leen como
+     etiquetas, que es lo que se pidió visualmente. aria-pressed comunica el
+     estado a un lector de pantalla, cosa que un div coloreado no haría. */
+  .enfoque-picker{display:flex;flex-wrap:wrap;gap:8px;}
+  /* El estado inactivo NO usa --line ni --muted: medido, el borde daba 1.46:1
+     (hace falta 3:1 para el contorno de un control) y el texto 4.40:1, justo
+     por debajo del 4.5:1 de AA. Estos dos tonos suben a 4.6:1 y 5.1:1 sin
+     cambiar el caracter apagado del estado inactivo. */
+  .enfoque-chip{
+    padding:7px 15px;border-radius:999px;cursor:pointer;
+    font-family:'Inter',sans-serif;font-size:12.5px;
+    background:transparent;border:1px solid #79796F;color:#66665C;
+    transition:background .15s ease,border-color .15s ease,color .15s ease;
+  }
+  .enfoque-chip:hover{border-color:var(--brass);color:var(--slate);}
+  .enfoque-chip.on{background:var(--sage-light);border-color:var(--brass);color:var(--slate);font-weight:600;}
+  .enfoque-chip:focus-visible{outline:2px solid var(--brass);outline-offset:2px;}
+  @media (prefers-reduced-motion: reduce){ .enfoque-chip{transition:none;} }
+
+  /* ── Compromisos como lista ── */
+  /* La casilla va DENTRO de un <label> junto a su texto: asi el texto es su
+     nombre accesible y ademas amplia la zona pulsable. Es el mismo patron que
+     la app ya usa en .member-check-row. */
+  .commit-lbl{display:flex;align-items:flex-start;gap:8px;cursor:pointer;}
+  .commit-list{margin-top:10px;}
+  .commit-title{display:block;margin-bottom:4px;}
+  .commit-add{display:flex;gap:8px;margin-top:8px;}
+  .commit-add input{flex:1;}
+  .commit-edit-row{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
+  .commit-edit-row input[type=text]{flex:1;}
+
   .btn-export{flex:1;padding:8px 6px;background:var(--sage-light);border:1px solid var(--brass);border-radius:7px;font-size:11.5px;cursor:pointer;color:var(--slate);font-family:'Inter',sans-serif;}
   .btn-export:hover{background:var(--slate-light);border-color:var(--slate);color:var(--violet-deep);}
 
@@ -565,6 +597,71 @@ const storageAdapter = {
   }
 };
 
+/* ── Migración de sesiones: de campo único a lista ──
+   Dos campos pasan de valor simple a lista: el compromiso (texto -> lista de
+   ítems marcables) y el enfoque (uno -> varios).
+
+   La migración es ADITIVA a propósito: nunca borra `commitment`,
+   `commitmentDone` ni `approach`. Si algo saliera mal con los campos nuevos,
+   los originales siguen intactos en los datos guardados y no se pierde
+   ninguna mentoría ya registrada. Por eso también es idempotente: si ya hay
+   lista, no la vuelve a construir. */
+function migrarSesiones(){
+  const migrarUna = (s) => {
+    /* Un elemento nulo o que no sea objeto reventaba aqui, y como
+       migrarSesiones() corre fuera del try/catch de loadData() y esta se
+       llama sin .catch(), la excepcion dejaba render() sin ejecutar: pantalla
+       en blanco, sin mensaje, con los datos intactos pero invisibles. Se llega
+       por "Importar copia", que solo valida que sean arreglos, no su
+       contenido. Hallazgo de security-reviewer. */
+    if(!s || typeof s !== 'object') return;
+    /* Un item nulo dentro de una lista ya migrada tampoco se tocaba (la
+       funcion es idempotente) y reventaba despues al pintar. */
+    if(Array.isArray(s.commitments)){
+      s.commitments = s.commitments
+        .filter(c => c && typeof c === 'object')
+        .map(c => ({ text: String(c.text == null ? '' : c.text), done: !!c.done }));
+    }
+    if(Array.isArray(s.approaches)){
+      s.approaches = s.approaches.filter(k => typeof k === 'string');
+    }
+    if(!Array.isArray(s.commitments)){
+      s.commitments = s.commitment
+        ? [{ text: s.commitment, done: !!s.commitmentDone }]
+        : [];
+    }
+    if(!Array.isArray(s.approaches)){
+      s.approaches = s.approach ? [s.approach] : ['directivo'];
+    }
+  };
+  /* Se descartan los elementos que no son sesiones antes de recorrer: dejarlos
+     dentro hacia reventar el render mas adelante, aunque migrarUna los
+     esquive. Un dato basura no debe poder ocultar los datos buenos. */
+  if(Array.isArray(state.sessions)) state.sessions = state.sessions.filter(s => s && typeof s === 'object');
+  if(Array.isArray(state.groupSessions)) state.groupSessions = state.groupSessions.filter(s => s && typeof s === 'object');
+  (state.sessions || []).forEach(migrarUna);
+  (state.groupSessions || []).forEach(migrarUna);
+}
+
+/* Lectores tolerantes: funcionan igual con datos migrados y sin migrar, así
+   que ninguna vista depende de que la migración ya haya corrido. */
+function compromisosDe(s){
+  if(Array.isArray(s.commitments)) return s.commitments;
+  return s.commitment ? [{ text: s.commitment, done: !!s.commitmentDone }] : [];
+}
+function enfoquesDe(s){
+  const lista = Array.isArray(s.approaches) && s.approaches.length
+    ? s.approaches
+    : (s.approach ? [s.approach] : ['directivo']);
+  /* El filtro puede vaciar la lista si el dato guardado trae un enfoque que ya
+     no existe (renombrado, dato importado a mano). Sin este respaldo la sesion
+     se quedaria sin ninguna etiqueta en el historial y no se contaria en las
+     estadisticas — es decir, el dato malo se volveria invisible en vez de
+     degradarse. Se cae a 'directivo', que es el valor por defecto de siempre. */
+  const validos = lista.filter(k => ENFOQUES[k]);
+  return validos.length ? validos : ['directivo'];
+}
+
 async function loadData(){
   try{
     const res = await storageAdapter.get(STORAGE_KEY);
@@ -577,6 +674,11 @@ async function loadData(){
   if(!state.groups) state.groups = [];
   if(!state.groupSessions) state.groupSessions = [];
   if(!state.templates) state.templates = [];
+  /* Con red: si la migracion fallara por una forma de dato que no previmos,
+     mas vale pintar la app (aunque alguna sesion se vea raro) que dejar la
+     pantalla en blanco. Los datos guardados no se tocan si esto falla. */
+  try { migrarSesiones(); }
+  catch(e){ console.warn('[Bitácora] La migración de sesiones falló; se continúa con los datos tal cual:', e); }
   if(state.mentees.length && !selectedMenteeId) selectedMenteeId = state.mentees[0].id;
   if(state.groups.length && !selectedGroupId) selectedGroupId = state.groups[0].id;
   cloudSyncReady = true;
@@ -637,7 +739,15 @@ function fmtDate(iso){
 function esc(s){
   const d = document.createElement('div');
   d.textContent = s == null ? '' : s;
-  return d.innerHTML;
+  /* Las comillas TAMBIEN hay que escaparlas: textContent+innerHTML cubre
+     &, < y >, pero deja pasar " y '. Eso es seguro en contexto de texto y
+     agujero en contexto de atributo, y esta funcion se usa en los dos —
+     value="${esc(...)}", aria-label="${esc(...)}". Sin esto, un texto con una
+     comilla puede cerrar el atributo y colar un manejador de eventos.
+     Las otras 4 apps ya escapaban comillas en su propia funcion; esta era la
+     unica que no. Hallazgo de security-reviewer, con exploit real vía
+     "Importar copia", que reemplaza el estado sin validar el contenido. */
+  return d.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 function expandableField(label, text, fieldId){
@@ -681,7 +791,8 @@ function sessionCount(menteeId){
 }
 
 function pendingCommitments(menteeId){
-  return state.sessions.filter(s=>s.menteeId===menteeId && s.commitment && !s.commitmentDone).length;
+  /* Cuenta ITEMS pendientes, no sesiones: una sesion puede llevar varios. */
+  return state.sessions.filter(s=>s.menteeId===menteeId).reduce((n,s)=>n+compromisosDe(s).filter(c=>!c.done).length,0);
 }
 
 function daysSinceLastActivity(mentee){
@@ -698,7 +809,7 @@ function isInactive(mentee){
 }
 
 function pendingGroupCommitments(groupId){
-  return state.groupSessions.filter(s=>s.groupId===groupId && s.commitment && !s.commitmentDone).length;
+  return state.groupSessions.filter(s=>s.groupId===groupId).reduce((n,s)=>n+compromisosDe(s).filter(c=>!c.done).length,0);
 }
 
 function daysSinceLastGroupActivity(group){
@@ -868,7 +979,8 @@ function renderMentoriaView(body){
     const sessionNumbers = {};
     [...sessions].sort((a,b)=>a.date.localeCompare(b.date)).forEach((s,i)=>{ sessionNumbers[s.id] = i+1; });
     sessions.forEach(s=>{
-      const ap = ENFOQUES[s.approach] || ENFOQUES.directivo;
+      const enfoques = enfoquesDe(s);
+      const ap = ENFOQUES[enfoques[0]] || ENFOQUES.directivo;
       const isDraft = s.status === 'draft';
       const entry = document.createElement('div');
       entry.className = 'entry';
@@ -880,18 +992,19 @@ function renderMentoriaView(body){
             <div class="entry-tags">
               <span class="session-number-tag">Sesión #${sessionNumbers[s.id]}</span>
               ${isDraft ? '<span class="tag tag-draft">Borrador</span>' : ''}
-              <span class="tag ${ap.tagClass}">${ap.label}</span>
+              ${enfoques.map(k=>`<span class="tag ${ENFOQUES[k].tagClass}">${ENFOQUES[k].label}</span>`).join("")}
             </div>
           </div>
           ${s.topic ? clampedEntryField(s.topic, `entry-topic-${s.id}`, {cls:'entry-topic'}) : '<p class="entry-topic">(sin tema aún)</p>'}
           ${s.whatWorked ? clampedEntryField(s.whatWorked, `entry-ww-${s.id}`, {label:'Qué funcionó'}) : ''}
           ${s.whatDidnt ? clampedEntryField(s.whatDidnt, `entry-wd-${s.id}`, {label:'Qué ajustar'}) : ''}
           ${s.nextSteps ? clampedEntryField(s.nextSteps, `entry-ns-${s.id}`, {label:'Próximos pasos'}) : ''}
-          ${s.commitment ? `<div class="commit-row ${s.commitmentDone ? 'done':''}"><input type="checkbox" data-commit-id="${s.id}" ${s.commitmentDone?'checked':''}><span><b>Compromiso:</b> ${esc(s.commitment)}</span></div>` : ''}
+          ${compromisosDe(s).length ? `<div class="commit-list"><b class="commit-title">Compromisos:</b>${compromisosDe(s).map((c,i)=>`<div class="commit-row ${c.done?"done":""}"><label class="commit-lbl"><input type="checkbox" data-commit-idx="${i}" ${c.done?"checked":""}><span>${esc(c.text)}</span></label></div>`).join("")}</div>` : ""}
           ${renderChecklistReadonly(s.checklist)}
           <div class="entry-footer">
-            ${isDraft ? `<button class="icon-btn" data-action="continue">continuar borrador</button>` : ''}
-            <button class="icon-btn" data-action="delete">eliminar</button>
+            ${isDraft ? `<button class="icon-btn" data-action="continue">continuar borrador</button>`
+                      : `<button class="icon-btn" data-action="edit" aria-label="editar sesion del ${esc(s.date)}">editar</button>`}
+            <button class="icon-btn" data-action="delete" aria-label="eliminar sesion del ${esc(s.date)}">eliminar</button>
           </div>
         </div>
       `;
@@ -903,15 +1016,25 @@ function renderMentoriaView(body){
         };
       });
       entry.querySelector('[data-action="delete"]').onclick = ()=> deleteSession(s.id);
-      const contBtn = entry.querySelector('[data-action="continue"]');
+      /* "editar" reutiliza el mismo camino que "continuar borrador": la
+         maquinaria de edicion ya existia, solo estaba expuesta unicamente para
+         borradores, asi que una sesion ya guardada no se podia corregir. */
+      const contBtn = entry.querySelector('[data-action="continue"], [data-action="edit"]');
       if(contBtn) contBtn.onclick = ()=>{ editingSessionId = s.id; modal='session'; render(); renderModal(); };
-      const commitBox = entry.querySelector('[data-commit-id]');
-      if(commitBox) commitBox.onchange = async (e)=>{
-        const idx = state.sessions.findIndex(x=>x.id===s.id);
-        state.sessions[idx].commitmentDone = e.target.checked;
-        await saveData();
-        render();
-      };
+      entry.querySelectorAll('[data-commit-idx]').forEach(box=>{
+        box.onchange = async (e)=>{
+          const idx = state.sessions.findIndex(x=>x.id===s.id);
+          const i = +e.target.dataset.commitIdx;
+          const lista = compromisosDe(state.sessions[idx]);
+          lista[i].done = e.target.checked;
+          state.sessions[idx].commitments = lista;
+          /* Se mantiene el campo viejo en sincronia mientras exista, para no
+             dejar datos incoherentes si algo lee todavia commitmentDone. */
+          if(state.sessions[idx].commitment && lista.length === 1) state.sessions[idx].commitmentDone = lista[0].done;
+          await saveData();
+          render();
+        };
+      });
       timeline.appendChild(entry);
     });
   }
@@ -1058,7 +1181,8 @@ function renderGroupsView(body){
   }else{
     timeline.innerHTML = '';
     gSessions.forEach(s=>{
-      const ap = ENFOQUES[s.approach] || ENFOQUES.directivo;
+      const enfoques = enfoquesDe(s);
+      const ap = ENFOQUES[enfoques[0]] || ENFOQUES.directivo;
       const isDraft = s.status === 'draft';
       const entry = document.createElement('div');
       entry.className = 'entry';
@@ -1069,17 +1193,17 @@ function renderGroupsView(body){
             <span class="entry-date">${fmtDate(s.date)}</span>
             <div class="entry-tags">
               ${isDraft ? '<span class="tag tag-draft">Borrador</span>' : ''}
-              <span class="tag ${ap.tagClass}">${ap.label}</span>
+              ${enfoques.map(k=>`<span class="tag ${ENFOQUES[k].tagClass}">${ENFOQUES[k].label}</span>`).join("")}
             </div>
           </div>
           ${s.topic ? clampedEntryField(s.topic, `gentry-topic-${s.id}`, {cls:'entry-topic'}) : '<p class="entry-topic">(sin tema aún)</p>'}
           ${s.whatWorked ? clampedEntryField(s.whatWorked, `gentry-ww-${s.id}`, {label:'Qué funcionó'}) : ''}
           ${s.whatDidnt ? clampedEntryField(s.whatDidnt, `gentry-wd-${s.id}`, {label:'Qué ajustar'}) : ''}
           ${s.nextSteps ? clampedEntryField(s.nextSteps, `gentry-ns-${s.id}`, {label:'Próximos pasos'}) : ''}
-          ${s.commitment ? `<div class="commit-row ${s.commitmentDone ? 'done':''}"><input type="checkbox" data-gcommit-id="${s.id}" ${s.commitmentDone?'checked':''}><span><b>Compromiso:</b> ${esc(s.commitment)}</span></div>` : ''}
+          ${compromisosDe(s).length ? `<div class="commit-list"><b class="commit-title">Compromisos:</b>${compromisosDe(s).map((c,i)=>`<div class="commit-row ${c.done?"done":""}"><label class="commit-lbl"><input type="checkbox" data-gcommit-idx="${i}" ${c.done?"checked":""}><span>${esc(c.text)}</span></label></div>`).join("")}</div>` : ""}
           <div class="entry-footer">
-            ${isDraft ? `<button class="icon-btn" data-action="continue">continuar borrador</button>` : ''}
-            <button class="icon-btn" data-action="delete">eliminar</button>
+            ${isDraft ? `<button class="icon-btn" data-action="continue">continuar borrador</button>` : `<button class="icon-btn" data-action="edit" aria-label="editar sesion del ${esc(s.date)}">editar</button>`}
+            <button class="icon-btn" data-action="delete" aria-label="eliminar sesion del ${esc(s.date)}">eliminar</button>
           </div>
         </div>
       `;
@@ -1091,15 +1215,20 @@ function renderGroupsView(body){
         };
       });
       entry.querySelector('[data-action="delete"]').onclick = ()=> deleteGroupSession(s.id);
-      const contBtn = entry.querySelector('[data-action="continue"]');
+      const contBtn = entry.querySelector('[data-action="continue"], [data-action="edit"]');
       if(contBtn) contBtn.onclick = ()=>{ editingGroupSessionId = s.id; modal='groupSession'; render(); renderModal(); };
-      const gcommitBox = entry.querySelector('[data-gcommit-id]');
-      if(gcommitBox) gcommitBox.onchange = async (e)=>{
-        const idx = state.groupSessions.findIndex(x=>x.id===s.id);
-        state.groupSessions[idx].commitmentDone = e.target.checked;
-        await saveData();
-        render();
-      };
+      entry.querySelectorAll('[data-gcommit-idx]').forEach(box=>{
+        box.onchange = async (e)=>{
+          const idx = state.groupSessions.findIndex(x=>x.id===s.id);
+          const i = +e.target.dataset.gcommitIdx;
+          const lista = compromisosDe(state.groupSessions[idx]);
+          lista[i].done = e.target.checked;
+          state.groupSessions[idx].commitments = lista;
+          if(state.groupSessions[idx].commitment && lista.length === 1) state.groupSessions[idx].commitmentDone = lista[0].done;
+          await saveData();
+          render();
+        };
+      });
       timeline.appendChild(entry);
     });
   }
@@ -1349,8 +1478,8 @@ function renderReportsView(body){
   state.mentees.forEach(m=>{ if(porNivel[m.level] !== undefined) porNivel[m.level]++; });
 
   const porEnfoque = { directivo:0, socratico:0, colaborativo:0 };
-  state.sessions.forEach(s=>{ if(porEnfoque[s.approach] !== undefined) porEnfoque[s.approach]++; });
-  state.groupSessions.forEach(s=>{ if(porEnfoque[s.approach] !== undefined) porEnfoque[s.approach]++; });
+  state.sessions.forEach(s=>{ enfoquesDe(s).forEach(k=>{ if(porEnfoque[k] !== undefined) porEnfoque[k]++; }); });
+  state.groupSessions.forEach(s=>{ enfoquesDe(s).forEach(k=>{ if(porEnfoque[k] !== undefined) porEnfoque[k]++; }); });
 
   const porEstado = { activo:0, pausa:0, cerrado:0 };
   state.mentees.forEach(m=>{ const st = m.status||'activo'; if(porEstado[st] !== undefined) porEstado[st]++; });
@@ -1541,7 +1670,7 @@ function renderModal(){
     const existingSession = editingGroupSessionId ? state.groupSessions.find(s=>s.id===editingGroupSessionId) : null;
     overlay.innerHTML = `
       <div class="modal">
-        <h3>${existingSession ? 'Continuar sesión grupal' : 'Registrar sesión grupal'}</h3>
+        <h3>${existingSession ? (existingSession.status === 'draft' ? 'Continuar sesión grupal' : 'Editar sesión grupal') : 'Registrar sesión grupal'}</h3>
         <div class="field"><label>Fecha</label><input type="date" id="gs-date" value="${existingSession ? existingSession.date : today}"></div>
         <div class="field"><label>Enfoque usado</label>
           <select id="gs-approach">
@@ -1568,19 +1697,50 @@ function renderModal(){
     }
     document.getElementById('btn-cancel').onclick = ()=>{ modal=null; editingGroupSessionId=null; renderModal(); };
 
-    const collectGroupSession = (status)=>({
-      id: existingSession ? existingSession.id : uid(),
-      groupId: selectedGroupId,
-      date: document.getElementById('gs-date').value || today,
-      approach: document.getElementById('gs-approach').value,
-      topic: document.getElementById('gs-topic').value.trim(),
-      whatWorked: document.getElementById('gs-worked').value.trim(),
-      whatDidnt: document.getElementById('gs-didnt').value.trim(),
-      nextSteps: document.getElementById('gs-next').value.trim(),
-      commitment: document.getElementById('gs-commitment').value.trim(),
-      commitmentDone: existingSession ? !!existingSession.commitmentDone : false,
-      status
-    });
+    const collectGroupSession = (status)=>{
+      /* Este modal todavia maneja un solo enfoque y un solo compromiso, pero
+         la sesion PUEDE tener listas de varios (importadas, o creadas desde el
+         modal individual). Como el guardado reemplaza el objeto entero, sin
+         esto bastaba con abrir "editar" y pulsar Guardar sin tocar nada para
+         borrar en silencio todo salvo el primer elemento de cada lista.
+         Hallazgo de qa-lead, alcanzable justo porque esta misma rama expuso
+         "editar" en sesiones de grupo ya finalizadas.
+         Se preserva lo que el modal no gobierna y solo se pisa el primer
+         elemento, que es el unico que el modal si edita. */
+      const enfoqueUnico = document.getElementById('gs-approach').value;
+      const textoCompromiso = document.getElementById('gs-commitment').value.trim();
+
+      const enfoquesPrevios = existingSession ? enfoquesDe(existingSession).slice() : [];
+      const approaches = enfoquesPrevios.length
+        ? [enfoqueUnico, ...enfoquesPrevios.filter(k => k !== enfoqueUnico)]
+        : [enfoqueUnico];
+
+      const compromisosPrevios = existingSession ? compromisosDe(existingSession).map(c=>({...c})) : [];
+      let commitments;
+      if(compromisosPrevios.length){
+        commitments = compromisosPrevios;
+        if(textoCompromiso) commitments[0] = { text: textoCompromiso, done: !!commitments[0].done };
+        else commitments.shift();
+      } else {
+        commitments = textoCompromiso ? [{ text: textoCompromiso, done: false }] : [];
+      }
+
+      return {
+        id: existingSession ? existingSession.id : uid(),
+        groupId: selectedGroupId,
+        date: document.getElementById('gs-date').value || today,
+        approaches,
+        approach: approaches[0],
+        topic: document.getElementById('gs-topic').value.trim(),
+        whatWorked: document.getElementById('gs-worked').value.trim(),
+        whatDidnt: document.getElementById('gs-didnt').value.trim(),
+        nextSteps: document.getElementById('gs-next').value.trim(),
+        commitments,
+        commitment: commitments.length ? commitments[0].text : '',
+        commitmentDone: commitments.length ? !!commitments[0].done : false,
+        status
+      };
+    };
 
     document.getElementById('btn-draft').onclick = async ()=>{
       const sess = collectGroupSession('draft');
@@ -1798,24 +1958,34 @@ function renderModal(){
     const today = new Date().toISOString().slice(0,10);
     const existingSession = editingSessionId ? state.sessions.find(s=>s.id===editingSessionId) : null;
     modalChecklist = existingSession && existingSession.checklist ? existingSession.checklist.map(i=>({...i})) : [];
+    let enfoqueSel = existingSession ? enfoquesDe(existingSession).slice() : ["directivo"];
+    let modalCommits = existingSession ? compromisosDe(existingSession).map(c=>({...c})) : [];
     let sessionTemplateId = existingSession ? (existingSession.templateId || '') : '';
 
     overlay.innerHTML = `
       <div class="modal">
-        <h3>${existingSession ? 'Continuar sesión' : 'Registrar sesión'}</h3>
+        <h3>${existingSession ? (existingSession.status === 'draft' ? 'Continuar sesión' : 'Editar sesión') : 'Registrar sesión'}</h3>
         <div class="field"><label>Fecha</label><input type="date" id="s-date" value="${existingSession ? existingSession.date : today}"></div>
-        <div class="field"><label>Enfoque usado</label>
-          <select id="s-approach">
-            <option value="directivo">Directivo</option>
-            <option value="socratico">Socrático</option>
-            <option value="colaborativo">Colaborativo</option>
-          </select>
+        <div class="field"><label id="s-approach-label">Enfoque usado <span style="color:var(--muted);">(puedes elegir varios)</span></label>
+          <!-- role="group" + aria-labelledby: sin esto un lector de pantalla
+               anuncia los botones sueltos, sin decir nunca de que grupo son.
+               El <label> por si solo no ata nada, porque no hay un unico
+               control al que apuntar con "for". -->
+          <div class="enfoque-picker" id="s-approach" role="group" aria-labelledby="s-approach-label">
+            ${Object.keys(ENFOQUES).map(k=>`<button type="button" class="enfoque-chip ${enfoqueSel.includes(k)?'on':''}" data-enfoque="${k}" aria-pressed="${enfoqueSel.includes(k)}">${ENFOQUES[k].label}</button>`).join('')}
+          </div>
         </div>
         <div class="field"><label>Tema tratado</label><input id="s-topic" placeholder="¿De qué trató la sesión?" value="${existingSession ? esc(existingSession.topic) : ''}"></div>
         <div class="field"><label>Qué funcionó</label><textarea id="s-worked" placeholder="Opcional">${existingSession ? esc(existingSession.whatWorked) : ''}</textarea></div>
         <div class="field"><label>Qué ajustar la próxima vez</label><textarea id="s-didnt" placeholder="Opcional">${existingSession ? esc(existingSession.whatDidnt) : ''}</textarea></div>
         <div class="field"><label>Próximos pasos</label><textarea id="s-next" placeholder="Opcional">${existingSession ? esc(existingSession.nextSteps) : ''}</textarea></div>
-        <div class="field"><label>Compromiso / acción pendiente <span style="color:var(--muted);">(opcional, marcable como cumplido después)</span></label><input id="s-commitment" placeholder="Ej: enviar CV actualizado" value="${existingSession ? esc(existingSession.commitment) : ''}"></div>
+        <div class="field"><label>Compromisos / acciones pendientes <span style="color:var(--muted);">(opcional, cada uno se marca por separado)</span></label>
+          <div id="s-commit-list"></div>
+          <div class="commit-add">
+            <input id="s-commitment" placeholder="Ej: enviar CV actualizado">
+            <button type="button" class="btn-ghost" id="s-commit-add">+ agregar</button>
+          </div>
+        </div>
         <div class="field"><label>Plantilla de preguntas clave <span style="color:var(--muted);">(opcional)</span></label>
           <select id="s-template">
             <option value="">Sin plantilla</option>
@@ -1831,9 +2001,68 @@ function renderModal(){
       </div>
     `;
     document.body.appendChild(overlay);
-    if(existingSession){
-      overlay.querySelector('#s-approach').value = existingSession.approach;
+
+    /* Enfoques: se puede marcar mas de uno, pero nunca ninguno — una sesion
+       sin enfoque no tendria como pintarse en el historial ni contarse en las
+       estadisticas, asi que el ultimo activo no se deja apagar. */
+    overlay.querySelectorAll('[data-enfoque]').forEach(chip=>{
+      chip.onclick = ()=>{
+        const k = chip.dataset.enfoque;
+        const i = enfoqueSel.indexOf(k);
+        if(i >= 0){
+          /* Antes el clic se ignoraba en silencio y parecia que el boton no
+             funcionaba. Se explica con el mismo aviso que ya usa la app. */
+          if(enfoqueSel.length === 1){ showToast('La sesión necesita al menos un enfoque.'); return; }
+          enfoqueSel.splice(i,1);
+        }
+        else enfoqueSel.push(k);
+        chip.classList.toggle('on', enfoqueSel.includes(k));
+        chip.setAttribute('aria-pressed', enfoqueSel.includes(k));
+      };
+    });
+
+    function renderCommits(){
+      const box = overlay.querySelector('#s-commit-list');
+      /* aria-label en cada control: "quitar" a secas no dice qué quita, y con
+         varios compromisos un lector de pantalla solo oiría "quitar, quitar,
+         quitar". Se conserva la palabra visible dentro del nombre accesible
+         (WCAG 2.5.3), así quien usa voz puede decir "quitar" y funciona. */
+      box.innerHTML = modalCommits.map((c,i)=>{
+        const nombre = c.text.trim() || `compromiso ${i+1}`;
+        return `
+        <div class="commit-edit-row">
+          <input type="checkbox" data-cdone="${i}" ${c.done?'checked':''} aria-label="Marcar como cumplido: ${esc(nombre)}">
+          <input type="text" data-ctext="${i}" value="${esc(c.text)}" aria-label="Texto del compromiso ${i+1}">
+          <button type="button" class="icon-btn" data-cdel="${i}" aria-label="quitar ${esc(nombre)}">quitar</button>
+        </div>`;
+      }).join('');
+      box.querySelectorAll('[data-cdone]').forEach(el=> el.onchange = e=>{ modalCommits[+e.target.dataset.cdone].done = e.target.checked; });
+      box.querySelectorAll('[data-ctext]').forEach(el=> el.oninput = e=>{ modalCommits[+e.target.dataset.ctext].text = e.target.value; });
+      box.querySelectorAll('[data-cdel]').forEach(el=> el.onclick = e=>{
+        const i = +e.target.dataset.cdel;
+        modalCommits.splice(i,1);
+        renderCommits();
+        /* Al repintar la lista el foco se perdía al <body>. Se devuelve al
+           botón "quitar" siguiente, o al campo de agregar si era el último. */
+        const box2 = overlay.querySelector('#s-commit-list');
+        const siguiente = box2.querySelectorAll('[data-cdel]')[Math.min(i, modalCommits.length-1)];
+        if(siguiente) siguiente.focus();
+        else overlay.querySelector('#s-commitment').focus();
+      });
     }
+    renderCommits();
+    const addCommit = ()=>{
+      const inp = overlay.querySelector('#s-commitment');
+      const v = inp.value.trim();
+      if(!v) return;
+      modalCommits.push({ text: v, done: false });
+      inp.value = '';
+      renderCommits();
+      inp.focus();
+    };
+    overlay.querySelector('#s-commit-add').onclick = addCommit;
+    overlay.querySelector('#s-commitment').onkeydown = e=>{ if(e.key === 'Enter'){ e.preventDefault(); addCommit(); } };
+
     document.getElementById('btn-cancel').onclick = ()=>{ modal=null; editingSessionId=null; renderModal(); };
 
     function renderSessionChecklist(){
@@ -1875,13 +2104,18 @@ function renderModal(){
       id: existingSession ? existingSession.id : uid(),
       menteeId: selectedMenteeId,
       date: document.getElementById('s-date').value || today,
-      approach: document.getElementById('s-approach').value,
+      approaches: enfoqueSel.slice(),
+      /* `approach` y `commitment` se siguen guardando (el primero de cada
+         lista) para que un dato escrito hoy siga siendo legible por cualquier
+         version anterior del archivo. Son espejo, no la fuente de verdad. */
+      approach: enfoqueSel[0],
       topic: document.getElementById('s-topic').value.trim(),
       whatWorked: document.getElementById('s-worked').value.trim(),
       whatDidnt: document.getElementById('s-didnt').value.trim(),
       nextSteps: document.getElementById('s-next').value.trim(),
-      commitment: document.getElementById('s-commitment').value.trim(),
-      commitmentDone: existingSession ? !!existingSession.commitmentDone : false,
+      commitments: modalCommits.filter(c=>c.text.trim()).map(c=>({ text:c.text.trim(), done:!!c.done })),
+      commitment: (modalCommits.find(c=>c.text.trim()) || {text:''}).text.trim(),
+      commitmentDone: !!(modalCommits.find(c=>c.text.trim()) || {}).done,
       templateId: sessionTemplateId || null,
       checklist: modalChecklist,
       status
