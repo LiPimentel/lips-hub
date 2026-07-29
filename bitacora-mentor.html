@@ -1655,19 +1655,50 @@ function renderModal(){
     }
     document.getElementById('btn-cancel').onclick = ()=>{ modal=null; editingGroupSessionId=null; renderModal(); };
 
-    const collectGroupSession = (status)=>({
-      id: existingSession ? existingSession.id : uid(),
-      groupId: selectedGroupId,
-      date: document.getElementById('gs-date').value || today,
-      approach: document.getElementById('gs-approach').value,
-      topic: document.getElementById('gs-topic').value.trim(),
-      whatWorked: document.getElementById('gs-worked').value.trim(),
-      whatDidnt: document.getElementById('gs-didnt').value.trim(),
-      nextSteps: document.getElementById('gs-next').value.trim(),
-      commitment: document.getElementById('gs-commitment').value.trim(),
-      commitmentDone: existingSession ? !!existingSession.commitmentDone : false,
-      status
-    });
+    const collectGroupSession = (status)=>{
+      /* Este modal todavia maneja un solo enfoque y un solo compromiso, pero
+         la sesion PUEDE tener listas de varios (importadas, o creadas desde el
+         modal individual). Como el guardado reemplaza el objeto entero, sin
+         esto bastaba con abrir "editar" y pulsar Guardar sin tocar nada para
+         borrar en silencio todo salvo el primer elemento de cada lista.
+         Hallazgo de qa-lead, alcanzable justo porque esta misma rama expuso
+         "editar" en sesiones de grupo ya finalizadas.
+         Se preserva lo que el modal no gobierna y solo se pisa el primer
+         elemento, que es el unico que el modal si edita. */
+      const enfoqueUnico = document.getElementById('gs-approach').value;
+      const textoCompromiso = document.getElementById('gs-commitment').value.trim();
+
+      const enfoquesPrevios = existingSession ? enfoquesDe(existingSession).slice() : [];
+      const approaches = enfoquesPrevios.length
+        ? [enfoqueUnico, ...enfoquesPrevios.filter(k => k !== enfoqueUnico)]
+        : [enfoqueUnico];
+
+      const compromisosPrevios = existingSession ? compromisosDe(existingSession).map(c=>({...c})) : [];
+      let commitments;
+      if(compromisosPrevios.length){
+        commitments = compromisosPrevios;
+        if(textoCompromiso) commitments[0] = { text: textoCompromiso, done: !!commitments[0].done };
+        else commitments.shift();
+      } else {
+        commitments = textoCompromiso ? [{ text: textoCompromiso, done: false }] : [];
+      }
+
+      return {
+        id: existingSession ? existingSession.id : uid(),
+        groupId: selectedGroupId,
+        date: document.getElementById('gs-date').value || today,
+        approaches,
+        approach: approaches[0],
+        topic: document.getElementById('gs-topic').value.trim(),
+        whatWorked: document.getElementById('gs-worked').value.trim(),
+        whatDidnt: document.getElementById('gs-didnt').value.trim(),
+        nextSteps: document.getElementById('gs-next').value.trim(),
+        commitments,
+        commitment: commitments.length ? commitments[0].text : '',
+        commitmentDone: commitments.length ? !!commitments[0].done : false,
+        status
+      };
+    };
 
     document.getElementById('btn-draft').onclick = async ()=>{
       const sess = collectGroupSession('draft');
