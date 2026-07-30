@@ -1,0 +1,181 @@
+# Hourglass — requerimientos
+
+Este archivo se alimenta de la revisión de los 5 agentes (business-analyst, qa-lead, security-reviewer, accessibility-reviewer, release-manager), no solo de business-analyst. Ver `docs/hourglass/prd-resumen.md` para la especificación funcional completa.
+
+Esta sección (Propósito, Requerimientos funcionales, Flujo de trabajo) la agrega `business-analyst` el 2026-07-30, describiendo el comportamiento **real** de `hourglass.html` en el commit `df5acc8` — leído línea por línea del código fuente, no del PRD ni de una intención. Donde algo no se pudo verificar en vivo en esta sesión concreta (ver nota de herramienta en `docs/hourglass/entrenamiento.md`), se apoya en la ejecución real que sí hicieron `qa-lead`/`accessibility-reviewer` el mismo día (citada explícitamente), nunca en una suposición nueva.
+
+## Propósito del app
+
+Hourglass es el registro personal de tiempo de Lissette dentro de LIPS-HUB. Sirve para anotar, ya sea a mano o con un cronómetro en vivo, en qué se le va el tiempo entre sus trabajos, sus actividades de voluntariado y sus proyectos personales, agrupados en tres secciones fijas (Trabajo / Voluntariado / Personal). La app calcula cuánto tiempo le queda disponible cada día — 24 horas menos lo que dedica a dormir y a comer — y avisa con un semáforo (verde / amarillo / rojo) cuando un día o un periodo se le está sobrecargando, señalando además qué sección es la que más está aportando a esa sobrecarga. Es una app de una sola usuaria, sin nada compartido ni multiusuario.
+
+## Requerimientos funcionales
+
+**Acceso y datos**
+
+1. La app está protegida por el candado estándar del hub (`auth-gate.js`); sin sesión iniciada no se cargan ni se muestran datos reales (`load()` corta de inmediato si `getSupabaseSession()` no devuelve sesión).
+2. Al abrir la app con sesión válida, los datos se leen primero de Supabase (tabla `app_data`, fila única por `user_id`+`app_id='hourglass'`); si la nube falla o no responde, se usa la última copia guardada en este navegador (`localStorage`, clave aislada por usuario).
+3. Cada guardado (`save()`) escribe a la vez en el `localStorage` de este navegador y en Supabase; si existe una carpeta local conectada (el badge "📁"), también queda reflejado ahí como un archivo `hourglass.data.json`.
+4. Un cronómetro en marcha **no** dispara un guardado en la nube en cada segundo — solo al iniciar, pausar, reanudar o detener — para no generar escrituras de más mientras corre.
+
+**Las tres secciones y los bloques fijos**
+
+5. Las secciones (Trabajo, Voluntariado, Personal) son fijas: no se pueden crear, renombrar ni eliminar desde la interfaz.
+6. El tiempo disponible de un día se calcula como 24 horas menos las horas de sueño menos las horas de comida de ese día. Sueño y comida tienen un valor por defecto configurable en Ajustes (7 h y 3 h de fábrica) que aplica a todos los días salvo que se registre una excepción puntual para una fecha concreta (pestaña Ajustes → "Excepciones de sueño y comida", o directamente desde el Panel cuando se está viendo un solo día).
+7. Sueño y comida de un mismo día no pueden sumar más de 24 horas; la app lo rechaza con un mensaje si se intenta guardar una combinación que se pase.
+
+**Proyectos**
+
+8. Un proyecto pertenece a exactamente una de las tres secciones, tiene un nombre (obligatorio, único sin distinguir mayúsculas/minúsculas), un color, un estado (Activo/Archivado) y, opcionalmente, una meta de horas semanales.
+9. **Archivar** un proyecto lo saca de la lista para iniciar nuevos cronómetros o registros manuales, pero conserva íntegro su historial de tiempo ya registrado; sigue viéndose en los filtros que incluyan archivados y en los reportes de periodos pasados.
+10. **Eliminar** un proyecto es distinto y más drástico: además del proyecto, borra también todos sus registros de tiempo guardados y descarta cualquier cronómetro suyo que esté corriendo. La app muestra una confirmación que dice cuántos registros y cronómetros se perderán, y recuerda explícitamente que "Archivar" es la opción que conserva el historial.
+
+**Registro manual de tiempo**
+
+11. Para crear un registro a mano hace falta: proyecto, fecha, hora de inicio, y el final indicado de una de dos formas — hora de fin, o duración directa en minutos (máximo 1440, es decir 24 horas).
+12. Si la hora de fin escrita es igual o anterior a la hora de inicio, la app entiende que la sesión terminó al día siguiente (no lo rechaza como error).
+13. Un registro guardado conserva su hora real de inicio y de fin tal como se introdujeron, aunque cruce la medianoche; el reparto entre los dos días calendario ocurre **solo** al calcular totales para el Panel o el Historial, nunca se reescribe el dato guardado.
+14. Un registro con duración calculada de 0 minutos no se guarda; la app pide revisar el horario.
+15. Cualquier registro (manual o el que resulta de detener un cronómetro) se puede editar después: cambiar proyecto, fecha, horario o nota. Al guardar el cambio queda marcado como "editado".
+16. Cualquier registro se puede eliminar, con una confirmación previa que muestra su duración y su proyecto.
+
+**Cronómetros en vivo**
+
+17. Se puede iniciar un cronómetro eligiendo un proyecto activo y, opcionalmente, una nota de qué se está haciendo.
+18. Se pueden tener **varios cronómetros corriendo a la vez, incluso dos o más del mismo proyecto**: ambos tiempos se suman al total "bruto" de ese proyecto, y si sus franjas se solapan en el reloj, esa franja solapada cuenta una sola vez para el indicador de sobrecarga (que siempre usa tiempo de reloj, nunca la suma bruta).
+19. Un cronómetro se puede pausar y reanudar cuantas veces haga falta; el tiempo en pausa no cuenta como tiempo trabajado.
+20. Al detener un cronómetro ("Detener y guardar"), se convierte automáticamente en un registro de tiempo con las pausas ya descontadas de su duración.
+21. "Descartar" un cronómetro (con confirmación) lo elimina sin crear ningún registro — se pierde ese tiempo a propósito.
+22. La cabecera de la app muestra en todo momento un indicador ("N cronómetro(s) en curso") con el tiempo acumulado, que se actualiza cada segundo mientras haya al menos uno corriendo.
+23. Un cronómetro que lleva corriendo más de un número configurable de horas (por defecto 6, ajustable en Ajustes) se marca como "Lleva mucho tiempo" en la lista de cronómetros.
+
+**Aviso de cronómetro olvidado**
+
+24. Al abrir la app (después de cargar los datos), si hay al menos un cronómetro corriendo por encima del umbral de horas configurado, aparece automáticamente una ventana emergente **centrada y bloqueante** (no un simple aviso en una esquina): mientras está abierta, el resto de la pantalla no se puede usar ni con clic ni con teclado.
+25. Esa ventana ofrece tres acciones: detener ya todos los cronómetros atrasados (los convierte en registros), ir a la pestaña de Cronómetros para corregirlos a mano, o dejarlos corriendo y cerrar el aviso sin hacer nada. Ninguna de las tres es obligatoria para poder cerrar la ventana (también se puede cerrar con Escape).
+
+**Panel principal y cálculo de sobrecarga**
+
+26. El Panel muestra un periodo elegido (Día, Semana, Mes o Personalizado) con navegación de "anterior/hoy/siguiente" para día/semana/mes.
+27. Un rango Personalizado se acota a fechas dentro del mismo año calendario; si se eligen fechas de años distintos, la app las ajusta automáticamente (recorta al 31 de diciembre del año de la fecha de inicio) y avisa por qué.
+28. El estado de carga del periodo es siempre uno de tres: verde (tiempo de reloj por debajo del 85% del disponible), amarillo (entre 85% y 100%), o rojo (por encima del 100%, es decir, sobrecarga real). Este cálculo usa siempre **tiempo de reloj** (franjas solapadas fusionadas, contadas una sola vez), nunca la suma bruta por proyecto.
+29. El Panel muestra explícitamente cuatro cifras distintas del periodo: tiempo de reloj, tiempo bruto (suma de todos los proyectos sin fusionar solapes), tiempo disponible, y tiempo "sin registrar" (disponible menos reloj).
+30. El aviso de sobrecarga, cuando aplica, señala cuál de las tres secciones es la que más está aportando al tiempo de reloj de ese periodo.
+31. El desglose por sección/proyecto del Panel se puede filtrar por sección y por proyecto — ese filtro cambia solo lo que se ve en el desglose, **no** cambia el indicador de sobrecarga, que siempre refleja el día/periodo completo.
+32. Si algún proyecto visible tiene una meta de horas semanales, el Panel muestra su comparación Plan vs. Real (la meta semanal se prorratea al tamaño del periodo mostrado: por ejemplo, una semana completa usa la meta tal cual, un solo día usa 1/7 de la meta).
+33. Cuando el periodo elegido abarca más de un día, el Panel agrega una tabla "Día por día" con el estado de cada día individual.
+34. Un cronómetro en curso cuenta como tiempo provisional en todos los cálculos del Panel (hasta el instante actual), para que la alerta de sobrecarga no espere a que se detenga el cronómetro.
+
+**Historial y filtros**
+
+35. El Historial de registros se puede filtrar por proyecto, por rango de fechas, y por texto libre (busca en la nota y en el nombre del proyecto).
+36. La lista de proyectos se puede filtrar por sección, por estado (activo/archivado) y por texto libre en el nombre.
+37. Si hay más de un cronómetro corriendo, la lista de cronómetros se puede filtrar por proyecto.
+38. El historial muestra como máximo los 300 registros más recientes que coincidan con los filtros; si hay más, la app lo indica y sugiere acotar el rango de fechas.
+
+**Zona horaria**
+
+39. Todos los cálculos de "día calendario" (para repartir totales, para las excepciones de sueño/comida, para el corte de semana/mes) se hacen según la zona horaria configurada en Ajustes, no según la del equipo donde se abre la app.
+
+## Flujo de trabajo
+
+```mermaid
+flowchart TD
+  A["Candado de login (auth-gate.js)"] -->|Sesión válida| B["Carga de datos: nube, o caché local si falla"]
+  B --> C{"¿Algún cronómetro corre hace más\nde N horas (staleTrackerAlertHours)?"}
+  C -->|Sí| D["Modal 'Cronómetro olvidado'\n(centrado, bloqueante, atrapa el foco)"]
+  D -->|Detener todos ahora| E["Esos cronómetros se convierten\nen registros de tiempo"]
+  D -->|Ir a corregir| F["Cambia a la pestaña Cronómetros"]
+  D -->|Dejarlo corriendo / Escape| G["Cierra el aviso sin cambios"]
+  C -->|No| H["Pestaña PANEL (vista inicial)"]
+  E --> H
+  F --> H2["Pestaña CRONÓMETROS"]
+  G --> H
+
+  H <--> H2
+  H <--> J["Pestaña REGISTROS"]
+  H <--> K["Pestaña PROYECTOS"]
+  H <--> L["Pestaña AJUSTES"]
+
+  H2 --> I1["Iniciar cronómetro\n(elige proyecto + nota opcional)"]
+  I1 --> I2["Cronómetro EN CURSO"]
+  I2 -->|Pausar| I2p["En pausa"]
+  I2p -->|Reanudar| I2
+  I2 -->|Detener y guardar| I3["Se crea un registro\n(pausas ya descontadas)"]
+  I2p -->|Detener y guardar| I3
+  I2 -->|Descartar + confirmar| I4["Se elimina sin generar registro"]
+  I3 --> J
+
+  J --> J1["Registrar tiempo a mano\n(proyecto, fecha, inicio, fin o duración, nota)"]
+  J --> J2["Editar un registro existente"]
+  J --> J3["Eliminar un registro + confirmar"]
+  J --> J4["Filtrar historial\n(proyecto / fechas / texto)"]
+
+  K --> K1["Crear proyecto\n(sección, color, meta opcional)"]
+  K --> K2["Editar proyecto"]
+  K --> K3["Archivar / Reactivar\n(conserva el historial)"]
+  K --> K4["Eliminar + confirmar\n(borra también sus registros y cronómetros)"]
+
+  L --> L1["Zona horaria, sueño/comida por\ndefecto, horas para la alerta"]
+  L --> L2["Excepciones puntuales de\nsueño/comida por fecha"]
+```
+
+Diagrama derivado de la lectura completa de `hourglass.html` (funciones `switchView`, `wireTrackers`, `trackerAction`, `wireRegistros`, `wireProyectos`, `wireAjustes`, `checkStaleTrackers`) — no se pudo recorrer con clics reales en esta sesión (ver limitación de herramienta explicada en `docs/hourglass/entrenamiento.md`), pero cada nodo y transición corresponde a una rama de código real, y las reglas de negocio (tiempo de reloj vs. bruto, cruce de medianoche, varios cronómetros del mismo proyecto, aviso bloqueante) coinciden con lo que `qa-lead` ya verificó con ejecución real el 2026-07-30 (`docs/hourglass/qa-checklist.md`).
+
+## Triaje de casos borde por el tech lead (2026-07-30, antes del primer commit)
+
+Estado de cada caso de la lista de abajo. Ninguno queda sin revisar.
+
+| # | Estado | Qué se hizo |
+|---|---|---|
+| 1 | **Implementado** | `MAX_ENTRY_DAYS = 31`: `normalize()` descarta los registros más largos que eso (con aviso en consola) y `segmentsOf()` tiene tope duro de `MAX_ENTRY_DAYS + 2` trozos. Re-medido: el caso de los 14,58 s resuelve ahora por debajo de 100 ms. |
+| 2 | **Implementado** | `settings.timezone` se recorta a 64 caracteres en `normalize()`, igual que `nombre`/`nota`. |
+| 3 | **Verificado** | `qa-lead` lo confirmó con dos cronómetros reales corriendo: reloj fusiona (60 min), bruto suma (~91 min). Es el comportamiento que pidió la usuaria (decisión 3). |
+| 4 | **Implementado** | Cubierto por el tope de `segmentsOf()`, que es justamente donde había que ponerlo: los cronómetros en curso **no** pasan por `normalize()` (se convierten en registro virtual con `fin` = ahora), así que un filtro solo en `normalize()` no los habría protegido. |
+| 5 | **Implementado** | `lockBehindModal()`/`unlockBehindModal()` marcan `inert` los hermanos del `<body>` mientras el aviso está abierto y los liberan al cerrar, igual que hace `auth-gate.js`. |
+| 6 | **Implementado** | El `outline:none` se sustituyó por `[role="tabpanel"]:focus-visible` con `outline` visible. Se mantiene el `tabindex="0"` porque es lo que permite llegar al contenido del panel con el teclado tras cambiar de pestaña. |
+| 7 | **Resuelto (era imprecisión de mi encargo, no de la app)** | Las reglas de reduced-motion de la escena viven en el bloque general compartido, como corresponde por orden de cascada. Verificado en vivo por el tech lead midiendo `getComputedStyle`: gato en `opacity:0.92` sin animación, arena en `scale(0.45)`, los 6 relojes de arena y el reloj presentes. |
+| 8 | **Resuelto** | El archivo ya está commiteado; el `<meta name="viewport">` entra en el primer commit. |
+| 9 | **Verificado por el tech lead** | Recorrido con teclado ejecutado en vivo sobre las 5 vistas: los 60 controles habilitados son alcanzables y reciben el foco, ningún campo se queda sin nombre accesible, ningún botón sin texto, y la navegación de pestañas responde a flechas / Home / End con eventos reales. **De paso apareció un defecto que ningún agente había visto:** los campos "hora de fin" y "duración" no tenían etiqueta propia (la etiqueta que había nombra al radio, no al campo). Corregido con etiquetas ocultas. |
+| 10 | **Implementado** | Es el mismo caso 1. |
+| 11 | **Pendiente, comunicado a la usuaria** | El doble clic no duplica hoy y la protección implícita es real, pero no explícita. No se agregó un guardia porque hoy sería código especulativo: el guardado es síncrono. **Revisar el día que el guardado espere confirmación de la nube antes de re-renderizar.** |
+| 12 | **Parcial: (a) pendiente comunicado, (b) descartado** | (a) No hay vista previa real de la rama antes de fusionar (Cloudflare Workers no tiene mecanismo de preview por PR configurado en este repo) — **pendiente de decisión con la usuaria**, comunicado. (b) La app no distingue "sin red" de "Supabase pausado" en su pantalla de login, pero es comportamiento preexistente y compartido por las 6 apps, no algo que Hourglass introduzca — descartado como no bloqueante para este release. |
+| 13 | **Verificado, sin cambio** | La división por cero implícita ya estaba cubierta. |
+| 14 | **Implementado** | Detener un cronómetro cuyo tiempo entero quedó dentro de sus pausas ya no dice "guardado como registro" cuando no se guardó nada: `stopTracker()` devuelve el registro creado o `null`, y quien llama muestra un aviso de error explícito ("NO se guardó ningún registro: todo su tiempo estaba en pausa"). El mensaje de éxito además dice ahora cuánto se guardó. Corregido también en el pop-up de cronómetro olvidado, que detiene varios a la vez y ahora cuenta cuántos se guardaron y cuántos no. |
+| 15 | **Descartado, con razón anotada** | `fromZoned()` es una aproximación de un paso que puede errar en la hora exacta de un cambio de horario. No aplica a la zona configurada (Santo Domingo no observa horario de verano) y, en otra zona, la ventana de fallo es de una hora al año sobre un cálculo que no maneja dinero ni decisiones irreversibles. Ya está anotado como aproximación en el propio comentario del código. Reabrirlo solo si la usuaria pasa a una zona con DST y le importa esa hora. |
+| 16 | **Descartado, es el comportamiento correcto** | Archivar un proyecto no detiene sus cronómetros en curso, a propósito: archivar significa "no lo ofrezcas para trabajo nuevo", no "descarta el trabajo que estoy haciendo ahora mismo". El cronómetro sigue visible en su pestaña y se puede detener y guardar con normalidad. Documentado aquí como decisión explícita, que era lo que faltaba. |
+
+## Casos borde
+
+1. **(security-reviewer, 2026-07-30) Entry con `inicio`/`fin` absurdamente separados puede colgar el navegador en cada render.** `segmentsOf()` (`hourglass.html:580-592`) parte una entry en segmentos de un día sin ningún tope de iteraciones, a diferencia de `dayKeysInRange()` (línea 633-641), que sí tiene un `out.length < 400` explícito para el rango de fechas visible. `normalize()` valida que `e.inicio`/`e.fin` sean fechas parseables (`isIso()`) pero no acota su diferencia — una entry con, por ejemplo, `inicio:"2026-01-01"` y `fin:"9999-01-01"` pasa la validación intacta y genera ~2.9 millones de objetos de segmento cada vez que `summarize()` (invocada en cada render del panel, línea 920) recorre `allEntries()`. Vector real de entrada: el archivo del puente de carpeta local editado a mano o corrompido por una sincronización externa, o una fila de `app_data` corrupta. No explotable por un tercero (proyecto de un solo usuario, RLS ya limita a la propia cuenta), pero si algún día se agrega una función de "importar backup" (como la que ya existe en `bitacora-mentor.html`), el vector se amplía igual que allá. **Pendiente, comunicado al tech lead** — ver detalle completo en `docs/security-notes.md` ("Revisión 2026-07-30 — app nueva `hourglass.html`"). Recomendación: acotar la duración máxima de una entry en `normalize()` (ej. descartar/truncar más de ~30 días) y/o agregar un tope de iteraciones explícito a `segmentsOf()`.
+
+2. **(security-reviewer, 2026-07-30) `state.settings.timezone` sin límite de longitud.** A diferencia de `nombre`/`nota` (que sí usan `.slice()` en `normalize()`, `hourglass.html:487, 508, 525`), `settings.timezone` (línea 477) acepta cualquier string sin recorte. No es una vía de XSS (se escapa igual al pintarse en el `<select>` de Ajustes, línea 1660), solo un hueco menor de consistencia frente al resto de `normalize()`. **Descartado como no bloqueante** por severidad mínima (memoria/render, no seguridad), pero anotado para si se decide endurecer `normalize()` en general.
+
+3. **(security-reviewer, 2026-07-30) Dos trackers del mismo proyecto en paralelo — ya decidido con la usuaria, verificar que el cálculo de tiempo de reloj no doble-cuente incorrectamente.** La decisión cerrada (`docs/hourglass/prd-resumen.md`, punto 3) permite esto y dice que "ambos suman al tiempo de ese proyecto" — el cálculo de `brutoMin` (suma bruta, `hourglass.html:661-666`) efectivamente suma ambos, y `relojMin` (tiempo de reloj real, vía `mergedMinutes()`, línea 594-604) los fusiona correctamente si se solapan, gracias al ordenamiento por `from` y fusión de intervalos contiguos/solapados. **No verificado por ejecución en esta revisión** (sin navegador) — es lectura de código, no una prueba con dos cronómetros reales corriendo a la vez. Recomendado que `qa-lead` lo confirme con datos inyectados reales antes de dar la funcionalidad por cerrada.
+
+4. **(security-reviewer, 2026-07-30) Tracker con `startedAt` muy en el pasado (reloj del sistema cambiado, o dato corrupto) — mismo patrón que el hallazgo 1 pero para cronómetros activos.** `trackerAsEntry()` (`hourglass.html:608-617`) no valida que `startedAt` sea razonable; un tracker "activo" con fecha de inicio de hace años generaría el mismo problema de `segmentsOf()` sin tope (hallazgo 1) al calcularse como entry en vivo en cada render. Mismo fix cubre ambos casos si se aplica en `segmentsOf()`/`entryIntervals()` en vez de solo en `normalize()` para entries ya cerradas.
+
+5. **(accessibility-reviewer, 2026-07-30) El diálogo de "cronómetro olvidado" (`checkStaleTrackers`, `hourglass.html:1854-1909`) no marca `inert`/`aria-hidden` en el resto de la página mientras está abierto.** La trampa de foco vía teclado (Tab/Shift+Tab en los bordes, Escape) está bien implementada, pero `header`/`nav`/`main` siguen expuestos al árbol de accesibilidad — un lector de pantalla en modo de cursor virtual (el modo por defecto de NVDA/JAWS para leer, no solo para tabular) puede seguir "entrando" al contenido de fondo (pestañas, tabla de registros) mientras el diálogo sigue técnicamente abierto. Inconsistente con el propio candado de `auth-gate.js`, que sí aplica `inert` a los hermanos de su overlay. No bloqueante (los usuarios de solo-teclado sí quedan atrapados correctamente), pero es una brecha real. Detalle completo en `docs/hourglass/accessibility-notes.md` §5. *Pendiente de decisión: agregar `header.inert = nav.inert = main.inert = true` al abrir el modal (y revertirlo al cerrar), o aceptar la brecha para lectores de pantalla por ahora.*
+
+6. **(accessibility-reviewer, 2026-07-30) El `tabpanel` (`hourglass.html:327-331`, `tabindex="0"`) pierde el indicador visual de foco** por la regla `[role="tabpanel"]:focus{outline:none;}` (línea 222), sin sustituto. Es una parada real del recorrido de Tab (entre la pestaña activa y el primer control del panel) sin ningún indicador visible — incumple WCAG 2.4.7 puntualmente ahí, aunque el contenido interactivo real dentro del panel sí tiene su propio `:focus-visible`. Detalle en `docs/hourglass/accessibility-notes.md`. *Pendiente de decisión: dar un `outline` sutil visible a esa regla, o revisar si el `tabindex="0"` del panel es necesario.*
+
+7. **(accessibility-reviewer, 2026-07-30) La descripción del encargo decía que la escena de login `hourglass-time` "tiene su propio bloque `@media (prefers-reduced-motion: reduce)`"; en realidad sus reglas están dentro del bloque general ya compartido con `coins-rain`/`gantt-build` (`auth-gate.js:1197-1218`).** El resultado funcional es correcto (nada queda invisible, los valores fijados corresponden a estados intermedios reales de cada `@keyframes`, no a sus extremos en 0), pero la descripción de "bloque propio" es imprecisa — se señala porque el protocolo de este equipo pide reportar discrepancias como tales, no porque sea un defecto de la app. Ver `docs/hourglass/accessibility-notes.md` §1.
+
+8. **(accessibility-reviewer, 2026-07-30) `hourglass.html` es un archivo nuevo todavía sin commitear** (confirmado con `git status`: aparece como *untracked*) — no existe todavía un historial de Git real para verificar literalmente "el meta viewport está desde el primer commit", aunque el contenido actual (que sí lo trae, línea 184) se convertirá en el primer commit en cuanto se guarde. No es un defecto, solo una precisión de proceso para quien redacte la nota de versión.
+
+9. **(accessibility-reviewer, 2026-07-30) No se pudo verificar con teclado real en esta sesión ningún flujo interactivo de la app** (clics, teclas y capturas de pantalla no tuvieron ningún efecto confirmable en el navegador de esta sesión concreta, incluido un clic sobre un `<a href>` sin JS de por medio — prueba de control, no de la app). Limitación de herramienta de esta sesión, no de la app. Toda la verificación de teclado/foco/ARIA de esta revisión se basó en lectura completa del código fuente, contrastada con patrones ya confirmados en vivo en otras apps del hub. *Pendiente: repetir el recorrido de Tab real (especialmente en la tabla de Registros/Proyectos y sus filtros) y la emulación de `prefers-reduced-motion` en una sesión donde el panel del navegador sí componga frames.* Ver aviso de cobertura completo en `docs/hourglass/accessibility-notes.md`.
+
+   **Nota de qa-lead (2026-07-30), misma fecha, sesión distinta:** en mi propia sesión el navegador SÍ compuso y respondió a interacción real — `.click()` sobre botones reales, `dispatchEvent('input'/'change'/keydown Escape/ArrowRight)` sobre campos y pestañas tuvieron efecto confirmado en el DOM (ver `docs/hourglass/qa-checklist.md`). No pude usar `computer{action:"screenshot"}` (mismo error de "pane no compuesto" que accessibility-reviewer), pero sí pude verificar interacción real por otra vía. Dato reutilizable para el equipo: la disponibilidad de interacción real en esta herramienta parece variar por sesión/momento, no ser un límite fijo del entorno — no asumir que "no funcionó en una sesión" significa "no va a funcionar en la siguiente"; conviene probar con un caso de control simple (como hizo accessibility-reviewer) antes de descartar la herramienta por completo.
+
+10. **(qa-lead, 2026-07-30) Hallazgo 1 de security-reviewer CONFIRMADO con ejecución real, y la severidad medida es mayor que "puede colgar el navegador" — es un cuelgue medido de 14.58 segundos reales.** Reproduje el caso exacto que security-reviewer describió (`inicio:"2026-01-01"`, `fin:"9999-01-01"`) invocando `segmentsOf()` directamente en el navegador con datos inyectados: **2.912.079 segmentos**, **14584.80 ms** de bloqueo del hilo principal (medido con `performance.now()`, no estimado). Como `renderPanel()` — la vista por defecto al abrir la app — llama `summarize()` sobre **todas** las entries de `allEntries()` en cada render, una sola entry así de corrupta congela la interfaz completa (sin ningún mensaje de error ni indicador de carga) cada vez que se carga la app o se vuelve a la pestaña Panel. No es un cuelgue permanente: la pestaña Registros no invoca `summarize()` (usa el campo `duracionMin` ya calculado), así que hay una vía de escape real (esperar el freeze una vez, ir a Registros, borrar la entry ofensiva), pero la primera vez que pasa es indistinguible de que la app se rompió. Vector de entrada real para esta usuaria en particular, no solo un ataque hipotético de terceros: el puente de carpeta local (`aiapps-folder-bridge`) guarda los datos como un archivo `.json` editable a mano en su propio disco — un error de tecleo al editarlo directamente (el propósito explícito de esa función), o un valor de año escrito a mano en el selector de fecha nativo del formulario de registro manual, puede producir una fecha con esta forma. **Pendiente, no bloqueante para este release según la misma lógica de security-reviewer** (requiere manipular datos fuera del flujo normal de la UI), pero recomendado cerrarlo pronto: es una corrección barata (acotar la duración máxima de una entry en `normalize()`, por ejemplo descartando/truncando entries de más de ~30-90 días, y/o un tope explícito de iteraciones en `segmentsOf()` igual al que ya tiene `dayKeysInRange()`) frente a un costo de soporte alto (la usuaria sin ayuda inmediata viendo la app "congelada" sin ninguna pista de por qué).
+
+11. **(qa-lead, 2026-07-30) El doble/triple clic rápido en "Agregar registro" e "Iniciar cronómetro" no crea duplicados hoy, pero no por un guardia explícito.** Confirmado con 3 `.click()` sintéticos consecutivos sin espera entre ellos en ambos formularios: se crea 1 solo registro y 1 solo cronómetro, no 3. La razón real (leída en el código y confirmada por el resultado) es que `render()` reconstruye el formulario completo tras el primer guardado exitoso y lo deja vacío (`proyecto=""`), así que el segundo y tercer clic fallan la validación "Elige un proyecto" y no llegan a crear nada. Es un efecto colateral del patrón de re-render, no una protección explícita (no hay `btn.disabled=true` durante el guardado, a diferencia de otros formularios de este mismo hub que sí deshabilitan el botón mientras esperan una operación async). Funciona por ahora porque el guardado es síncrono; si en el futuro `save()`/el guardado pasa a esperar confirmación de la nube antes de re-renderizar, este mecanismo implícito desaparecería y el doble clic sí podría duplicar. No bloqueante hoy — se anota para que quien lo toque después no asuma que hay una protección explícita donde no la hay.
+
+12. **(release-manager, 2026-07-30, verificación previa al merge de `claude/hourglass-app`) Dos casos borde de despliegue/infraestructura, no de la app.** (a) *Sin deploy preview real de esta rama*: producción vive en Cloudflare Workers, que se publica automáticamente al fusionar a `master`, pero este repo no tiene configurado ningún mecanismo de preview por PR para Workers (a diferencia de lo que sí ofrecía Netlify) — no existe ningún entorno donde probar `hourglass.html` ya integrado y servido por HTTP antes de fusionar; la única red de seguridad hoy es la revisión de código + `build.sh` en local, y confirmar en vivo justo después de fusionar. **Pendiente, comunicado a la usuaria**: valdría la pena decidir si se configura un preview real para Workers, o aceptar este hueco a cambio de la simplicidad actual. (b) *Sexto usuario del keepalive de Supabase, sin cambio de riesgo*: Hourglass escribe en la misma tabla `app_data` que las otras 5 apps; no cambia el mecanismo de auto-pausa (por proyecto completo, no por app) ni agrega esquema/política nueva. Si Supabase llegara a pausarse (falla del keepalive, cambio de plan, etc.), la app hoy no distingue en su UI de login "sin conexión" de "proyecto pausado" — mismo comportamiento que las otras 5 apps, no una regresión de Hourglass. **Descartado como no bloqueante para este release** (comportamiento preexistente y compartido, no introducido por esta rama), anotado para si algún día se decide mejorar el mensaje de error de login del hub completo. Detalle en `docs/release-log.md` ("2026-07-30 — Verificación previa a fusionar `claude/hourglass-app`") y `docs/infra-watch.md`.
+
+13. **(qa-lead, 2026-07-30) Rango con 0 minutos disponibles (sueño + comida = 24h) no genera una falsa alarma de sobrecarga si no hay tiempo registrado.** Confirmado con ejecución real: `sleepHoursDefault=20` + `mealHoursDefault=4` (suma 24, `availMin=0`) sin ninguna entry da estado `verde` (no `rojo`); con una sola entry de 60 minutos ese mismo día, el estado pasa a `rojo` de inmediato. Comportamiento correcto, documentado aquí porque es la división por cero implícita (`relojMin/availMin` con `availMin=0`) que más fácilmente se rompe en este tipo de cálculo, y no se rompió.
+
+14. **(business-analyst, 2026-07-30) "Detener y guardar" un cronómetro puede no guardar nada, y el mensaje dice lo contrario.** `stopTracker()` (`hourglass.html:1314-1329`) solo empuja el registro nuevo a `state.entries` `if(entry.duracionMin > 0)` — si toda la duración del cronómetro quedó dentro de sus propias pausas (por ejemplo: iniciar, pausar casi de inmediato, y dejarlo así varios minutos antes de "Detener"), el tiempo activo redondea a 0 minutos y **no se crea ningún registro**. El botón que el usuario pulsó se llama "⏹ Detener y guardar" (no "Descartar", que sí existe como acción separada con su propio `confirm()`), y el manejador de clic (`trackerAction`, `hourglass.html:1292-1312`) siempre muestra "Cronómetro detenido y guardado como registro." y anuncia por lector de pantalla "Cronómetro detenido y guardado" **sin comprobar si `stopTracker` realmente guardó algo**. Contraste directo dentro del mismo archivo: el registro manual sí tiene esta misma situación cubierta — `saveManualEntry()` (`hourglass.html:1520-1522` y `1534`) revisa `entry.duracionMin <= 0` y responde con un error explícito en vez de guardar en silencio. Es decir, el mismo caso (0 minutos activos) está bien resuelto en un formulario y mal resuelto en el otro. Reproducible leyendo el código, no ejecutado en vivo esta sesión por la limitación de herramienta explicada en `docs/hourglass/entrenamiento.md`. **Pendiente de decisión con la usuaria**: al menos avisar cuando "Detener y guardar" no generó ningún registro (mismo texto de error que ya usa el formulario manual), para que no crea que su tiempo quedó guardado cuando en realidad se perdió.
+
+15. **(business-analyst, 2026-07-30) La conversión de hora local a UTC (`fromZoned()`, `hourglass.html:453-456`) es una aproximación de un solo paso y puede fallar exactamente en la hora de un cambio de horario (DST).** El propio comentario del código ya reconoce esto ("es lo correcto salvo en la hora exacta de un cambio de horario"). `America/Santo_Domingo` (la zona por defecto) no usa horario de verano, así que en la práctica esto no afecta a la usuaria mientras no cambie la zona horaria en Ajustes — pero el selector de Ajustes sí ofrece zonas que sí cambian de horario (`America/New_York`, `America/Chicago`, `Europe/Madrid`), y un registro manual con fecha/hora escrita a mano que caiga justo en esa hora ambigua o inexistente del cambio de horario podría guardarse con una hora real desplazada en una hora respecto a lo que la usuaria escribió. No verificado en vivo (requeriría fijar la fecha del sistema al día exacto de un cambio de horario). **Pendiente, de bajo riesgo con la configuración actual** — solo relevante si algún día se cambia la zona horaria por defecto a una que sí observe DST.
+
+16. **(business-analyst, 2026-07-30) Archivar un proyecto no detiene ni avisa sobre sus cronómetros en curso.** El botón "Archivar" (`wireProyectos`, `hourglass.html:1656-1664`) solo cambia `p.estado`; no toca `state.activeTrackers`. Un cronómetro que ya estaba corriendo sobre ese proyecto sigue corriendo con total normalidad después de archivarlo (se sigue viendo en la pestaña Cronómetros, se puede pausar/reanudar/detener igual que antes), aunque el proyecto ya no aparezca como opción para *iniciar* un cronómetro nuevo. Es probablemente el comportamiento correcto (archivar es "no lo uses para cosas nuevas", no "congela lo que ya estaba pasando"), pero no está documentado como decisión explícita en ningún lado, a diferencia del caso de "Eliminar" que sí describe qué pasa con los cronómetros activos en su propio texto de confirmación. **Descartado como no bloqueante** (parece la interpretación razonable de "archivar"), anotado solo para que quede como decisión de producto explícita y no como un olvido.
