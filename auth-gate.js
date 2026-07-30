@@ -482,6 +482,112 @@
           16%, 50%{ opacity:0.85; transform:translateY(0px); }
           58%, 100%{ opacity:0; }
         }
+        /* ── Escena 'hourglass-time' (Hourglass) ──
+           Relojes de arena que se vacían y se dan vuelta, un reloj de
+           manecillas, y el Gato de Cheshire que aparece y se desvanece.
+           Se dibuja a la izquierda, con el mismo cálculo de ancho que la
+           escena del Gantt para no montarse sobre la tarjeta de login. */
+        .hg-scene{
+          position:absolute; left:5%; top:10%; height:80%;
+          width:min(62%, 1100px, max(0px, calc(86vw - 416px)));
+          pointer-events:none;
+        }
+        /* Debajo de este ancho la tarjeta de login ocupa casi toda la pantalla.
+           El contenedor se encoge a 0, pero sus piezas miden en rem y px (no en
+           % del contenedor), así que seguirían dibujándose encima del
+           formulario: por eso la escena se oculta entera, igual que hace la del
+           Mentor. */
+        @media (max-width: 900px){
+          .hg-scene{ display:none; }
+        }
+        .hg-piece{ position:absolute; }
+        .hg-glass-turn{
+          display:block; width:100%; height:100%;
+          transform-origin:center center;
+          animation:hg-turn var(--cycle,9s) ease-in-out infinite;
+          animation-delay:var(--delay,0s);
+        }
+        .hg-glass-turn svg{ width:100%; height:100%; display:block; overflow:visible; }
+        .hg-frame{
+          fill:none; stroke:rgba(180,240,238,0.55); stroke-width:1.6;
+          stroke-linecap:round; stroke-linejoin:round;
+        }
+        /* Las dos masas de arena se escalan hacia su vértice (el cuello del
+           reloj), no en un solo eje: así la de arriba se va consumiendo desde
+           el borde superior hacia el cuello y la de abajo crece desde el
+           cuello hacia el fondo, conservando la forma de triángulo. */
+        .hg-sand-top, .hg-sand-bot{ fill:var(--sand,#7FE3DC); transform-box:fill-box; }
+        .hg-sand-top{
+          transform-origin:center bottom;
+          animation:hg-sand-top var(--cycle,9s) linear infinite;
+          animation-delay:var(--delay,0s);
+        }
+        .hg-sand-bot{
+          transform-origin:center top;
+          animation:hg-sand-bot var(--cycle,9s) linear infinite;
+          animation-delay:var(--delay,0s);
+        }
+        .hg-stream{
+          fill:var(--sand,#7FE3DC); opacity:0;
+          animation:hg-stream var(--cycle,9s) linear infinite;
+          animation-delay:var(--delay,0s);
+        }
+        @keyframes hg-turn{
+          0%, 80%{ transform:rotate(0deg); }
+          96%, 100%{ transform:rotate(360deg); }
+        }
+        /* El salto de vuelta (87% → 88%) cae en mitad del giro de 360°, así
+           que el "recargado" del reloj no se ve como un parpadeo. */
+        @keyframes hg-sand-top{
+          0%{ transform:scale(1); }
+          80%, 87%{ transform:scale(0); }
+          88%, 100%{ transform:scale(1); }
+        }
+        @keyframes hg-sand-bot{
+          0%{ transform:scale(0); }
+          80%, 87%{ transform:scale(1); }
+          88%, 100%{ transform:scale(0); }
+        }
+        @keyframes hg-stream{
+          0%, 2%{ opacity:0; }
+          6%, 76%{ opacity:0.9; }
+          80%, 100%{ opacity:0; }
+        }
+        .hg-clock svg{ width:100%; height:100%; display:block; }
+        .hg-clock .hg-face{ fill:rgba(12,26,30,0.55); stroke:rgba(180,240,238,0.5); stroke-width:1.6; }
+        .hg-clock .hg-tick{ stroke:rgba(180,240,238,0.45); stroke-width:1.4; stroke-linecap:round; }
+        /* Las manecillas giran alrededor del centro del reloj (50,50 del
+           viewBox), no del centro de su propia caja: por eso NO se les pone
+           transform-box:fill-box — con el valor por defecto (view-box) el
+           origen en px se lee en el sistema de coordenadas del SVG.
+           OJO: este archivo entero es un template literal de JavaScript, así
+           que dentro de estos comentarios no puede haber acentos graves. */
+        .hg-clock .hg-hand{
+          stroke:#9FEDE6; stroke-linecap:round; fill:none;
+          transform-origin:50px 50px;
+        }
+        .hg-clock .hg-hand-min{ stroke-width:2.2; animation:hg-spin 8s linear infinite; }
+        .hg-clock .hg-hand-hour{ stroke-width:3.6; animation:hg-spin 96s linear infinite; }
+        @keyframes hg-spin{
+          0%{ transform:rotate(0deg); }
+          100%{ transform:rotate(360deg); }
+        }
+        .hg-cat{
+          position:absolute;
+          display:block;
+          opacity:0;
+          /* La ilustración es un cuadro con fondo casi negro: el degradado de
+             máscara difumina el borde para que no se lea como una foto pegada
+             encima del fondo. */
+          -webkit-mask-image:radial-gradient(circle at 50% 50%, #000 50%, transparent 74%);
+          mask-image:radial-gradient(circle at 50% 50%, #000 50%, transparent 74%);
+          animation:hg-cat-fade 17s ease-in-out infinite;
+        }
+        @keyframes hg-cat-fade{
+          0%, 6%{ opacity:0; }
+          20%, 58%{ opacity:0.92; }
+          78%, 100%{ opacity:0; }
+        }
         .travel-skyline{
           position:absolute; left:0; right:0; bottom:0; height:46%;
           filter:blur(1.2px); opacity:0.66; pointer-events:none;
@@ -1100,6 +1206,15 @@
           .gantt-dot{ opacity:1; left:var(--w,70%); }
           .gantt-flag{ opacity:1; transform:scale(1) rotate(-4deg); }
           .gantt-date{ opacity:0.85; transform:translateY(0); }
+          /* hourglass-time: relojes de arena a media caída (arena arriba y
+             abajo, con el chorro visible), manecillas quietas y el gato
+             presente. Sin estas líneas la escena quedaría vacía: el gato y el
+             chorro arrancan en opacity:0 y la arena de abajo en scaleY(0). */
+          .hg-sand-top{ transform:scale(0.45); }
+          .hg-sand-bot{ transform:scale(0.55); }
+          .hg-stream{ opacity:0.9; }
+          .hg-glass-turn{ transform:none; }
+          .hg-cat{ opacity:0.92; }
         }
       </style>
       <div class="cover ${window.AIAPPS_LOGIN_LAYOUT === 'right' ? 'align-right' : ''}">
@@ -1312,6 +1427,53 @@
               </div>`;
           }).join('');
           return `<div class="gantt-scene">${rows}</div>`;
+        })() : ''}
+        ${window.AIAPPS_LOGIN_SCENE === 'hourglass-time' ? (() => {
+          // Relojes de arena repartidos por la escena, cada uno con su propio
+          // tamaño, ritmo y desfase para que no caigan todos a la vez.
+          const glasses = [
+            { top: 4,  left: 2,  size: 4.6, cycle: 9.5, delay: 0 },
+            { top: 30, left: 16, size: 6.8, cycle: 12,  delay: 2.2 },
+            { top: 6,  left: 38, size: 3.6, cycle: 8,   delay: 4.1 },
+            { top: 58, left: 4,  size: 3.2, cycle: 10.5, delay: 1.3 },
+            { top: 68, left: 46, size: 5.4, cycle: 11,  delay: 3.4 },
+            { top: 40, left: 62, size: 3.4, cycle: 9,   delay: 5.6 }
+          ];
+          const sandTones = ['#7FE3DC', '#5FD3D9', '#A8F0E6'];
+          const glassSvg = `<svg viewBox="0 0 32 34" aria-hidden="true">
+              <path class="hg-sand-top" d="M9 6.4 H23 L16 16.3 Z"/>
+              <path class="hg-sand-bot" d="M9 28.4 H23 L16 18.2 Z"/>
+              <rect class="hg-stream" x="15.45" y="16.3" width="1.1" height="12.1"/>
+              <path class="hg-frame" d="M5.5 3.2 H26.5 M5.5 31.2 H26.5 M8 4 L16 17.2 L8 30.4 M24 4 L16 17.2 L24 30.4"/>
+            </svg>`;
+          const glassHtml = glasses.map((g, i) => `
+            <span class="hg-piece" style="top:${g.top}%; left:${g.left}%; width:${g.size}rem; height:${(g.size * 1.06).toFixed(2)}rem; --cycle:${g.cycle}s; --delay:${g.delay}s; --sand:${sandTones[i % sandTones.length]};">
+              <span class="hg-glass-turn">${glassSvg}</span>
+            </span>`).join('');
+          const ticks = Array.from({ length: 12 }).map((_, i) => {
+            const a = (Math.PI * 2 * i) / 12;
+            const x1 = (50 + Math.sin(a) * 37).toFixed(1);
+            const y1 = (50 - Math.cos(a) * 37).toFixed(1);
+            const x2 = (50 + Math.sin(a) * 42).toFixed(1);
+            const y2 = (50 - Math.cos(a) * 42).toFixed(1);
+            return `<line class="hg-tick" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"/>`;
+          }).join('');
+          return `
+          <div class="hg-scene" aria-hidden="true">
+            ${glassHtml}
+            <span class="hg-piece hg-clock" style="top:2%; left:60%; width:7.4rem; height:7.4rem;">
+              <svg viewBox="0 0 100 100">
+                <circle class="hg-face" cx="50" cy="50" r="44"/>
+                ${ticks}
+                <line class="hg-hand hg-hand-hour" x1="50" y1="50" x2="50" y2="29"/>
+                <line class="hg-hand hg-hand-min" x1="50" y1="50" x2="50" y2="17"/>
+                <circle cx="50" cy="50" r="2.6" fill="#9FEDE6"/>
+              </svg>
+            </span>
+            <img class="hg-cat" src="./assets/cheshire.png" alt=""
+                 style="bottom:0; left:14%; width:clamp(150px, 26vw, 320px);"
+                 onerror="this.style.display='none'">
+          </div>`;
         })() : ''}
         ${window.AIAPPS_LOGIN_SCENE === 'travel-sky' ? (() => {
           const n = (v) => Number(v).toFixed(1);

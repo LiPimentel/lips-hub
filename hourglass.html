@@ -1,0 +1,2003 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<script>
+/* ===== AI APPs · Folder Bridge (guardado en carpeta local) ===== */
+(function(){
+  const APP_ID = "hourglass";
+  const SYNC_PREFIX = "hourglass_v1";
+  // La caché real se guarda como "hourglass_v1::<userId>" (aislada por usuario),
+  // así que este puente reconoce cualquier clave con ese prefijo, no solo la exacta.
+  function isSyncKey(k){ return k === SYNC_PREFIX || k.indexOf(SYNC_PREFIX + '::') === 0; }
+  const DB_NAME = "aiapps-folder-bridge";
+  const STORE = "handles";
+
+  function idbOpen(){
+    return new Promise((res, rej)=>{
+      const req = indexedDB.open(DB_NAME, 1);
+      req.onupgradeneeded = () => req.result.createObjectStore(STORE);
+      req.onsuccess = () => res(req.result);
+      req.onerror = () => rej(req.error);
+    });
+  }
+  async function idbGet(key){
+    const db = await idbOpen();
+    return new Promise((res, rej)=>{
+      const rq = db.transaction(STORE, "readonly").objectStore(STORE).get(key);
+      rq.onsuccess = () => res(rq.result);
+      rq.onerror = () => rej(rq.error);
+    });
+  }
+  async function idbSet(key, val){
+    const db = await idbOpen();
+    return new Promise((res, rej)=>{
+      const tx = db.transaction(STORE, "readwrite");
+      tx.objectStore(STORE).put(val, key);
+      tx.oncomplete = () => res();
+      tx.onerror = () => rej(tx.error);
+    });
+  }
+
+  const supported = 'showDirectoryPicker' in window;
+  let dirHandle = null;
+  let writeTimer = null;
+  let badgeEl = null;
+  const FILE_NAME = APP_ID + ".data.json";
+
+  async function readFolderFile(){
+    if(!dirHandle) return null;
+    try{
+      const fh = await dirHandle.getFileHandle(FILE_NAME, {create:false});
+      const file = await fh.getFile();
+      const text = await file.text();
+      return text ? JSON.parse(text) : null;
+    }catch(e){ return null; }
+  }
+
+  async function writeFolderFile(data){
+    if(!dirHandle) return;
+    try{
+      const fh = await dirHandle.getFileHandle(FILE_NAME, {create:true});
+      const writable = await fh.createWritable();
+      await writable.write(JSON.stringify(data, null, 2));
+      await writable.close();
+    }catch(e){ console.warn("[AI APPs] No se pudo escribir en la carpeta:", e); }
+  }
+
+  function collectLocalSnapshot(){
+    const out = {};
+    Object.keys(localStorage).forEach(k => { if(isSyncKey(k)){ const v = localStorage.getItem(k); if(v !== null) out[k] = v; } });
+    return out;
+  }
+
+  function applySnapshot(snap){
+    if(!snap) return;
+    Object.keys(snap).forEach(k => { if(isSyncKey(k)) localStorage.setItem.__original.call(localStorage, k, snap[k]); });
+  }
+
+  function queueWrite(){
+    clearTimeout(writeTimer);
+    writeTimer = setTimeout(()=>{ writeFolderFile(collectLocalSnapshot()); }, 700);
+  }
+
+  // Interceptar localStorage.setItem para reflejar cada cambio en el archivo de la carpeta
+  const origSetItem = localStorage.setItem.bind(localStorage);
+  function patchedSetItem(key, value){
+    origSetItem(key, value);
+    if(isSyncKey(key)) queueWrite();
+  }
+  patchedSetItem.__original = origSetItem;
+  localStorage.setItem = patchedSetItem;
+
+  function makeBadge(){
+    const el = document.createElement('div');
+    el.id = 'aiapps-folder-badge';
+    el.style.cssText = 'position:fixed;bottom:calc(14px + min(var(--aiapps-chrome-bottom, 0px), 40vh));right:14px;z-index:999999;font-family:system-ui,-apple-system,sans-serif;font-size:12.5px;line-height:1;display:inline-flex;align-items:center;gap:7px;background:#1B2430;color:#F1EDE4;padding:9px 14px;border-radius:999px;box-shadow:0 6px 20px rgba(0,0,0,0.35);border:1px solid rgba(255,255,255,0.12);user-select:none;';
+    document.body.appendChild(el);
+    return el;
+  }
+
+  function setBadge(state){
+    if(!badgeEl) return;
+    if(state === 'connected'){
+      badgeEl.textContent = '📁 Guardando en carpeta local';
+      badgeEl.style.opacity = '0.72';
+      badgeEl.style.cursor = 'default';
+      badgeEl.title = 'Los datos se están guardando en ' + FILE_NAME + ' dentro de tu carpeta AI APPs';
+      badgeEl.onclick = null;
+    } else if(state === 'reconnect'){
+      badgeEl.textContent = '📁 Reconectar carpeta de datos';
+      badgeEl.style.opacity = '1';
+      badgeEl.style.cursor = 'pointer';
+      badgeEl.onclick = connect;
+    } else if(state === 'unsupported'){
+      badgeEl.textContent = '⚠️ Guardado solo local (usa Chrome/Edge)';
+      badgeEl.style.opacity = '0.6';
+      badgeEl.style.cursor = 'default';
+      badgeEl.onclick = null;
+    } else {
+      badgeEl.textContent = '📁 Conectar carpeta de datos';
+      badgeEl.style.opacity = '1';
+      badgeEl.style.cursor = 'pointer';
+      badgeEl.onclick = connect;
+    }
+  }
+
+  async function connect(){
+    try{
+      const handle = await window.showDirectoryPicker({ id: 'aiapps-folder', mode: 'readwrite' });
+      const perm = await handle.requestPermission({ mode: 'readwrite' });
+      if(perm !== 'granted') throw new Error('permiso denegado');
+      dirHandle = handle;
+      await idbSet(APP_ID + '-dir', handle);
+      const existing = await readFolderFile();
+      if(existing){
+        applySnapshot(existing);
+        setBadge('connected');
+        location.reload();
+        return;
+      }
+      await writeFolderFile(collectLocalSnapshot());
+      setBadge('connected');
+    }catch(e){
+      console.warn('[AI APPs] Conexión de carpeta cancelada:', e);
+    }
+  }
+
+  async function tryReconnect(){
+    try{
+      const handle = await idbGet(APP_ID + '-dir');
+      if(!handle){ setBadge('idle'); return; }
+      const perm = await handle.queryPermission({ mode: 'readwrite' });
+      if(perm === 'granted'){
+        dirHandle = handle;
+        const existing = await readFolderFile();
+        if(existing){
+          const localSnap = JSON.stringify(collectLocalSnapshot());
+          const fileSnap = JSON.stringify(existing);
+          if(localSnap !== fileSnap){
+            applySnapshot(existing);
+            setBadge('connected');
+            location.reload();
+            return;
+          }
+        }
+        setBadge('connected');
+      } else {
+        setBadge('reconnect');
+      }
+    }catch(e){
+      setBadge('idle');
+    }
+  }
+
+  window.addEventListener('DOMContentLoaded', async () => {
+    badgeEl = makeBadge();
+    if(!supported){ setBadge('unsupported'); return; }
+    setBadge('idle');
+    await tryReconnect();
+  });
+})();
+</script>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hourglass — your time slice</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3E%3Crect width='30' height='30' rx='8' fill='%230E1A1E'/%3E%3Ctext x='15' y='22' font-size='16' text-anchor='middle'%3E%E2%8F%B3%3C/text%3E%3C/svg%3E">
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<script>window.AIAPPS_APP_ID = 'hourglass'; window.AIAPPS_SHOW_ACCOUNT_WIDGET = true; window.AIAPPS_APP_NAME = 'Hourglass'; window.AIAPPS_APP_EMOJI = '⏳'; window.AIAPPS_APP_TAGLINE = 'your time slice'; window.AIAPPS_APP_ACCENT = '#3FB8AE'; window.AIAPPS_APP_BG = '#0E1A1E'; window.AIAPPS_APP_GLOW = 'rgba(63,184,174,0.20)'; window.AIAPPS_LOGIN_SCENE = 'hourglass-time'; window.AIAPPS_LOGIN_LAYOUT = 'right';</script>
+<script src="./supabase-client-app.js"></script>
+<script src="./auth-gate.js"></script>
+<style>
+  :root{
+    --ink:#16212B; --paper:#F5F6F4; --card:#FFFFFF; --line:#DFE1DC;
+    --muted:#5C6670; --dark:#12242A; --dark-2:#1B3840;
+    --teal:#2E8C86; --teal-text:#1F6763;
+    --verde-bg:#E6F4EC; --verde-tx:#1F6B45;
+    --ambar-bg:#FBF1DC; --ambar-tx:#7A5A12;
+    --rojo-bg:#FBE9E7; --rojo-tx:#97362C;
+  }
+  *{box-sizing:border-box;}
+  html{-webkit-text-size-adjust:100%;}
+  body{margin:0;font-family:system-ui,-apple-system,'Segoe UI',Arial,sans-serif;background:var(--paper);color:var(--ink);font-size:14px;line-height:1.45;}
+
+  header.app{background:var(--dark);color:#EAF3F2;padding:clamp(14px,3.5vw,22px) clamp(14px,4vw,30px);}
+  .head-row{display:flex;flex-wrap:wrap;gap:12px;align-items:baseline;justify-content:space-between;max-width:1180px;margin:0 auto;}
+  header.app h1{margin:0;font-size:clamp(17px,4vw,21px);font-weight:700;letter-spacing:0.2px;}
+  header.app .tagline{margin:4px 0 0;font-size:12px;color:#9FBFBC;letter-spacing:0.08em;text-transform:uppercase;}
+  header.app a.hub{color:#BFE4E0;font-size:12.5px;text-decoration:none;border-bottom:1px solid rgba(191,228,224,0.45);}
+  header.app a.hub:hover{color:#fff;}
+  .running-chip{display:inline-flex;align-items:center;gap:7px;background:rgba(63,184,174,0.16);border:1px solid rgba(63,184,174,0.45);color:#CFF0EC;border-radius:999px;padding:5px 12px;font-size:12.5px;}
+  .running-chip .dot{width:8px;height:8px;border-radius:50%;background:#4FD1C5;animation:pulse 1.8s ease-in-out infinite;}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.35;}}
+
+  nav.tabs{background:var(--dark-2);padding:0 clamp(10px,4vw,30px);overflow-x:auto;}
+  .tabs-inner{display:flex;gap:2px;max-width:1180px;margin:0 auto;}
+  .tab{background:none;border:none;border-bottom:3px solid transparent;color:#AECDCA;padding:11px 15px;font-size:13.5px;cursor:pointer;white-space:nowrap;font-family:inherit;}
+  .tab:hover{color:#fff;}
+  .tab[aria-selected="true"]{color:#fff;border-bottom-color:#4FD1C5;font-weight:600;}
+  .tab:focus-visible{outline:2px solid #7FE3DC;outline-offset:-3px;}
+
+  main{max-width:1180px;margin:0 auto;padding:clamp(14px,3vw,22px) clamp(12px,4vw,30px) 96px;}
+  /* El panel es una parada real del recorrido de Tab (tiene tabindex="0"),
+     así que tiene que verse cuando recibe el foco. Antes llevaba
+     outline:none y quien navega con teclado se quedaba sin saber dónde
+     estaba parado. */
+  [role="tabpanel"]:focus-visible{outline:2px solid var(--teal);outline-offset:-2px;border-radius:8px;}
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:clamp(13px,2.6vw,18px);margin-bottom:16px;}
+  .panel > h2{font-size:12.5px;margin:0 0 12px;color:var(--teal-text);text-transform:uppercase;letter-spacing:0.7px;}
+  .panel > h3{font-size:13.5px;margin:16px 0 8px;color:var(--ink);}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;}
+  .field{display:flex;flex-direction:column;gap:4px;min-width:0;}
+  .field.grow{flex:1 1 170px;}
+  label{font-size:12px;color:var(--muted);}
+  input,select,textarea{font-family:inherit;font-size:13.5px;padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--ink);max-width:100%;}
+  input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-visible{outline:2px solid var(--teal);outline-offset:1px;}
+  .btn{background:var(--teal-text);color:#fff;border:none;border-radius:6px;padding:8px 15px;font-size:13px;cursor:pointer;font-family:inherit;white-space:nowrap;}
+  .btn:hover{background:#17514E;}
+  .btn.ghost{background:#fff;color:var(--teal-text);border:1px solid var(--teal-text);}
+  .btn.ghost:hover{background:#EAF4F3;}
+  .btn.danger{background:#fff;color:#97362C;border:1px solid #C9756A;}
+  .btn.danger:hover{background:#FBE9E7;}
+  .btn.small{padding:5px 10px;font-size:12px;}
+  .btn:disabled{opacity:0.5;cursor:not-allowed;}
+
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;}
+  .stat{border:1px solid var(--line);border-radius:9px;padding:12px 13px;background:#FBFCFB;}
+  .stat .k{font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;}
+  .stat .v{font-size:21px;font-weight:700;margin-top:3px;}
+  .stat .s{font-size:12px;color:var(--muted);margin-top:2px;}
+
+  .estado{border-radius:9px;padding:13px 15px;border:1px solid;}
+  .estado h3{margin:0 0 4px;font-size:16px;}
+  .estado p{margin:0;font-size:13px;}
+  .estado.verde{background:var(--verde-bg);border-color:#A9D6BE;color:var(--verde-tx);}
+  .estado.amarillo{background:var(--ambar-bg);border-color:#E0C27C;color:var(--ambar-tx);}
+  .estado.rojo{background:var(--rojo-bg);border-color:#DDA096;color:var(--rojo-tx);}
+
+  .bar{height:9px;border-radius:999px;background:#ECEEEA;overflow:hidden;margin-top:6px;}
+  .bar > span{display:block;height:100%;border-radius:999px;background:var(--teal);}
+  .bar.over > span{background:#B0453A;}
+
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  .tablewrap{overflow-x:auto;}
+  th,td{border-bottom:1px solid var(--line);padding:7px 9px;text-align:left;vertical-align:top;}
+  th{font-size:11.5px;text-transform:uppercase;letter-spacing:0.5px;color:var(--muted);font-weight:700;white-space:nowrap;}
+  td.num,th.num{text-align:right;white-space:nowrap;}
+  tbody tr:hover{background:#FAFBFA;}
+
+  .chip{display:inline-block;font-size:11.5px;padding:2px 8px;border-radius:999px;border:1px solid var(--line);background:#F2F4F2;color:#3A444C;white-space:nowrap;}
+  .swatch{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px;border:1px solid rgba(0,0,0,0.15);}
+  .muted{color:var(--muted);font-size:12.5px;}
+  .empty{color:var(--muted);font-size:13px;padding:14px 2px;}
+  .msg{font-size:12.5px;min-height:1.2em;margin-top:8px;}
+  .msg.err{color:#97362C;}
+  .msg.ok{color:var(--verde-tx);}
+  .hint{font-size:12px;color:var(--muted);margin:6px 0 0;}
+  fieldset{border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin:0;}
+  legend{font-size:12px;color:var(--muted);padding:0 5px;}
+
+  .tracker{border:1px solid var(--line);border-radius:9px;padding:11px 13px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:9px;}
+  .tracker .t-time{font-size:20px;font-weight:700;font-variant-numeric:tabular-nums;}
+  .tracker.paused{background:#FAF9F5;}
+
+  .modal-back{position:fixed;inset:0;background:rgba(10,20,24,0.62);display:flex;align-items:center;justify-content:center;padding:16px;z-index:1000;}
+  .modal{background:#fff;border-radius:12px;max-width:520px;width:100%;padding:20px 22px;box-shadow:0 24px 60px rgba(0,0,0,0.35);}
+  .modal h2{margin:0 0 8px;font-size:17px;color:#97362C;}
+  .modal ul{margin:10px 0;padding-left:20px;font-size:13px;}
+  .modal .actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:16px;}
+
+  .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0;}
+
+  @media (max-width:640px){
+    .stat .v{font-size:18px;}
+    .btn{padding:8px 12px;}
+    th,td{padding:6px 7px;}
+  }
+  @media (prefers-reduced-motion: reduce){
+    /* El punto del cronómetro deja de latir; el chip sigue diciendo con
+       palabras cuántos hay corriendo, así que no se pierde información. */
+    .running-chip .dot{animation:none;}
+    *{transition:none !important;}
+  }
+</style>
+</head>
+<body>
+
+<header class="app">
+  <div class="head-row">
+    <div>
+      <h1>⏳ Hourglass</h1>
+      <p class="tagline">your time slice</p>
+    </div>
+    <div class="row" style="align-items:center;gap:14px;">
+      <span id="running-chip"></span>
+      <a class="hub" href="./index.html">← Volver al hub</a>
+    </div>
+  </div>
+</header>
+
+<nav class="tabs">
+  <div class="tabs-inner" role="tablist" aria-label="Secciones de Hourglass">
+    <button class="tab" role="tab" id="tab-panel"     aria-controls="view-panel"     aria-selected="true"  data-view="panel">Panel</button>
+    <button class="tab" role="tab" id="tab-trackers"  aria-controls="view-trackers"  aria-selected="false" data-view="trackers" tabindex="-1">Cronómetros</button>
+    <button class="tab" role="tab" id="tab-registros" aria-controls="view-registros" aria-selected="false" data-view="registros" tabindex="-1">Registros</button>
+    <button class="tab" role="tab" id="tab-proyectos" aria-controls="view-proyectos" aria-selected="false" data-view="proyectos" tabindex="-1">Proyectos</button>
+    <button class="tab" role="tab" id="tab-ajustes"   aria-controls="view-ajustes"   aria-selected="false" data-view="ajustes" tabindex="-1">Ajustes</button>
+  </div>
+</nav>
+
+<main>
+  <div id="view-panel"     role="tabpanel" aria-labelledby="tab-panel"     tabindex="0"></div>
+  <div id="view-trackers"  role="tabpanel" aria-labelledby="tab-trackers"  tabindex="0" hidden></div>
+  <div id="view-registros" role="tabpanel" aria-labelledby="tab-registros" tabindex="0" hidden></div>
+  <div id="view-proyectos" role="tabpanel" aria-labelledby="tab-proyectos" tabindex="0" hidden></div>
+  <div id="view-ajustes"   role="tabpanel" aria-labelledby="tab-ajustes"   tabindex="0" hidden></div>
+</main>
+
+<div id="live" class="sr-only" role="status" aria-live="polite"></div>
+<div id="modal-host"></div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════
+   Hourglass — seguimiento de tiempo personal
+   Todo el cálculo (solapamiento, sobrecarga, reparto por día) vive aquí,
+   en el navegador: LIPS-HUB no tiene backend propio. Decisión cerrada con
+   la usuaria el 29/07/2026, ver docs/hourglass/prd-resumen.md.
+   ═══════════════════════════════════════════════════════════════════ */
+
+const SUPA_APP_ID = 'hourglass';
+const CACHE_KEY = 'hourglass_v1';
+const DAY = 86400000;
+/* Tope de duración de UN registro. Nadie trabaja 31 días seguidos sin parar:
+   un registro más largo que esto no es un dato real, es un JSON dañado o
+   editado a mano (el puente de carpeta deja el archivo en disco). Sin este
+   tope, un registro con fechas separadas por años hace que `segmentsOf()`
+   genere millones de trozos de día y congele la pestaña — medido: 2.912.079
+   segmentos y 14,58 s de bloqueo con un `fin` en el año 9999. */
+const MAX_ENTRY_DAYS = 31;
+
+/* Las 3 secciones son fijas: viven en el código, no en los datos. */
+const SECTIONS = [
+  { id:'trabajo',      nombre:'Trabajo',      color:'#2E8C86' },
+  { id:'voluntariado', nombre:'Voluntariado', color:'#B8862F' },
+  { id:'personal',     nombre:'Personal',     color:'#7C6BB0' }
+];
+const SECTION_IDS = SECTIONS.map(s => s.id);
+const PALETTE = ['#2E8C86','#B8862F','#7C6BB0','#4E7A8B','#B85C4E','#5F8A4E','#8B6BA0','#C07A4E'];
+
+const DEFAULTS = {
+  timezone:'America/Santo_Domingo',
+  sleepHoursDefault:7,
+  mealHoursDefault:3,
+  staleTrackerAlertHours:6
+};
+
+let state = emptyState();
+let cloudSyncReady = false;
+let cachedUserId = null;
+
+function emptyState(){
+  return {
+    version:1,
+    settings:Object.assign({}, DEFAULTS),
+    projects:[],
+    entries:[],
+    activeTrackers:[],
+    fixedBlockOverrides:[]
+  };
+}
+
+/* ───────────────────── utilidades ───────────────────── */
+
+function esc(s){
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+function uid(p){ return p + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+function num(v, fallback){ const n = Number(v); return isFinite(n) ? n : fallback; }
+function clamp(v, lo, hi){ return Math.min(hi, Math.max(lo, v)); }
+// Los colores llegan de un <input type="color">, pero también podrían venir de
+// un JSON de la nube manipulado: se validan antes de escribirlos en un style.
+function safeColor(c, fallback){
+  return /^#[0-9a-fA-F]{6}$/.test(String(c || '')) ? String(c) : (fallback || '#2E8C86');
+}
+function isDayKey(s){ return /^\d{4}-\d{2}-\d{2}$/.test(String(s || '')) && !isNaN(Date.parse(s + 'T00:00:00Z')); }
+function isIso(s){ return typeof s === 'string' && !isNaN(Date.parse(s)); }
+
+function fmtDur(min){
+  const m = Math.max(0, Math.round(min));
+  const h = Math.floor(m / 60);
+  const r = m % 60;
+  if(h && r) return h + ' h ' + r + ' min';
+  if(h) return h + ' h';
+  return r + ' min';
+}
+function fmtHoursShort(min){ return (Math.round(min / 6) / 10).toFixed(1).replace('.', ',') + ' h'; }
+function fmtClock(ms){
+  const t = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = t % 60;
+  return String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+}
+
+/* ───────────────────── zona horaria ─────────────────────
+   Todo el cálculo se hace en "milisegundos zonificados": el instante real
+   desplazado al huso de `settings.timezone`. Así partir por día calendario
+   es una simple división entre 86.400.000, sin depender del huso del equipo
+   donde se abra la app. */
+let tzWarned = false;
+function tzName(){ return state.settings.timezone || DEFAULTS.timezone; }
+function offsetMin(ms){
+  try{
+    const p = {};
+    new Intl.DateTimeFormat('en-US', {
+      timeZone: tzName(), hour12:false,
+      year:'numeric', month:'2-digit', day:'2-digit',
+      hour:'2-digit', minute:'2-digit', second:'2-digit'
+    }).formatToParts(new Date(ms)).forEach(x => { if(x.type !== 'literal') p[x.type] = x.value; });
+    let h = +p.hour; if(h === 24) h = 0;
+    const asUTC = Date.UTC(+p.year, +p.month - 1, +p.day, h, +p.minute, +p.second);
+    return Math.round((asUTC - Math.floor(ms / 1000) * 1000) / 60000);
+  }catch(e){
+    if(!tzWarned){
+      console.warn('[Hourglass] Zona horaria no reconocida ("' + tzName() + '"), se usa la del navegador.');
+      tzWarned = true;
+    }
+    return -new Date(ms).getTimezoneOffset();
+  }
+}
+function toZoned(ms){ return ms + offsetMin(ms) * 60000; }
+// Inversa aproximada: se estima el instante y se recalcula el desfase con él,
+// que es lo correcto salvo en la hora exacta de un cambio de horario.
+function fromZoned(z){
+  const guess = z - offsetMin(z) * 60000;
+  return z - offsetMin(guess) * 60000;
+}
+function dayKeyOf(z){ return new Date(z).toISOString().slice(0,10); }
+function dayStartZ(key){ return Date.parse(key + 'T00:00:00Z'); }
+function zonedNow(){ return toZoned(Date.now()); }
+function todayKey(){ return dayKeyOf(zonedNow()); }
+function hhmmOf(z){
+  const d = new Date(z);
+  return String(d.getUTCHours()).padStart(2,'0') + ':' + String(d.getUTCMinutes()).padStart(2,'0');
+}
+function isoFromLocal(dateStr, timeStr){
+  if(!isDayKey(dateStr)) return null;
+  const z = Date.parse(dateStr + 'T' + (timeStr || '00:00') + ':00Z');
+  if(isNaN(z)) return null;
+  return new Date(fromZoned(z)).toISOString();
+}
+function fmtDayLong(key){
+  const d = new Date(dayStartZ(key));
+  return d.toLocaleDateString('es-DO', { weekday:'short', day:'2-digit', month:'short', year:'numeric', timeZone:'UTC' });
+}
+function fmtDayShort(key){
+  const d = new Date(dayStartZ(key));
+  return d.toLocaleDateString('es-DO', { day:'2-digit', month:'short', timeZone:'UTC' });
+}
+
+/* ───────────────────── normalización de datos ─────────────────────
+   El JSON puede venir de la nube, de la caché local o de un archivo de la
+   carpeta: nada de eso está garantizado, así que se normaliza antes de usarlo
+   en vez de confiar en su forma. */
+function normalize(raw){
+  const s = emptyState();
+  if(!raw || typeof raw !== 'object') return s;
+  const set = raw.settings && typeof raw.settings === 'object' ? raw.settings : {};
+  // El recorte es por consistencia con `nombre`/`nota`: ningún identificador
+  // de zona horaria real pasa de 64 caracteres.
+  s.settings.timezone = typeof set.timezone === 'string' && set.timezone ? set.timezone.slice(0, 64) : DEFAULTS.timezone;
+  s.settings.sleepHoursDefault = clamp(num(set.sleepHoursDefault, DEFAULTS.sleepHoursDefault), 0, 24);
+  s.settings.mealHoursDefault = clamp(num(set.mealHoursDefault, DEFAULTS.mealHoursDefault), 0, 24);
+  s.settings.staleTrackerAlertHours = clamp(num(set.staleTrackerAlertHours, DEFAULTS.staleTrackerAlertHours), 1, 48);
+
+  (Array.isArray(raw.projects) ? raw.projects : []).forEach((p, i) => {
+    if(!p || typeof p !== 'object') return;
+    s.projects.push({
+      id: String(p.id || uid('p')),
+      sectionId: SECTION_IDS.indexOf(p.sectionId) !== -1 ? p.sectionId : 'trabajo',
+      nombre: String(p.nombre || 'Sin nombre').slice(0, 120),
+      color: safeColor(p.color, PALETTE[i % PALETTE.length]),
+      estado: p.estado === 'archivado' ? 'archivado' : 'activo',
+      metaHorasSemanales: p.metaHorasSemanales == null || p.metaHorasSemanales === ''
+        ? null : clamp(num(p.metaHorasSemanales, 0), 0, 168)
+    });
+  });
+
+  let descartados = 0;
+  (Array.isArray(raw.entries) ? raw.entries : []).forEach(e => {
+    if(!e || typeof e !== 'object') return;
+    if(!isIso(e.inicio) || !isIso(e.fin)) return;
+    if(Date.parse(e.fin) - Date.parse(e.inicio) > MAX_ENTRY_DAYS * DAY){
+      descartados++;
+      return;
+    }
+    const pausas = (Array.isArray(e.pausas) ? e.pausas : [])
+      .filter(p => p && isIso(p.from) && isIso(p.to))
+      .map(p => ({ from: new Date(p.from).toISOString(), to: new Date(p.to).toISOString() }));
+    const entry = {
+      id: String(e.id || uid('e')),
+      projectId: String(e.projectId || ''),
+      origen: e.origen === 'tracker' ? 'tracker' : 'manual',
+      inicio: new Date(e.inicio).toISOString(),
+      fin: new Date(e.fin).toISOString(),
+      duracionMin: 0,
+      nota: String(e.nota || '').slice(0, 500),
+      editado: !!e.editado,
+      pausas: pausas
+    };
+    entry.duracionMin = activeMinutes(entry);
+    s.entries.push(entry);
+  });
+
+  if(descartados){
+    console.warn('[Hourglass] Se descartaron ' + descartados + ' registro(s) con una duración imposible (más de ' + MAX_ENTRY_DAYS + ' días). Suelen venir de un archivo de datos dañado o editado a mano.');
+  }
+
+  (Array.isArray(raw.activeTrackers) ? raw.activeTrackers : []).forEach(t => {
+    if(!t || typeof t !== 'object' || !isIso(t.startedAt)) return;
+    s.activeTrackers.push({
+      id: String(t.id || uid('t')),
+      projectId: String(t.projectId || ''),
+      startedAt: new Date(t.startedAt).toISOString(),
+      pausedIntervals: (Array.isArray(t.pausedIntervals) ? t.pausedIntervals : [])
+        .filter(p => p && isIso(p.from))
+        .map(p => ({ from: new Date(p.from).toISOString(), to: isIso(p.to) ? new Date(p.to).toISOString() : null })),
+      nota: String(t.nota || '').slice(0, 500)
+    });
+  });
+
+  (Array.isArray(raw.fixedBlockOverrides) ? raw.fixedBlockOverrides : []).forEach(o => {
+    if(!o || typeof o !== 'object' || !isDayKey(o.fecha)) return;
+    if(o.tipo !== 'sueno' && o.tipo !== 'comida') return;
+    s.fixedBlockOverrides.push({ fecha: o.fecha, tipo: o.tipo, horas: clamp(num(o.horas, 0), 0, 24) });
+  });
+
+  // Un proyecto borrado no debe dejar registros huérfanos que no se puedan
+  // ver ni corregir desde ninguna pantalla.
+  const ids = {};
+  s.projects.forEach(p => { ids[p.id] = true; });
+  s.entries = s.entries.filter(e => ids[e.projectId]);
+  s.activeTrackers = s.activeTrackers.filter(t => ids[t.projectId]);
+  return s;
+}
+
+function projectById(id){ return state.projects.find(p => p.id === id) || null; }
+function sectionById(id){ return SECTIONS.find(s => s.id === id) || SECTIONS[0]; }
+function projectName(id){ const p = projectById(id); return p ? p.nombre : '(proyecto eliminado)'; }
+
+/* ───────────────────── cálculo de tiempo ─────────────────────
+   Regla de negocio no negociable (PRD §8.2): la sobrecarga se mide con
+   tiempo de reloj REAL (intervalos solapados fusionados), no con la suma
+   bruta por proyecto. */
+
+// Intervalos realmente trabajados de un registro, en ms zonificados,
+// descontando las pausas del cronómetro.
+function entryIntervals(e){
+  const s = toZoned(Date.parse(e.inicio));
+  const f = toZoned(Date.parse(e.fin));
+  if(!(f > s)) return [];
+  let parts = [{ from:s, to:f }];
+  (e.pausas || []).forEach(p => {
+    const ps = toZoned(Date.parse(p.from));
+    const pe = toZoned(Date.parse(p.to));
+    if(!(pe > ps)) return;
+    const next = [];
+    parts.forEach(seg => {
+      if(pe <= seg.from || ps >= seg.to){ next.push(seg); return; }
+      if(ps > seg.from) next.push({ from:seg.from, to:Math.min(ps, seg.to) });
+      if(pe < seg.to) next.push({ from:Math.max(pe, seg.from), to:seg.to });
+    });
+    parts = next;
+  });
+  return parts;
+}
+function activeMinutes(e){
+  return Math.round(entryIntervals(e).reduce((a, iv) => a + (iv.to - iv.from), 0) / 60000);
+}
+
+// Un registro que cruza medianoche se parte en el CÁLCULO, nunca en el dato
+// guardado (decisión 2 cerrada con la usuaria).
+function segmentsOf(e){
+  const out = [];
+  // Tope duro de trozos por registro. `normalize()` ya descarta los registros
+  // guardados con una duración imposible, pero los cronómetros en curso NO
+  // pasan por ahí (se convierten en registro virtual con `fin` = ahora): uno
+  // con una fecha de inicio disparatada llegaría hasta aquí. Sin este tope el
+  // bucle congela la pestaña entera; con él, el peor caso es que ese registro
+  // roto reporte de menos, que se puede ver y corregir.
+  const maxSegs = MAX_ENTRY_DAYS + 2;
+  entryIntervals(e).forEach(iv => {
+    let cur = iv.from;
+    while(cur < iv.to && out.length < maxSegs){
+      const dStart = Math.floor(cur / DAY) * DAY;
+      const to = Math.min(iv.to, dStart + DAY);
+      out.push({ day: dayKeyOf(dStart), from: cur, to: to, entry: e });
+      cur = to;
+    }
+  });
+  return out;
+}
+
+function mergedMinutes(list){
+  if(!list.length) return 0;
+  const s = list.slice().sort((a, b) => a.from - b.from);
+  let total = 0, cf = s[0].from, ct = s[0].to;
+  for(let i = 1; i < s.length; i++){
+    if(s[i].from <= ct) ct = Math.max(ct, s[i].to);
+    else { total += ct - cf; cf = s[i].from; ct = s[i].to; }
+  }
+  total += ct - cf;
+  return Math.round(total / 60000);
+}
+
+// Los cronómetros en curso cuentan como tiempo provisional hasta "ahora":
+// sin eso el panel avisaría de la sobrecarga solo después de detenerlos.
+function trackerAsEntry(t, nowMs){
+  const pausas = (t.pausedIntervals || [])
+    .map(p => ({ from:p.from, to: p.to || new Date(nowMs).toISOString() }))
+    .filter(p => Date.parse(p.to) > Date.parse(p.from));
+  return {
+    id: 'live-' + t.id, projectId: t.projectId, origen:'tracker',
+    inicio: t.startedAt, fin: new Date(nowMs).toISOString(),
+    nota: t.nota, editado:false, pausas: pausas, live:true
+  };
+}
+function allEntries(){
+  const now = Date.now();
+  return state.entries.concat(state.activeTrackers.map(t => trackerAsEntry(t, now)));
+}
+
+function blockHours(dayKey, tipo){
+  const ov = state.fixedBlockOverrides.find(o => o.fecha === dayKey && o.tipo === tipo);
+  if(ov) return clamp(num(ov.horas, 0), 0, 24);
+  return tipo === 'sueno'
+    ? clamp(num(state.settings.sleepHoursDefault, DEFAULTS.sleepHoursDefault), 0, 24)
+    : clamp(num(state.settings.mealHoursDefault, DEFAULTS.mealHoursDefault), 0, 24);
+}
+function availableMinutes(dayKey){
+  return Math.max(0, Math.round((24 - blockHours(dayKey,'sueno') - blockHours(dayKey,'comida')) * 60));
+}
+function dayKeysInRange(from, to){
+  const out = [];
+  const a = dayStartZ(from), b = dayStartZ(to);
+  if(isNaN(a) || isNaN(b) || b < a) return out;
+  // Tope de seguridad: el rango personalizado ya está acotado a un año, pero
+  // un dato corrupto no debe poder colgar el navegador con un bucle largo.
+  for(let z = a; z <= b && out.length < 400; z += DAY) out.push(dayKeyOf(z));
+  return out;
+}
+
+/* Resumen completo de un rango: es la ÚNICA función que calcula totales, para
+   que panel, informes y cualquier exportación futura no puedan divergir. */
+function summarize(from, to){
+  const days = dayKeysInRange(from, to);
+  const inRange = {};
+  days.forEach(d => { inRange[d] = true; });
+
+  const segs = [];
+  allEntries().forEach(e => {
+    segmentsOf(e).forEach(sg => { if(inRange[sg.day]) segs.push(sg); });
+  });
+
+  const byProject = {}, bySection = {}, byDay = {};
+  days.forEach(d => { byDay[d] = { day:d, segs:[], brutoMin:0 }; });
+  segs.forEach(sg => {
+    const p = projectById(sg.entry.projectId);
+    const secId = p ? p.sectionId : 'trabajo';
+    const min = (sg.to - sg.from) / 60000;
+    if(!byProject[sg.entry.projectId]) byProject[sg.entry.projectId] = { projectId:sg.entry.projectId, brutoMin:0, segs:[] };
+    byProject[sg.entry.projectId].brutoMin += min;
+    byProject[sg.entry.projectId].segs.push(sg);
+    if(!bySection[secId]) bySection[secId] = { sectionId:secId, brutoMin:0, segs:[] };
+    bySection[secId].brutoMin += min;
+    bySection[secId].segs.push(sg);
+    byDay[sg.day].segs.push(sg);
+    byDay[sg.day].brutoMin += min;
+  });
+
+  Object.keys(byProject).forEach(k => {
+    byProject[k].brutoMin = Math.round(byProject[k].brutoMin);
+    byProject[k].relojMin = mergedMinutes(byProject[k].segs);
+  });
+  Object.keys(bySection).forEach(k => {
+    bySection[k].brutoMin = Math.round(bySection[k].brutoMin);
+    bySection[k].relojMin = mergedMinutes(bySection[k].segs);
+  });
+
+  let availMin = 0;
+  days.forEach(d => {
+    availMin += availableMinutes(d);
+    byDay[d].brutoMin = Math.round(byDay[d].brutoMin);
+    byDay[d].relojMin = mergedMinutes(byDay[d].segs);
+    byDay[d].availMin = availableMinutes(d);
+    byDay[d].estado = statusOf(byDay[d].relojMin, byDay[d].availMin);
+  });
+
+  const relojMin = mergedMinutes(segs);
+  const brutoMin = Math.round(segs.reduce((a, sg) => a + (sg.to - sg.from) / 60000, 0));
+  const sleepMin = Math.round(days.reduce((a, d) => a + blockHours(d,'sueno') * 60, 0));
+  const mealMin = Math.round(days.reduce((a, d) => a + blockHours(d,'comida') * 60, 0));
+
+  let topSection = null;
+  Object.keys(bySection).forEach(k => {
+    if(!topSection || bySection[k].relojMin > bySection[topSection].relojMin) topSection = k;
+  });
+
+  return {
+    from, to, days,
+    relojMin, brutoMin, availMin, sleepMin, mealMin,
+    sinRegistrarMin: Math.max(0, availMin - relojMin),
+    estado: statusOf(relojMin, availMin),
+    topSection: topSection,
+    byProject, bySection, byDay,
+    liveCount: state.activeTrackers.length
+  };
+}
+
+function statusOf(relojMin, availMin){
+  if(availMin <= 0) return relojMin > 0 ? 'rojo' : 'verde';
+  const r = relojMin / availMin;
+  if(r > 1) return 'rojo';
+  if(r >= 0.85) return 'amarillo';
+  return 'verde';
+}
+const ESTADO_TEXTO = {
+  verde:   { titulo:'Carga bajo control', clase:'verde' },
+  amarillo:{ titulo:'Cerca del límite',   clase:'amarillo' },
+  rojo:    { titulo:'Sobrecarga',         clase:'rojo' }
+};
+
+/* ───────────────────── persistencia ───────────────────── */
+
+function scopedKey(key, userId){ return userId ? key + '::' + userId : key; }
+
+async function getSupabaseSession(){
+  if(!window.supabaseClient) return null;
+  const { data } = await window.supabaseClient.auth.getSession();
+  return data && data.session ? data.session : null;
+}
+
+function serialize(){
+  return {
+    version: 1,
+    settings: state.settings,
+    projects: state.projects,
+    entries: state.entries,
+    activeTrackers: state.activeTrackers,
+    fixedBlockOverrides: state.fixedBlockOverrides
+  };
+}
+
+function save(){
+  // Se vuelve a resolver la sesión en vez de confiar en cachedUserId, para que
+  // un guardado disparado antes de que load() termine no caiga en la clave sin
+  // aislar por usuario.
+  (async () => {
+    const session = await getSupabaseSession();
+    const uidNow = session ? session.user.id : null;
+    try{
+      localStorage.setItem(scopedKey(CACHE_KEY, uidNow), JSON.stringify(serialize()));
+    }catch(e){
+      console.warn('[Hourglass] No se pudo escribir la caché local:', e);
+    }
+  })();
+  syncToCloud();
+}
+
+async function syncToCloud(){
+  const session = await getSupabaseSession();
+  if(!session) return;
+  if(!cloudSyncReady) return;
+  try{
+    const { error } = await window.supabaseClient
+      .from('app_data')
+      .upsert(
+        { user_id: session.user.id, app_id: SUPA_APP_ID, data: serialize(), updated_at: new Date().toISOString() },
+        { onConflict: 'user_id,app_id' }
+      );
+    if(error) throw error;
+  }catch(e){
+    console.warn('[Hourglass] Guardado local OK, pero falló la sincronización con la nube:', e);
+  }
+}
+
+function loadFromLocalStorage(userId){
+  try{
+    const raw = localStorage.getItem(scopedKey(CACHE_KEY, userId));
+    state = normalize(raw ? JSON.parse(raw) : null);
+  }catch(e){
+    console.warn('[Hourglass] Caché local ilegible, se empieza vacío:', e);
+    state = emptyState();
+  }
+}
+
+async function load(){
+  const session = await getSupabaseSession();
+  if(!session) return; // Sin sesión no se cargan datos reales detrás del candado.
+  cachedUserId = session.user.id;
+  try{
+    const { data, error } = await window.supabaseClient
+      .from('app_data')
+      .select('data')
+      .eq('app_id', SUPA_APP_ID)
+      .eq('user_id', session.user.id)
+      .maybeSingle();
+    if(error) throw error;
+    if(data && data.data){
+      state = normalize(data.data);
+      try{ localStorage.setItem(scopedKey(CACHE_KEY, cachedUserId), JSON.stringify(serialize())); }catch(e){}
+      return;
+    }
+    loadFromLocalStorage(cachedUserId);
+  }catch(e){
+    console.warn('[Hourglass] No se pudo leer de la nube, usando caché local:', e);
+    loadFromLocalStorage(cachedUserId);
+  }
+}
+
+/* ───────────────────── estado de la interfaz ───────────────────── */
+
+const ui = {
+  view:'panel',
+  range:{ mode:'dia', anchor: todayKey(), from:'', to:'' },
+  panelFilter:{ seccion:'', proyecto:'' },
+  regFilter:{ proyecto:'', desde:'', hasta:'', texto:'' },
+  projFilter:{ seccion:'', estado:'activo', texto:'' },
+  trackerFilter:{ proyecto:'' },
+  ovFilter:{ desde:'', hasta:'' },
+  editingEntryId:null,
+  editingProjectId:null,
+  manualMode:'fin',
+  msg:{}
+};
+
+function say(text){ document.getElementById('live').textContent = text; }
+function setMsg(view, text, kind){ ui.msg[view] = text ? { text, kind } : null; }
+function msgHtml(view){
+  const m = ui.msg[view];
+  if(!m) return '<div class="msg"></div>';
+  return '<div class="msg ' + (m.kind === 'err' ? 'err' : 'ok') + '" role="alert">' + esc(m.text) + '</div>';
+}
+
+function resolveRange(){
+  const m = ui.range.mode;
+  if(m === 'personalizado'){
+    let a = isDayKey(ui.range.from) ? ui.range.from : todayKey();
+    let b = isDayKey(ui.range.to) ? ui.range.to : a;
+    if(a > b){ const t = a; a = b; b = t; }
+    return { from:a, to:b };
+  }
+  const anchor = isDayKey(ui.range.anchor) ? ui.range.anchor : todayKey();
+  const z = dayStartZ(anchor);
+  if(m === 'semana'){
+    const dow = new Date(z).getUTCDay();       // 0 = domingo
+    const start = z - ((dow + 6) % 7) * DAY;   // la semana empieza el lunes
+    return { from: dayKeyOf(start), to: dayKeyOf(start + 6 * DAY) };
+  }
+  if(m === 'mes'){
+    const d = new Date(z);
+    const first = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1);
+    const last = Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0);
+    return { from: dayKeyOf(first), to: dayKeyOf(last) };
+  }
+  return { from: anchor, to: anchor };
+}
+
+function rangeLabel(r){
+  if(ui.range.mode === 'dia') return fmtDayLong(r.from);
+  if(ui.range.mode === 'mes'){
+    const d = new Date(dayStartZ(r.from));
+    const s = d.toLocaleDateString('es-DO', { month:'long', year:'numeric', timeZone:'UTC' });
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  }
+  return fmtDayShort(r.from) + ' – ' + fmtDayShort(r.to) + ' de ' + new Date(dayStartZ(r.to)).getUTCFullYear();
+}
+
+function shiftRange(dir){
+  if(ui.range.mode === 'personalizado') return;
+  const z = dayStartZ(isDayKey(ui.range.anchor) ? ui.range.anchor : todayKey());
+  if(ui.range.mode === 'dia') ui.range.anchor = dayKeyOf(z + dir * DAY);
+  else if(ui.range.mode === 'semana') ui.range.anchor = dayKeyOf(z + dir * 7 * DAY);
+  else{
+    const d = new Date(z);
+    ui.range.anchor = dayKeyOf(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + dir, 1));
+  }
+}
+
+/* ───────────────────── piezas de interfaz reutilizables ───────────────────── */
+
+function projectOptions(selected, opts){
+  const o = opts || {};
+  const list = state.projects
+    .filter(p => o.incluirArchivados ? true : p.estado === 'activo' || p.id === selected)
+    .slice()
+    .sort((a, b) => a.sectionId.localeCompare(b.sectionId) || a.nombre.localeCompare(b.nombre));
+  let html = '<option value="">' + esc(o.vacio || 'Todos los proyectos') + '</option>';
+  SECTIONS.forEach(sec => {
+    const inSec = list.filter(p => p.sectionId === sec.id);
+    if(!inSec.length) return;
+    html += '<option disabled>── ' + esc(sec.nombre) + ' ──</option>';
+    inSec.forEach(p => {
+      html += '<option value="' + esc(p.id) + '"' + (p.id === selected ? ' selected' : '') + '>'
+        + esc(p.nombre) + (p.estado === 'archivado' ? ' (archivado)' : '') + '</option>';
+    });
+  });
+  return html;
+}
+function sectionOptions(selected, vacio){
+  let html = vacio ? '<option value="">' + esc(vacio) + '</option>' : '';
+  SECTIONS.forEach(s => {
+    html += '<option value="' + s.id + '"' + (s.id === selected ? ' selected' : '') + '>' + esc(s.nombre) + '</option>';
+  });
+  return html;
+}
+function projectChip(p){
+  if(!p) return '<span class="chip">(proyecto eliminado)</span>';
+  return '<span class="swatch" style="background:' + safeColor(p.color) + '"></span>' + esc(p.nombre);
+}
+function barHtml(pct, over){
+  const w = clamp(pct, 0, 100).toFixed(1);
+  return '<div class="bar' + (over ? ' over' : '') + '"><span style="width:' + w + '%"></span></div>';
+}
+
+/* ───────────────────── vista: Panel ───────────────────── */
+
+function renderPanel(){
+  const r = resolveRange();
+  const sum = summarize(r.from, r.to);
+  const pct = sum.availMin > 0 ? (sum.relojMin / sum.availMin) * 100 : 0;
+  const est = ESTADO_TEXTO[sum.estado];
+  const topSec = sum.topSection ? sectionById(sum.topSection) : null;
+
+  let mensaje;
+  if(sum.estado === 'rojo'){
+    mensaje = 'El tiempo registrado supera las horas disponibles del periodo ('
+      + fmtDur(sum.relojMin) + ' de reloj sobre ' + fmtDur(sum.availMin) + ' disponibles).';
+  }else if(sum.estado === 'amarillo'){
+    mensaje = 'Vas por ' + Math.round(pct) + '% de las horas disponibles del periodo. Queda poco margen.';
+  }else{
+    mensaje = 'Llevas ' + fmtDur(sum.relojMin) + ' de las ' + fmtDur(sum.availMin) + ' disponibles en el periodo.';
+  }
+  if(topSec && sum.relojMin > 0){
+    mensaje += ' La sección que más aporta es ' + topSec.nombre + ' ('
+      + fmtDur(sum.bySection[topSec.id].relojMin) + ').';
+  }
+
+  /* Los filtros de abajo NO tocan este indicador a propósito: la sobrecarga
+     de un día es la de todo el día, no la del proyecto que se esté mirando. */
+  let html = '<div class="panel">'
+    + '<h2>Periodo</h2>'
+    + '<div class="row">'
+    + '<div class="field"><label for="f-modo">Rango</label><select id="f-modo">'
+    + ['dia','semana','mes','personalizado'].map(m =>
+        '<option value="' + m + '"' + (ui.range.mode === m ? ' selected' : '') + '>'
+        + ({dia:'Día', semana:'Semana', mes:'Mes', personalizado:'Personalizado'})[m] + '</option>').join('')
+    + '</select></div>';
+
+  if(ui.range.mode === 'personalizado'){
+    html += '<div class="field"><label for="f-desde">Desde</label><input type="date" id="f-desde" value="' + esc(ui.range.from || r.from) + '"></div>'
+      + '<div class="field"><label for="f-hasta">Hasta</label><input type="date" id="f-hasta" value="' + esc(ui.range.to || r.to) + '"></div>'
+      + '<p class="hint" style="flex:1 1 100%">El rango personalizado se limita a un mismo año.</p>';
+  }else{
+    html += '<div class="field"><label for="f-ancla">Fecha</label><input type="date" id="f-ancla" value="' + esc(ui.range.anchor) + '"></div>'
+      + '<div class="field"><button class="btn ghost" id="p-prev" aria-label="Periodo anterior">←</button></div>'
+      + '<div class="field"><button class="btn ghost" id="p-hoy">Hoy</button></div>'
+      + '<div class="field"><button class="btn ghost" id="p-next" aria-label="Periodo siguiente">→</button></div>';
+  }
+  html += '</div><p class="hint"><strong>' + esc(rangeLabel(r)) + '</strong> · ' + sum.days.length + ' día(s)'
+    + (sum.liveCount ? ' · incluye ' + sum.liveCount + ' cronómetro(s) en curso, contados hasta ahora' : '')
+    + '</p>' + msgHtml('panel') + '</div>';
+
+  html += '<div class="panel"><h2>Estado de carga</h2>'
+    + '<div class="estado ' + est.clase + '"><h3>' + esc(est.titulo) + '</h3><p>' + esc(mensaje) + '</p></div>'
+    + barHtml(pct, sum.estado === 'rojo')
+    + '<p class="hint">La sobrecarga se mide con <strong>tiempo de reloj real</strong>: si dos actividades ocurren a la vez, esa franja cuenta una sola vez. Los filtros de más abajo no cambian este indicador.</p>'
+    + '<div class="cards" style="margin-top:12px">'
+    + statCard('Tiempo de reloj', fmtDur(sum.relojMin), 'Franjas solapadas contadas una vez')
+    + statCard('Tiempo bruto', fmtDur(sum.brutoMin), 'Suma de todos los proyectos')
+    + statCard('Disponible', fmtDur(sum.availMin), '24 h − sueño − comida por día')
+    + statCard('Sin registrar', fmtDur(sum.sinRegistrarMin), 'Tiempo libre real del periodo')
+    + '</div></div>';
+
+  // Bloques fijos
+  html += '<div class="panel"><h2>Bloques fijos</h2><div class="cards">'
+    + statCard('Sueño', fmtDur(sum.sleepMin), sum.days.length > 1 ? 'Total del periodo' : blockHours(r.from,'sueno') + ' h ese día')
+    + statCard('Comida', fmtDur(sum.mealMin), sum.days.length > 1 ? 'Total del periodo' : blockHours(r.from,'comida') + ' h ese día')
+    + '</div>';
+  if(sum.days.length === 1){
+    html += '<div class="row" style="margin-top:12px">'
+      + '<div class="field"><label for="ov-sueno">Sueño de ' + esc(fmtDayShort(r.from)) + ' (horas)</label>'
+      + '<input type="number" id="ov-sueno" min="0" max="24" step="0.5" value="' + blockHours(r.from,'sueno') + '"></div>'
+      + '<div class="field"><label for="ov-comida">Comida de ' + esc(fmtDayShort(r.from)) + ' (horas)</label>'
+      + '<input type="number" id="ov-comida" min="0" max="24" step="0.5" value="' + blockHours(r.from,'comida') + '"></div>'
+      + '<div class="field"><button class="btn" id="ov-guardar">Guardar este día</button></div>'
+      + '<div class="field"><button class="btn ghost" id="ov-reset">Volver al valor por defecto</button></div>'
+      + '</div>';
+  }else{
+    html += '<p class="hint">Para ajustar el sueño o la comida de un día concreto, cambia el rango a «Día», o usa la lista de excepciones en Ajustes.</p>';
+  }
+  html += '</div>';
+
+  // Desglose con filtros
+  html += '<div class="panel"><h2>Desglose por sección y proyecto</h2>'
+    + '<div class="row">'
+    + '<div class="field"><label for="pf-sec">Sección</label><select id="pf-sec">' + sectionOptions(ui.panelFilter.seccion, 'Todas las secciones') + '</select></div>'
+    + '<div class="field grow"><label for="pf-proy">Proyecto</label><select id="pf-proy">' + projectOptions(ui.panelFilter.proyecto, { incluirArchivados:true }) + '</select></div>'
+    + '<div class="field"><button class="btn ghost" id="pf-limpiar">Limpiar filtros</button></div>'
+    + '</div>';
+
+  const secsToShow = SECTIONS.filter(s => !ui.panelFilter.seccion || s.id === ui.panelFilter.seccion);
+  let algo = false;
+  secsToShow.forEach(sec => {
+    const secData = sum.bySection[sec.id];
+    const projs = state.projects
+      .filter(p => p.sectionId === sec.id)
+      .filter(p => !ui.panelFilter.proyecto || p.id === ui.panelFilter.proyecto)
+      .map(p => ({ p, d: sum.byProject[p.id] }))
+      .filter(x => x.d && x.d.brutoMin > 0)
+      .sort((a, b) => b.d.brutoMin - a.d.brutoMin);
+    if(!projs.length && (!secData || ui.panelFilter.proyecto)) return;
+    algo = true;
+    html += '<h3><span class="swatch" style="background:' + sec.color + '"></span>' + esc(sec.nombre)
+      + ' — ' + fmtDur(secData ? secData.relojMin : 0) + ' de reloj'
+      + (secData && secData.brutoMin !== secData.relojMin ? ' <span class="muted">(' + fmtDur(secData.brutoMin) + ' brutas)</span>' : '')
+      + '</h3>';
+    if(!projs.length){ html += '<p class="empty">Sin tiempo registrado en esta sección durante el periodo.</p>'; return; }
+    const maxMin = projs[0].d.brutoMin || 1;
+    html += '<div class="tablewrap"><table><thead><tr><th>Proyecto</th><th class="num">Horas</th><th style="width:38%">Reparto</th></tr></thead><tbody>';
+    projs.forEach(x => {
+      html += '<tr><td>' + projectChip(x.p) + '</td><td class="num">' + esc(fmtDur(x.d.brutoMin)) + '</td>'
+        + '<td>' + barHtml((x.d.brutoMin / maxMin) * 100, false) + '</td></tr>';
+    });
+    html += '</tbody></table></div>';
+  });
+  if(!algo) html += '<p class="empty">No hay tiempo registrado con estos filtros en el periodo elegido.</p>';
+  html += '</div>';
+
+  // Metas plan vs. real
+  const conMeta = state.projects
+    .filter(p => p.metaHorasSemanales != null && p.metaHorasSemanales > 0)
+    .filter(p => !ui.panelFilter.seccion || p.sectionId === ui.panelFilter.seccion)
+    .filter(p => !ui.panelFilter.proyecto || p.id === ui.panelFilter.proyecto);
+  html += '<div class="panel"><h2>Metas: plan vs. real</h2>';
+  if(!conMeta.length){
+    html += '<p class="empty">Ningún proyecto visible tiene meta de horas semanales. Puedes ponerle una en la pestaña Proyectos.</p>';
+  }else{
+    const factor = sum.days.length / 7;
+    html += '<p class="hint">La meta semanal se ajusta al periodo elegido (' + sum.days.length + ' día(s) = '
+      + factor.toFixed(2).replace('.', ',') + ' semanas).</p>'
+      + '<div class="tablewrap"><table><thead><tr><th>Proyecto</th><th class="num">Meta</th><th class="num">Real</th><th class="num">Diferencia</th><th style="width:30%">Avance</th></tr></thead><tbody>';
+    conMeta.forEach(p => {
+      const metaMin = p.metaHorasSemanales * 60 * factor;
+      const realMin = sum.byProject[p.id] ? sum.byProject[p.id].brutoMin : 0;
+      const dif = realMin - metaMin;
+      const pctMeta = metaMin > 0 ? (realMin / metaMin) * 100 : 0;
+      html += '<tr><td>' + projectChip(p) + '</td>'
+        + '<td class="num">' + esc(fmtDur(metaMin)) + '</td>'
+        + '<td class="num">' + esc(fmtDur(realMin)) + '</td>'
+        + '<td class="num">' + (dif >= 0 ? '+' : '−') + esc(fmtDur(Math.abs(dif))) + '</td>'
+        + '<td>' + barHtml(pctMeta, pctMeta > 100) + '<span class="muted">' + Math.round(pctMeta) + '%</span></td></tr>';
+    });
+    html += '</tbody></table></div>';
+  }
+  html += '</div>';
+
+  // Detalle por día (cuando el rango tiene más de un día)
+  if(sum.days.length > 1){
+    html += '<div class="panel"><h2>Día por día</h2><div class="tablewrap"><table>'
+      + '<thead><tr><th>Día</th><th class="num">Reloj</th><th class="num">Bruto</th><th class="num">Disponible</th><th>Estado</th></tr></thead><tbody>';
+    sum.days.forEach(d => {
+      const x = sum.byDay[d];
+      const e = ESTADO_TEXTO[x.estado];
+      html += '<tr><td>' + esc(fmtDayShort(d)) + '</td>'
+        + '<td class="num">' + esc(fmtDur(x.relojMin)) + '</td>'
+        + '<td class="num">' + esc(fmtDur(x.brutoMin)) + '</td>'
+        + '<td class="num">' + esc(fmtDur(x.availMin)) + '</td>'
+        + '<td><span class="chip" style="background:var(--' + (x.estado === 'verde' ? 'verde' : x.estado === 'amarillo' ? 'ambar' : 'rojo') + '-bg);color:var(--'
+        + (x.estado === 'verde' ? 'verde' : x.estado === 'amarillo' ? 'ambar' : 'rojo') + '-tx)">' + esc(e.titulo) + '</span></td></tr>';
+    });
+    html += '</tbody></table></div></div>';
+  }
+
+  return html;
+}
+
+function statCard(k, v, s){
+  return '<div class="stat"><div class="k">' + esc(k) + '</div><div class="v">' + esc(v) + '</div>'
+    + (s ? '<div class="s">' + esc(s) + '</div>' : '') + '</div>';
+}
+
+function wirePanel(root){
+  const modo = root.querySelector('#f-modo');
+  if(modo) modo.addEventListener('change', () => {
+    ui.range.mode = modo.value;
+    if(ui.range.mode === 'personalizado' && !ui.range.from){
+      const r = resolveRange();
+      ui.range.from = r.from; ui.range.to = r.to;
+    }
+    setMsg('panel', '', '');
+    render();
+  });
+  const ancla = root.querySelector('#f-ancla');
+  if(ancla) ancla.addEventListener('change', () => {
+    if(isDayKey(ancla.value)) ui.range.anchor = ancla.value;
+    render();
+  });
+  ['p-prev','p-next'].forEach(id => {
+    const b = root.querySelector('#' + id);
+    if(b) b.addEventListener('click', () => { shiftRange(id === 'p-prev' ? -1 : 1); render(); });
+  });
+  const hoy = root.querySelector('#p-hoy');
+  if(hoy) hoy.addEventListener('click', () => { ui.range.anchor = todayKey(); render(); });
+
+  const desde = root.querySelector('#f-desde'), hasta = root.querySelector('#f-hasta');
+  if(desde && hasta){
+    const aplicar = () => {
+      const a = desde.value, b = hasta.value;
+      if(!isDayKey(a) || !isDayKey(b)){ setMsg('panel','Elige las dos fechas del rango.','err'); render(); return; }
+      if(a.slice(0,4) !== b.slice(0,4)){
+        setMsg('panel','El rango personalizado tiene que quedar dentro de un mismo año. Se ajustó al año de la fecha inicial.','err');
+        ui.range.from = a;
+        ui.range.to = a.slice(0,4) + '-12-31';
+      }else{
+        setMsg('panel','','');
+        ui.range.from = a; ui.range.to = b;
+      }
+      render();
+    };
+    desde.addEventListener('change', aplicar);
+    hasta.addEventListener('change', aplicar);
+  }
+
+  const sec = root.querySelector('#pf-sec');
+  if(sec) sec.addEventListener('change', () => { ui.panelFilter.seccion = sec.value; render(); });
+  const proy = root.querySelector('#pf-proy');
+  if(proy) proy.addEventListener('change', () => { ui.panelFilter.proyecto = proy.value; render(); });
+  const limp = root.querySelector('#pf-limpiar');
+  if(limp) limp.addEventListener('click', () => { ui.panelFilter = { seccion:'', proyecto:'' }; render(); });
+
+  const guardar = root.querySelector('#ov-guardar');
+  if(guardar) guardar.addEventListener('click', () => {
+    const r = resolveRange();
+    const sueno = clamp(num(root.querySelector('#ov-sueno').value, 0), 0, 24);
+    const comida = clamp(num(root.querySelector('#ov-comida').value, 0), 0, 24);
+    if(sueno + comida > 24){
+      setMsg('panel','Sueño y comida no pueden sumar más de 24 horas.','err'); render(); return;
+    }
+    setOverride(r.from, 'sueno', sueno);
+    setOverride(r.from, 'comida', comida);
+    save();
+    setMsg('panel','Bloques fijos de ' + fmtDayShort(r.from) + ' actualizados.','ok');
+    say('Bloques fijos guardados');
+    render();
+  });
+  const reset = root.querySelector('#ov-reset');
+  if(reset) reset.addEventListener('click', () => {
+    const r = resolveRange();
+    state.fixedBlockOverrides = state.fixedBlockOverrides.filter(o => o.fecha !== r.from);
+    save();
+    setMsg('panel','Ese día vuelve a usar los valores por defecto.','ok');
+    render();
+  });
+}
+
+function setOverride(fecha, tipo, horas){
+  const i = state.fixedBlockOverrides.findIndex(o => o.fecha === fecha && o.tipo === tipo);
+  if(i === -1) state.fixedBlockOverrides.push({ fecha, tipo, horas });
+  else state.fixedBlockOverrides[i].horas = horas;
+}
+
+/* ───────────────────── vista: Cronómetros ───────────────────── */
+
+function isPaused(t){
+  const ps = t.pausedIntervals || [];
+  return ps.length > 0 && !ps[ps.length - 1].to;
+}
+function trackerElapsed(t, nowMs){
+  const s = Date.parse(t.startedAt);
+  let paused = 0;
+  (t.pausedIntervals || []).forEach(p => {
+    const ps = Date.parse(p.from);
+    const pe = p.to ? Date.parse(p.to) : nowMs;
+    if(pe > ps) paused += pe - ps;
+  });
+  return Math.max(0, nowMs - s - paused);
+}
+
+function renderTrackers(){
+  const activos = state.projects.filter(p => p.estado === 'activo');
+  let html = '<div class="panel"><h2>Iniciar un cronómetro</h2>';
+  if(!activos.length){
+    html += '<p class="empty">Todavía no hay proyectos activos. Crea uno en la pestaña Proyectos para poder cronometrar.</p>';
+  }else{
+    html += '<div class="row">'
+      + '<div class="field grow"><label for="tr-proy">Proyecto</label><select id="tr-proy">'
+      + projectOptions('', { vacio:'Elige un proyecto' }) + '</select></div>'
+      + '<div class="field grow"><label for="tr-nota">Nota (opcional)</label><input type="text" id="tr-nota" maxlength="200" placeholder="En qué estás trabajando"></div>'
+      + '<div class="field"><button class="btn" id="tr-start">▶ Iniciar</button></div>'
+      + '</div>'
+      + '<p class="hint">Puedes tener varios cronómetros corriendo a la vez, incluso dos del mismo proyecto: ambos suman a ese proyecto, y el tiempo solapado cuenta una sola vez en el reloj del día.</p>';
+  }
+  html += msgHtml('trackers') + '</div>';
+
+  const nowMs = Date.now();
+  let lista = state.activeTrackers.slice();
+  if(ui.trackerFilter.proyecto) lista = lista.filter(t => t.projectId === ui.trackerFilter.proyecto);
+
+  html += '<div class="panel"><h2>En curso (' + state.activeTrackers.length + ')</h2>';
+  if(state.activeTrackers.length > 1){
+    html += '<div class="row" style="margin-bottom:10px">'
+      + '<div class="field grow"><label for="trf-proy">Filtrar por proyecto</label><select id="trf-proy">'
+      + projectOptions(ui.trackerFilter.proyecto, { incluirArchivados:true }) + '</select></div></div>';
+  }
+  if(!state.activeTrackers.length){
+    html += '<p class="empty">No hay cronómetros corriendo.</p>';
+  }else if(!lista.length){
+    html += '<p class="empty">Ningún cronómetro coincide con el filtro.</p>';
+  }else{
+    lista.forEach(t => {
+      const p = projectById(t.projectId);
+      const pausado = isPaused(t);
+      const stale = (nowMs - Date.parse(t.startedAt)) > staleMs();
+      html += '<div class="tracker' + (pausado ? ' paused' : '') + '">'
+        + '<div><div>' + projectChip(p) + (pausado ? ' <span class="chip">En pausa</span>' : '')
+        + (stale ? ' <span class="chip" style="background:var(--rojo-bg);color:var(--rojo-tx)">Lleva mucho tiempo</span>' : '')
+        + '</div>'
+        + '<div class="t-time" data-elapsed="' + esc(t.id) + '">' + fmtClock(trackerElapsed(t, nowMs)) + '</div>'
+        + '<div class="muted">Inició ' + esc(fmtDayShort(dayKeyOf(toZoned(Date.parse(t.startedAt))))) + ' a las '
+        + esc(hhmmOf(toZoned(Date.parse(t.startedAt)))) + (t.nota ? ' · ' + esc(t.nota) : '') + '</div></div>'
+        + '<div class="row" style="align-items:center">'
+        + (pausado
+            ? '<button class="btn ghost small" data-act="resume" data-id="' + esc(t.id) + '">▶ Reanudar</button>'
+            : '<button class="btn ghost small" data-act="pause" data-id="' + esc(t.id) + '">⏸ Pausar</button>')
+        + '<button class="btn small" data-act="stop" data-id="' + esc(t.id) + '">⏹ Detener y guardar</button>'
+        + '<button class="btn danger small" data-act="discard" data-id="' + esc(t.id) + '">Descartar</button>'
+        + '</div></div>';
+    });
+  }
+  html += '</div>';
+  return html;
+}
+
+function staleMs(){
+  return clamp(num(state.settings.staleTrackerAlertHours, DEFAULTS.staleTrackerAlertHours), 1, 48) * 3600000;
+}
+
+function wireTrackers(root){
+  const start = root.querySelector('#tr-start');
+  if(start) start.addEventListener('click', () => {
+    const sel = root.querySelector('#tr-proy');
+    const nota = root.querySelector('#tr-nota');
+    if(!sel.value){ setMsg('trackers','Elige un proyecto antes de iniciar el cronómetro.','err'); render(); return; }
+    state.activeTrackers.push({
+      id: uid('t'), projectId: sel.value,
+      startedAt: new Date().toISOString(),
+      pausedIntervals: [], nota: (nota.value || '').slice(0, 200)
+    });
+    save();
+    setMsg('trackers','Cronómetro iniciado.','ok');
+    say('Cronómetro iniciado para ' + projectName(sel.value));
+    render();
+  });
+  const filtro = root.querySelector('#trf-proy');
+  if(filtro) filtro.addEventListener('change', () => { ui.trackerFilter.proyecto = filtro.value; render(); });
+
+  root.querySelectorAll('[data-act]').forEach(btn => {
+    btn.addEventListener('click', () => trackerAction(btn.dataset.act, btn.dataset.id));
+  });
+}
+
+function trackerAction(act, id){
+  const t = state.activeTrackers.find(x => x.id === id);
+  if(!t) return;
+  const nowIso = new Date().toISOString();
+  if(act === 'pause'){
+    if(!isPaused(t)) t.pausedIntervals.push({ from: nowIso, to: null });
+    save(); setMsg('trackers','Cronómetro en pausa.','ok'); say('Cronómetro en pausa');
+  }else if(act === 'resume'){
+    if(isPaused(t)) t.pausedIntervals[t.pausedIntervals.length - 1].to = nowIso;
+    save(); setMsg('trackers','Cronómetro reanudado.','ok'); say('Cronómetro reanudado');
+  }else if(act === 'stop'){
+    stopTracker(t, nowIso);
+    setMsg('trackers','Cronómetro detenido y guardado como registro.','ok');
+    say('Cronómetro detenido y guardado');
+  }else if(act === 'discard'){
+    if(!confirm('¿Descartar este cronómetro sin guardar el tiempo?')) return;
+    state.activeTrackers = state.activeTrackers.filter(x => x.id !== id);
+    save(); setMsg('trackers','Cronómetro descartado.','ok'); say('Cronómetro descartado');
+  }
+  render();
+}
+
+function stopTracker(t, endIso){
+  // Las pausas se guardan dentro del registro: sin ellas, el tiempo de reloj
+  // del día contaría también los ratos en pausa.
+  const pausas = (t.pausedIntervals || [])
+    .map(p => ({ from: p.from, to: p.to || endIso }))
+    .filter(p => Date.parse(p.to) > Date.parse(p.from));
+  const entry = {
+    id: uid('e'), projectId: t.projectId, origen:'tracker',
+    inicio: t.startedAt, fin: endIso, duracionMin: 0,
+    nota: t.nota || '', editado:false, pausas: pausas
+  };
+  entry.duracionMin = activeMinutes(entry);
+  if(entry.duracionMin > 0) state.entries.push(entry);
+  state.activeTrackers = state.activeTrackers.filter(x => x.id !== t.id);
+  save();
+}
+
+/* ───────────────────── vista: Registros ───────────────────── */
+
+function renderRegistros(){
+  const editing = ui.editingEntryId ? state.entries.find(e => e.id === ui.editingEntryId) : null;
+  const f = ui.regFilter;
+
+  let d = todayKey(), hi = '', hf = '', dur = '', nota = '', proy = '';
+  if(editing){
+    const zi = toZoned(Date.parse(editing.inicio)), zf = toZoned(Date.parse(editing.fin));
+    d = dayKeyOf(zi); hi = hhmmOf(zi); hf = hhmmOf(zf);
+    dur = String(editing.duracionMin); nota = editing.nota; proy = editing.projectId;
+  }
+
+  let html = '<div class="panel"><h2>' + (editing ? 'Editar registro' : 'Registrar tiempo a mano') + '</h2>';
+  if(!state.projects.length){
+    html += '<p class="empty">Primero crea un proyecto en la pestaña Proyectos.</p>';
+  }else{
+    html += '<div class="row">'
+      + '<div class="field grow"><label for="re-proy">Proyecto</label><select id="re-proy">' + projectOptions(proy, { vacio:'Elige un proyecto' }) + '</select></div>'
+      + '<div class="field"><label for="re-fecha">Fecha</label><input type="date" id="re-fecha" value="' + esc(d) + '"></div>'
+      + '<div class="field"><label for="re-inicio">Hora de inicio</label><input type="time" id="re-inicio" value="' + esc(hi) + '"></div>'
+      + '</div>'
+      /* Cada campo lleva su propia etiqueta oculta: la etiqueta que envuelve
+         al radio nombra al radio, no al campo de al lado, así que sin esto un
+         lector de pantalla anuncia "hora de fin" para la opción y luego un
+         campo sin nombre. */
+      + '<fieldset style="margin-top:10px"><legend>Cómo indicar el final</legend><div class="row">'
+      + '<div class="field"><label><input type="radio" name="re-modo" value="fin"' + (ui.manualMode === 'fin' ? ' checked' : '') + '> Hora de fin</label>'
+      + '<label class="sr-only" for="re-fin">Hora de fin</label>'
+      + '<input type="time" id="re-fin" value="' + esc(hf) + '"' + (ui.manualMode === 'fin' ? '' : ' disabled') + '></div>'
+      + '<div class="field"><label><input type="radio" name="re-modo" value="dur"' + (ui.manualMode === 'dur' ? ' checked' : '') + '> Duración (minutos)</label>'
+      + '<label class="sr-only" for="re-dur">Duración en minutos</label>'
+      + '<input type="number" id="re-dur" min="1" max="1440" step="5" value="' + esc(dur) + '"' + (ui.manualMode === 'dur' ? '' : ' disabled') + '></div>'
+      + '</div><p class="hint">Si la hora de fin es igual o anterior a la de inicio, se entiende que la sesión terminó al día siguiente.</p></fieldset>'
+      + '<div class="row" style="margin-top:10px">'
+      + '<div class="field grow"><label for="re-nota">Nota (opcional)</label><input type="text" id="re-nota" maxlength="200" value="' + esc(nota) + '"></div>'
+      + '<div class="field"><button class="btn" id="re-guardar">' + (editing ? 'Guardar cambios' : 'Agregar registro') + '</button></div>'
+      + (editing ? '<div class="field"><button class="btn ghost" id="re-cancelar">Cancelar</button></div>' : '')
+      + '</div>';
+  }
+  html += msgHtml('registros') + '</div>';
+
+  // Filtros + lista
+  const filtrados = filteredEntries();
+  const totalMin = filtrados.reduce((a, e) => a + e.duracionMin, 0);
+
+  html += '<div class="panel"><h2>Historial</h2>'
+    + '<div class="row">'
+    + '<div class="field grow"><label for="rf-proy">Proyecto</label><select id="rf-proy">' + projectOptions(f.proyecto, { incluirArchivados:true }) + '</select></div>'
+    + '<div class="field"><label for="rf-desde">Desde</label><input type="date" id="rf-desde" value="' + esc(f.desde) + '"></div>'
+    + '<div class="field"><label for="rf-hasta">Hasta</label><input type="date" id="rf-hasta" value="' + esc(f.hasta) + '"></div>'
+    + '<div class="field grow"><label for="rf-texto">Buscar en la nota</label><input type="search" id="rf-texto" value="' + esc(f.texto) + '" placeholder="texto libre"></div>'
+    + '<div class="field"><button class="btn ghost" id="rf-limpiar">Limpiar filtros</button></div>'
+    + '</div>'
+    + '<p class="hint">' + filtrados.length + ' registro(s) · ' + esc(fmtDur(totalMin)) + ' en total (suma bruta).</p>';
+
+  if(!filtrados.length){
+    html += '<p class="empty">' + (state.entries.length ? 'Ningún registro coincide con los filtros.' : 'Todavía no hay registros guardados.') + '</p>';
+  }else{
+    html += '<div class="tablewrap"><table><thead><tr><th>Fecha</th><th>Proyecto</th><th>Horario</th><th class="num">Duración</th><th>Origen</th><th>Nota</th><th>Acciones</th></tr></thead><tbody>';
+    filtrados.slice(0, 300).forEach(e => {
+      const zi = toZoned(Date.parse(e.inicio)), zf = toZoned(Date.parse(e.fin));
+      const cruza = dayKeyOf(zi) !== dayKeyOf(zf);
+      html += '<tr><td>' + esc(fmtDayShort(dayKeyOf(zi))) + '</td>'
+        + '<td>' + projectChip(projectById(e.projectId)) + '</td>'
+        + '<td>' + esc(hhmmOf(zi)) + ' – ' + esc(hhmmOf(zf))
+        + (cruza ? ' <span class="chip">cruza medianoche</span>' : '')
+        + ((e.pausas && e.pausas.length) ? ' <span class="chip">' + e.pausas.length + ' pausa(s)</span>' : '')
+        + '</td>'
+        + '<td class="num">' + esc(fmtDur(e.duracionMin)) + '</td>'
+        + '<td><span class="chip">' + (e.origen === 'tracker' ? 'Cronómetro' : 'Manual') + (e.editado ? ' · editado' : '') + '</span></td>'
+        + '<td>' + esc(e.nota || '') + '</td>'
+        + '<td><button class="btn ghost small" data-edit="' + esc(e.id) + '">Editar</button> '
+        + '<button class="btn danger small" data-del="' + esc(e.id) + '">Eliminar</button></td></tr>';
+    });
+    html += '</tbody></table></div>';
+    if(filtrados.length > 300) html += '<p class="hint">Se muestran los 300 registros más recientes de los ' + filtrados.length + ' que coinciden. Acota el rango de fechas para ver el resto.</p>';
+  }
+  html += '</div>';
+  return html;
+}
+
+function filteredEntries(){
+  const f = ui.regFilter;
+  const texto = f.texto.trim().toLowerCase();
+  return state.entries.filter(e => {
+    if(f.proyecto && e.projectId !== f.proyecto) return false;
+    const dk = dayKeyOf(toZoned(Date.parse(e.inicio)));
+    const dkFin = dayKeyOf(toZoned(Date.parse(e.fin)));
+    if(isDayKey(f.desde) && dkFin < f.desde) return false;
+    if(isDayKey(f.hasta) && dk > f.hasta) return false;
+    if(texto){
+      const hay = (e.nota || '').toLowerCase() + ' ' + projectName(e.projectId).toLowerCase();
+      if(hay.indexOf(texto) === -1) return false;
+    }
+    return true;
+  }).sort((a, b) => Date.parse(b.inicio) - Date.parse(a.inicio));
+}
+
+function wireRegistros(root){
+  root.querySelectorAll('input[name="re-modo"]').forEach(rb => {
+    rb.addEventListener('change', () => {
+      ui.manualMode = rb.value;
+      root.querySelector('#re-fin').disabled = rb.value !== 'fin';
+      root.querySelector('#re-dur').disabled = rb.value !== 'dur';
+    });
+  });
+
+  const guardar = root.querySelector('#re-guardar');
+  if(guardar) guardar.addEventListener('click', () => saveManualEntry(root));
+  const cancelar = root.querySelector('#re-cancelar');
+  if(cancelar) cancelar.addEventListener('click', () => { ui.editingEntryId = null; setMsg('registros','','' ); render(); });
+
+  const bind = (id, key) => {
+    const el = root.querySelector('#' + id);
+    if(el) el.addEventListener(el.tagName === 'SELECT' ? 'change' : 'input', () => {
+      ui.regFilter[key] = el.value;
+      renderInto('registros', true);
+    });
+  };
+  bind('rf-proy','proyecto'); bind('rf-desde','desde'); bind('rf-hasta','hasta'); bind('rf-texto','texto');
+  const limpiar = root.querySelector('#rf-limpiar');
+  if(limpiar) limpiar.addEventListener('click', () => {
+    ui.regFilter = { proyecto:'', desde:'', hasta:'', texto:'' };
+    render();
+  });
+
+  root.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', () => {
+    ui.editingEntryId = b.dataset.edit;
+    const e = state.entries.find(x => x.id === ui.editingEntryId);
+    ui.manualMode = 'fin';
+    setMsg('registros', e && e.pausas && e.pausas.length
+      ? 'Este registro vino de un cronómetro con pausas: al cambiar el horario, las pausas que queden fuera dejan de contar.'
+      : '', 'ok');
+    render();
+    const el = document.getElementById('re-proy');
+    if(el){ el.focus(); el.scrollIntoView({ block:'center' }); }
+  }));
+  root.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', () => {
+    const e = state.entries.find(x => x.id === b.dataset.del);
+    if(!e) return;
+    if(!confirm('¿Eliminar este registro de ' + fmtDur(e.duracionMin) + ' en «' + projectName(e.projectId) + '»?')) return;
+    state.entries = state.entries.filter(x => x.id !== e.id);
+    if(ui.editingEntryId === e.id) ui.editingEntryId = null;
+    save();
+    setMsg('registros','Registro eliminado.','ok');
+    say('Registro eliminado');
+    render();
+  }));
+}
+
+function saveManualEntry(root){
+  const proy = root.querySelector('#re-proy').value;
+  const fecha = root.querySelector('#re-fecha').value;
+  const hi = root.querySelector('#re-inicio').value;
+  const modo = ui.manualMode;
+  const hf = root.querySelector('#re-fin').value;
+  const durVal = root.querySelector('#re-dur').value;
+
+  if(!proy){ setMsg('registros','Elige un proyecto.','err'); render(); return; }
+  if(!isDayKey(fecha)){ setMsg('registros','Elige una fecha válida.','err'); render(); return; }
+  if(!/^\d{2}:\d{2}$/.test(hi)){ setMsg('registros','Indica la hora de inicio.','err'); render(); return; }
+
+  const inicioIso = isoFromLocal(fecha, hi);
+  if(!inicioIso){ setMsg('registros','No se pudo interpretar la fecha y hora de inicio.','err'); render(); return; }
+
+  let finIso;
+  if(modo === 'dur'){
+    const d = Math.round(num(durVal, 0));
+    if(!(d > 0)){ setMsg('registros','La duración tiene que ser mayor que cero.','err'); render(); return; }
+    if(d > 1440){ setMsg('registros','La duración máxima de un registro es 24 horas (1440 minutos).','err'); render(); return; }
+    finIso = new Date(Date.parse(inicioIso) + d * 60000).toISOString();
+  }else{
+    if(!/^\d{2}:\d{2}$/.test(hf)){ setMsg('registros','Indica la hora de fin, o cambia a duración.','err'); render(); return; }
+    let z = Date.parse(fecha + 'T' + hf + ':00Z');
+    const zi = Date.parse(fecha + 'T' + hi + ':00Z');
+    if(z <= zi) z += DAY; // termina al día siguiente
+    finIso = new Date(fromZoned(z)).toISOString();
+  }
+
+  const editing = ui.editingEntryId ? state.entries.find(e => e.id === ui.editingEntryId) : null;
+  const nota = (root.querySelector('#re-nota').value || '').slice(0, 200);
+  if(editing){
+    editing.projectId = proy;
+    editing.inicio = inicioIso;
+    editing.fin = finIso;
+    editing.nota = nota;
+    editing.editado = true;
+    editing.duracionMin = activeMinutes(editing);
+    if(editing.duracionMin <= 0){
+      setMsg('registros','El registro quedaría en cero minutos. Revisa el horario.','err'); render(); return;
+    }
+    ui.editingEntryId = null;
+    save();
+    setMsg('registros','Registro actualizado.','ok');
+    say('Registro actualizado');
+  }else{
+    const entry = {
+      id: uid('e'), projectId: proy, origen:'manual',
+      inicio: inicioIso, fin: finIso, duracionMin: 0,
+      nota: nota, editado:false, pausas: []
+    };
+    entry.duracionMin = activeMinutes(entry);
+    if(entry.duracionMin <= 0){ setMsg('registros','El registro quedaría en cero minutos. Revisa el horario.','err'); render(); return; }
+    state.entries.push(entry);
+    save();
+    setMsg('registros','Registro de ' + fmtDur(entry.duracionMin) + ' agregado.','ok');
+    say('Registro agregado');
+  }
+  render();
+}
+
+/* ───────────────────── vista: Proyectos ───────────────────── */
+
+function renderProyectos(){
+  const editing = ui.editingProjectId ? projectById(ui.editingProjectId) : null;
+  const f = ui.projFilter;
+
+  let html = '<div class="panel"><h2>' + (editing ? 'Editar proyecto' : 'Nuevo proyecto') + '</h2>'
+    + '<div class="row">'
+    + '<div class="field grow"><label for="pr-nombre">Nombre</label><input type="text" id="pr-nombre" maxlength="80" value="' + esc(editing ? editing.nombre : '') + '"></div>'
+    + '<div class="field"><label for="pr-sec">Sección</label><select id="pr-sec">' + sectionOptions(editing ? editing.sectionId : 'trabajo', '') + '</select></div>'
+    + '<div class="field"><label for="pr-color">Color</label><input type="color" id="pr-color" value="' + safeColor(editing ? editing.color : PALETTE[state.projects.length % PALETTE.length]) + '"></div>'
+    + '<div class="field"><label for="pr-meta">Meta semanal (horas)</label><input type="number" id="pr-meta" min="0" max="168" step="0.5" placeholder="opcional" value="'
+    + (editing && editing.metaHorasSemanales != null ? esc(editing.metaHorasSemanales) : '') + '"></div>'
+    + '<div class="field"><label for="pr-estado">Estado</label><select id="pr-estado">'
+    + '<option value="activo"' + (editing && editing.estado === 'archivado' ? '' : ' selected') + '>Activo</option>'
+    + '<option value="archivado"' + (editing && editing.estado === 'archivado' ? ' selected' : '') + '>Archivado</option>'
+    + '</select></div>'
+    + '<div class="field"><button class="btn" id="pr-guardar">' + (editing ? 'Guardar cambios' : 'Crear proyecto') + '</button></div>'
+    + (editing ? '<div class="field"><button class="btn ghost" id="pr-cancelar">Cancelar</button></div>' : '')
+    + '</div>' + msgHtml('proyectos') + '</div>';
+
+  const texto = f.texto.trim().toLowerCase();
+  const lista = state.projects.filter(p => {
+    if(f.seccion && p.sectionId !== f.seccion) return false;
+    if(f.estado && p.estado !== f.estado) return false;
+    if(texto && p.nombre.toLowerCase().indexOf(texto) === -1) return false;
+    return true;
+  }).sort((a, b) => a.sectionId.localeCompare(b.sectionId) || a.nombre.localeCompare(b.nombre));
+
+  html += '<div class="panel"><h2>Proyectos (' + lista.length + ' de ' + state.projects.length + ')</h2>'
+    + '<div class="row">'
+    + '<div class="field"><label for="pjf-sec">Sección</label><select id="pjf-sec">' + sectionOptions(f.seccion, 'Todas') + '</select></div>'
+    + '<div class="field"><label for="pjf-estado">Estado</label><select id="pjf-estado">'
+    + '<option value=""' + (f.estado === '' ? ' selected' : '') + '>Todos</option>'
+    + '<option value="activo"' + (f.estado === 'activo' ? ' selected' : '') + '>Activos</option>'
+    + '<option value="archivado"' + (f.estado === 'archivado' ? ' selected' : '') + '>Archivados</option>'
+    + '</select></div>'
+    + '<div class="field grow"><label for="pjf-texto">Buscar</label><input type="search" id="pjf-texto" value="' + esc(f.texto) + '" placeholder="nombre del proyecto"></div>'
+    + '<div class="field"><button class="btn ghost" id="pjf-limpiar">Limpiar filtros</button></div>'
+    + '</div>';
+
+  if(!lista.length){
+    html += '<p class="empty">' + (state.projects.length ? 'Ningún proyecto coincide con los filtros.' : 'Todavía no hay proyectos. Crea el primero arriba.') + '</p>';
+  }else{
+    const totales = {};
+    state.entries.forEach(e => { totales[e.projectId] = (totales[e.projectId] || 0) + e.duracionMin; });
+    html += '<div class="tablewrap"><table><thead><tr><th>Proyecto</th><th>Sección</th><th class="num">Meta semanal</th><th class="num">Total registrado</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>';
+    lista.forEach(p => {
+      html += '<tr><td>' + projectChip(p) + '</td>'
+        + '<td>' + esc(sectionById(p.sectionId).nombre) + '</td>'
+        + '<td class="num">' + (p.metaHorasSemanales != null ? esc(fmtHoursShort(p.metaHorasSemanales * 60)) : '—') + '</td>'
+        + '<td class="num">' + esc(fmtDur(totales[p.id] || 0)) + '</td>'
+        + '<td><span class="chip">' + (p.estado === 'archivado' ? 'Archivado' : 'Activo') + '</span></td>'
+        + '<td><button class="btn ghost small" data-pedit="' + esc(p.id) + '">Editar</button> '
+        + '<button class="btn ghost small" data-parch="' + esc(p.id) + '">' + (p.estado === 'archivado' ? 'Reactivar' : 'Archivar') + '</button> '
+        + '<button class="btn danger small" data-pdel="' + esc(p.id) + '">Eliminar</button></td></tr>';
+    });
+    html += '</tbody></table></div>';
+  }
+  html += '</div>';
+  return html;
+}
+
+function wireProyectos(root){
+  const guardar = root.querySelector('#pr-guardar');
+  if(guardar) guardar.addEventListener('click', () => {
+    const nombre = (root.querySelector('#pr-nombre').value || '').trim().slice(0, 80);
+    const sec = root.querySelector('#pr-sec').value;
+    const color = safeColor(root.querySelector('#pr-color').value);
+    const metaRaw = root.querySelector('#pr-meta').value;
+    const estado = root.querySelector('#pr-estado').value === 'archivado' ? 'archivado' : 'activo';
+    if(!nombre){ setMsg('proyectos','El proyecto necesita un nombre.','err'); render(); return; }
+    if(SECTION_IDS.indexOf(sec) === -1){ setMsg('proyectos','Sección no válida.','err'); render(); return; }
+    const meta = metaRaw === '' ? null : clamp(num(metaRaw, 0), 0, 168);
+
+    const editing = ui.editingProjectId ? projectById(ui.editingProjectId) : null;
+    const dup = state.projects.some(p => p.nombre.toLowerCase() === nombre.toLowerCase() && (!editing || p.id !== editing.id));
+    if(dup){ setMsg('proyectos','Ya existe un proyecto con ese nombre.','err'); render(); return; }
+
+    if(editing){
+      Object.assign(editing, { nombre, sectionId:sec, color, metaHorasSemanales:meta, estado });
+      ui.editingProjectId = null;
+      setMsg('proyectos','Proyecto actualizado.','ok');
+      say('Proyecto actualizado');
+    }else{
+      state.projects.push({ id: uid('p'), sectionId:sec, nombre, color, estado, metaHorasSemanales:meta });
+      setMsg('proyectos','Proyecto creado.','ok');
+      say('Proyecto creado');
+    }
+    save();
+    render();
+  });
+  const cancelar = root.querySelector('#pr-cancelar');
+  if(cancelar) cancelar.addEventListener('click', () => { ui.editingProjectId = null; setMsg('proyectos','',''); render(); });
+
+  const bind = (id, key) => {
+    const el = root.querySelector('#' + id);
+    if(el) el.addEventListener(el.tagName === 'SELECT' ? 'change' : 'input', () => {
+      ui.projFilter[key] = el.value;
+      renderInto('proyectos', true);
+    });
+  };
+  bind('pjf-sec','seccion'); bind('pjf-estado','estado'); bind('pjf-texto','texto');
+  const limpiar = root.querySelector('#pjf-limpiar');
+  if(limpiar) limpiar.addEventListener('click', () => { ui.projFilter = { seccion:'', estado:'', texto:'' }; render(); });
+
+  root.querySelectorAll('[data-pedit]').forEach(b => b.addEventListener('click', () => {
+    ui.editingProjectId = b.dataset.pedit;
+    setMsg('proyectos','','');
+    render();
+    const el = document.getElementById('pr-nombre');
+    if(el){ el.focus(); el.scrollIntoView({ block:'center' }); }
+  }));
+  root.querySelectorAll('[data-parch]').forEach(b => b.addEventListener('click', () => {
+    const p = projectById(b.dataset.parch);
+    if(!p) return;
+    p.estado = p.estado === 'archivado' ? 'activo' : 'archivado';
+    save();
+    setMsg('proyectos','«' + p.nombre + '» ahora está ' + (p.estado === 'archivado' ? 'archivado' : 'activo') + '.','ok');
+    say('Proyecto ' + p.estado);
+    render();
+  }));
+  root.querySelectorAll('[data-pdel]').forEach(b => b.addEventListener('click', () => {
+    const p = projectById(b.dataset.pdel);
+    if(!p) return;
+    const nEntries = state.entries.filter(e => e.projectId === p.id).length;
+    const nTrack = state.activeTrackers.filter(t => t.projectId === p.id).length;
+    const aviso = '¿Eliminar el proyecto «' + p.nombre + '»?'
+      + (nEntries ? '\n\nSe borrarán también sus ' + nEntries + ' registro(s) de tiempo.' : '')
+      + (nTrack ? '\nSe descartarán ' + nTrack + ' cronómetro(s) en curso.' : '')
+      + '\n\nSi solo quieres dejar de verlo, usa «Archivar»: eso conserva el historial.';
+    if(!confirm(aviso)) return;
+    state.projects = state.projects.filter(x => x.id !== p.id);
+    state.entries = state.entries.filter(e => e.projectId !== p.id);
+    state.activeTrackers = state.activeTrackers.filter(t => t.projectId !== p.id);
+    if(ui.editingProjectId === p.id) ui.editingProjectId = null;
+    save();
+    setMsg('proyectos','Proyecto eliminado.','ok');
+    say('Proyecto eliminado');
+    render();
+  }));
+}
+
+/* ───────────────────── vista: Ajustes ───────────────────── */
+
+const TIMEZONES = ['America/Santo_Domingo','America/New_York','America/Chicago','America/Bogota','America/Mexico_City','Europe/Madrid','UTC'];
+
+function renderAjustes(){
+  const s = state.settings;
+  let html = '<div class="panel"><h2>Preferencias</h2><div class="row">'
+    + '<div class="field grow"><label for="aj-tz">Zona horaria</label><select id="aj-tz">'
+    + TIMEZONES.concat(TIMEZONES.indexOf(s.timezone) === -1 ? [s.timezone] : [])
+        .map(t => '<option value="' + esc(t) + '"' + (t === s.timezone ? ' selected' : '') + '>' + esc(t) + '</option>').join('')
+    + '</select></div>'
+    + '<div class="field"><label for="aj-sueno">Sueño por defecto (horas)</label><input type="number" id="aj-sueno" min="0" max="24" step="0.5" value="' + esc(s.sleepHoursDefault) + '"></div>'
+    + '<div class="field"><label for="aj-comida">Comida por defecto (horas)</label><input type="number" id="aj-comida" min="0" max="24" step="0.5" value="' + esc(s.mealHoursDefault) + '"></div>'
+    + '<div class="field"><label for="aj-stale">Avisar si un cronómetro lleva más de (horas)</label><input type="number" id="aj-stale" min="1" max="48" step="1" value="' + esc(s.staleTrackerAlertHours) + '"></div>'
+    + '<div class="field"><button class="btn" id="aj-guardar">Guardar preferencias</button></div>'
+    + '</div>'
+    + '<p class="hint">Con estos valores, cada día tiene ' + esc(fmtDur(Math.max(0, (24 - num(s.sleepHoursDefault,0) - num(s.mealHoursDefault,0)) * 60))) + ' disponibles.</p>'
+    + msgHtml('ajustes') + '</div>';
+
+  // Excepciones de bloques fijos
+  const f = ui.ovFilter;
+  const lista = state.fixedBlockOverrides.filter(o => {
+    if(isDayKey(f.desde) && o.fecha < f.desde) return false;
+    if(isDayKey(f.hasta) && o.fecha > f.hasta) return false;
+    return true;
+  }).sort((a, b) => b.fecha.localeCompare(a.fecha) || a.tipo.localeCompare(b.tipo));
+
+  html += '<div class="panel"><h2>Excepciones de sueño y comida</h2>'
+    + '<p class="hint">Días concretos en los que dormiste o comiste distinto de lo habitual.</p>'
+    + '<div class="row">'
+    + '<div class="field"><label for="ovn-fecha">Fecha</label><input type="date" id="ovn-fecha" value="' + esc(todayKey()) + '"></div>'
+    + '<div class="field"><label for="ovn-tipo">Tipo</label><select id="ovn-tipo"><option value="sueno">Sueño</option><option value="comida">Comida</option></select></div>'
+    + '<div class="field"><label for="ovn-horas">Horas</label><input type="number" id="ovn-horas" min="0" max="24" step="0.5" value="6"></div>'
+    + '<div class="field"><button class="btn" id="ovn-add">Agregar excepción</button></div>'
+    + '</div>'
+    + '<div class="row" style="margin-top:10px">'
+    + '<div class="field"><label for="ovf-desde">Desde</label><input type="date" id="ovf-desde" value="' + esc(f.desde) + '"></div>'
+    + '<div class="field"><label for="ovf-hasta">Hasta</label><input type="date" id="ovf-hasta" value="' + esc(f.hasta) + '"></div>'
+    + '<div class="field"><button class="btn ghost" id="ovf-limpiar">Limpiar filtro</button></div>'
+    + '</div>';
+  if(!lista.length){
+    html += '<p class="empty">' + (state.fixedBlockOverrides.length ? 'Ninguna excepción en ese rango.' : 'No hay excepciones: todos los días usan los valores por defecto.') + '</p>';
+  }else{
+    html += '<div class="tablewrap"><table><thead><tr><th>Fecha</th><th>Tipo</th><th class="num">Horas</th><th>Acciones</th></tr></thead><tbody>';
+    lista.forEach(o => {
+      html += '<tr><td>' + esc(fmtDayShort(o.fecha)) + ' ' + esc(o.fecha.slice(0,4)) + '</td>'
+        + '<td>' + (o.tipo === 'sueno' ? 'Sueño' : 'Comida') + '</td>'
+        + '<td class="num">' + esc(o.horas) + ' h</td>'
+        + '<td><button class="btn danger small" data-ovdel="' + esc(o.fecha + '|' + o.tipo) + '">Quitar</button></td></tr>';
+    });
+    html += '</tbody></table></div>';
+  }
+  html += '</div>';
+
+  html += '<div class="panel"><h2>Tus datos</h2>'
+    + '<p class="muted">' + state.projects.length + ' proyecto(s), ' + state.entries.length + ' registro(s) de tiempo, '
+    + state.activeTrackers.length + ' cronómetro(s) en curso y ' + state.fixedBlockOverrides.length + ' excepción(es).</p>'
+    + '<p class="hint">Todo se guarda en tu cuenta de LIPS-HUB y queda también en este navegador. El cálculo de sobrecarga se hace aquí mismo, sin enviar nada a ningún otro servicio.</p>'
+    + '</div>';
+  return html;
+}
+
+function wireAjustes(root){
+  const guardar = root.querySelector('#aj-guardar');
+  if(guardar) guardar.addEventListener('click', () => {
+    const tz = root.querySelector('#aj-tz').value;
+    const sueno = clamp(num(root.querySelector('#aj-sueno').value, 7), 0, 24);
+    const comida = clamp(num(root.querySelector('#aj-comida').value, 3), 0, 24);
+    const stale = clamp(Math.round(num(root.querySelector('#aj-stale').value, 6)), 1, 48);
+    if(sueno + comida > 24){ setMsg('ajustes','Sueño y comida no pueden sumar más de 24 horas.','err'); render(); return; }
+    state.settings.timezone = tz;
+    state.settings.sleepHoursDefault = sueno;
+    state.settings.mealHoursDefault = comida;
+    state.settings.staleTrackerAlertHours = stale;
+    tzWarned = false;
+    save();
+    setMsg('ajustes','Preferencias guardadas.','ok');
+    say('Preferencias guardadas');
+    render();
+  });
+
+  const add = root.querySelector('#ovn-add');
+  if(add) add.addEventListener('click', () => {
+    const fecha = root.querySelector('#ovn-fecha').value;
+    const tipo = root.querySelector('#ovn-tipo').value;
+    const horas = clamp(num(root.querySelector('#ovn-horas').value, 0), 0, 24);
+    if(!isDayKey(fecha)){ setMsg('ajustes','Elige una fecha válida.','err'); render(); return; }
+    const otro = tipo === 'sueno' ? 'comida' : 'sueno';
+    if(horas + blockHours(fecha, otro) > 24){
+      setMsg('ajustes','Sueño y comida de ese día no pueden sumar más de 24 horas.','err'); render(); return;
+    }
+    setOverride(fecha, tipo, horas);
+    save();
+    setMsg('ajustes','Excepción guardada.','ok');
+    say('Excepción guardada');
+    render();
+  });
+
+  const bind = (id, key) => {
+    const el = root.querySelector('#' + id);
+    if(el) el.addEventListener('change', () => { ui.ovFilter[key] = el.value; renderInto('ajustes', true); });
+  };
+  bind('ovf-desde','desde'); bind('ovf-hasta','hasta');
+  const limpiar = root.querySelector('#ovf-limpiar');
+  if(limpiar) limpiar.addEventListener('click', () => { ui.ovFilter = { desde:'', hasta:'' }; render(); });
+
+  root.querySelectorAll('[data-ovdel]').forEach(b => b.addEventListener('click', () => {
+    const [fecha, tipo] = b.dataset.ovdel.split('|');
+    state.fixedBlockOverrides = state.fixedBlockOverrides.filter(o => !(o.fecha === fecha && o.tipo === tipo));
+    save();
+    setMsg('ajustes','Excepción quitada.','ok');
+    render();
+  }));
+}
+
+/* ───────────────────── render y navegación ───────────────────── */
+
+const VIEWS = {
+  panel:     { render:renderPanel,     wire:wirePanel },
+  trackers:  { render:renderTrackers,  wire:wireTrackers },
+  registros: { render:renderRegistros, wire:wireRegistros },
+  proyectos: { render:renderProyectos, wire:wireProyectos },
+  ajustes:   { render:renderAjustes,   wire:wireAjustes }
+};
+
+// `keepFocus` re-dibuja conservando el elemento que tenía el foco y su
+// posición del cursor: sin eso, escribir en un filtro de texto lo perdería
+// tras la primera letra.
+function renderInto(view, keepFocus){
+  const root = document.getElementById('view-' + view);
+  if(!root) return;
+  const act = document.activeElement;
+  const focusId = keepFocus && act && act.id ? act.id : null;
+  const selStart = focusId && act.setSelectionRange ? act.selectionStart : null;
+  const selEnd = focusId && act.setSelectionRange ? act.selectionEnd : null;
+
+  root.innerHTML = VIEWS[view].render();
+  VIEWS[view].wire(root);
+
+  if(focusId){
+    const again = document.getElementById(focusId);
+    if(again){
+      again.focus();
+      if(selStart != null && again.setSelectionRange){
+        try{ again.setSelectionRange(selStart, selEnd); }catch(e){}
+      }
+    }
+  }
+}
+
+function render(){
+  renderInto(ui.view, false);
+  renderRunningChip();
+}
+
+function renderRunningChip(){
+  const el = document.getElementById('running-chip');
+  const n = state.activeTrackers.length;
+  if(!n){ el.innerHTML = ''; return; }
+  const nowMs = Date.now();
+  const total = state.activeTrackers.reduce((a, t) => a + trackerElapsed(t, nowMs), 0);
+  el.innerHTML = '<span class="running-chip"><span class="dot" aria-hidden="true"></span>'
+    + n + (n === 1 ? ' cronómetro' : ' cronómetros') + ' en curso · <span data-chip-total>' + fmtClock(total) + '</span></span>';
+}
+
+function switchView(view){
+  if(!VIEWS[view]) return;
+  ui.view = view;
+  document.querySelectorAll('[role="tab"]').forEach(t => {
+    const on = t.dataset.view === view;
+    t.setAttribute('aria-selected', on ? 'true' : 'false');
+    t.tabIndex = on ? 0 : -1;
+    document.getElementById('view-' + t.dataset.view).hidden = !on;
+  });
+  render();
+}
+
+document.querySelectorAll('[role="tab"]').forEach(tab => {
+  tab.addEventListener('click', () => switchView(tab.dataset.view));
+  tab.addEventListener('keydown', (e) => {
+    const tabs = Array.from(document.querySelectorAll('[role="tab"]'));
+    const i = tabs.indexOf(tab);
+    let next = null;
+    if(e.key === 'ArrowRight') next = tabs[(i + 1) % tabs.length];
+    else if(e.key === 'ArrowLeft') next = tabs[(i - 1 + tabs.length) % tabs.length];
+    else if(e.key === 'Home') next = tabs[0];
+    else if(e.key === 'End') next = tabs[tabs.length - 1];
+    if(next){ e.preventDefault(); next.focus(); switchView(next.dataset.view); }
+  });
+});
+
+/* ───────────────────── aviso de cronómetro olvidado ─────────────────────
+   Pop-up centrado, no un banner: decisión 5 cerrada con la usuaria, tomada
+   a propósito en contra de la recomendación de algo menos invasivo, porque
+   la prioridad es que no pase desapercibido. */
+let modalPrevFocus = null;
+
+function staleTrackers(){
+  const nowMs = Date.now();
+  const limite = staleMs();
+  return state.activeTrackers.filter(t => (nowMs - Date.parse(t.startedAt)) > limite);
+}
+
+function checkStaleTrackers(){
+  const viejos = staleTrackers();
+  if(!viejos.length) return;
+  const host = document.getElementById('modal-host');
+  const horas = clamp(num(state.settings.staleTrackerAlertHours, 6), 1, 48);
+  const nowMs = Date.now();
+
+  host.innerHTML = '<div class="modal-back"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" aria-describedby="modal-desc">'
+    + '<h2 id="modal-title">⏳ Hay ' + (viejos.length === 1 ? 'un cronómetro' : viejos.length + ' cronómetros') + ' sin detener</h2>'
+    + '<p id="modal-desc">Lleva' + (viejos.length === 1 ? '' : 'n') + ' más de ' + horas + ' horas corriendo. Confirma si el tiempo es real o corrígelo antes de que ensucie tus totales.</p>'
+    + '<ul>' + viejos.map(t => '<li><strong>' + esc(projectName(t.projectId)) + '</strong> — '
+        + esc(fmtClock(trackerElapsed(t, nowMs))) + ' desde ' + esc(fmtDayShort(dayKeyOf(toZoned(Date.parse(t.startedAt)))))
+        + ' ' + esc(hhmmOf(toZoned(Date.parse(t.startedAt)))) + '</li>').join('') + '</ul>'
+    + '<div class="actions">'
+    + '<button class="btn" id="mo-stop">Detener ' + (viejos.length === 1 ? 'ahora' : 'todos ahora') + '</button>'
+    + '<button class="btn ghost" id="mo-fix">Ir a corregir</button>'
+    + '<button class="btn ghost" id="mo-later">Dejarlo corriendo</button>'
+    + '</div></div></div>';
+
+  modalPrevFocus = document.activeElement;
+  lockBehindModal(host);
+  const modal = host.querySelector('.modal');
+  const focusables = () => Array.from(modal.querySelectorAll('button'));
+  focusables()[0].focus();
+
+  // Trampa de foco: mientras el aviso está abierto, el Tab no debe salirse a
+  // la página de atrás.
+  modal.addEventListener('keydown', (e) => {
+    if(e.key === 'Escape'){ e.preventDefault(); closeModal(); return; }
+    if(e.key !== 'Tab') return;
+    const f = focusables();
+    const first = f[0], last = f[f.length - 1];
+    if(e.shiftKey && document.activeElement === first){ e.preventDefault(); last.focus(); }
+    else if(!e.shiftKey && document.activeElement === last){ e.preventDefault(); first.focus(); }
+  });
+
+  host.querySelector('#mo-stop').addEventListener('click', () => {
+    const iso = new Date().toISOString();
+    staleTrackers().forEach(t => stopTracker(t, iso));
+    closeModal();
+    say('Cronómetros detenidos y guardados');
+    render();
+  });
+  host.querySelector('#mo-fix').addEventListener('click', () => {
+    closeModal();
+    switchView('trackers');
+    setMsg('trackers','Detén el cronómetro y luego ajusta el horario del registro en la pestaña Registros.','ok');
+    render();
+  });
+  host.querySelector('#mo-later').addEventListener('click', closeModal);
+}
+
+/* La trampa de foco sola no basta: un lector de pantalla en modo de cursor
+   virtual no navega con Tab, así que puede seguir "entrando" al contenido de
+   atrás aunque el foco no salga del aviso. `inert` lo saca del árbol de
+   accesibilidad, no solo del orden de tabulación — es lo mismo que hace el
+   candado de auth-gate.js. Se recuerda qué se marcó para devolverlo como
+   estaba (puede haber elementos ya inertes por el candado). */
+let modalInerted = [];
+function lockBehindModal(host){
+  modalInerted = [];
+  Array.prototype.forEach.call(document.body.children, (el) => {
+    if(el === host || el.hasAttribute('inert')) return;
+    el.setAttribute('inert', '');
+    modalInerted.push(el);
+  });
+}
+function unlockBehindModal(){
+  modalInerted.forEach(el => el.removeAttribute('inert'));
+  modalInerted = [];
+}
+
+function closeModal(){
+  document.getElementById('modal-host').innerHTML = '';
+  unlockBehindModal();
+  if(modalPrevFocus && modalPrevFocus.focus) modalPrevFocus.focus();
+  modalPrevFocus = null;
+}
+
+/* ───────────────────── arranque y latido ───────────────────── */
+
+(async () => {
+  await load();
+  cloudSyncReady = true;
+  render();
+  checkStaleTrackers();
+})();
+
+/* El cronómetro en pantalla se refresca cada segundo, pero NO se guarda cada
+   segundo: los datos solo se escriben en start/pause/resume/stop. Así un
+   cronómetro de varias horas no genera cientos de escrituras a Supabase. */
+setInterval(() => {
+  if(!state.activeTrackers.length) return;
+  const nowMs = Date.now();
+  document.querySelectorAll('[data-elapsed]').forEach(el => {
+    const t = state.activeTrackers.find(x => x.id === el.dataset.elapsed);
+    if(t) el.textContent = fmtClock(trackerElapsed(t, nowMs));
+  });
+  const chip = document.querySelector('[data-chip-total]');
+  if(chip) chip.textContent = fmtClock(state.activeTrackers.reduce((a, t) => a + trackerElapsed(t, nowMs), 0));
+}, 1000);
+
+/* El panel sí depende del reloj (un cronómetro en curso mueve los totales),
+   pero volver a dibujarlo cada segundo sería tirar el foco de quien esté
+   usando un filtro. Se refresca cada minuto y solo si nadie está escribiendo. */
+setInterval(() => {
+  if(ui.view !== 'panel' || !state.activeTrackers.length) return;
+  const a = document.activeElement;
+  if(a && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName)) return;
+  if(document.getElementById('modal-host').children.length) return;
+  render();
+}, 60000);
+</script>
+</body>
+</html>
