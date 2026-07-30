@@ -76,6 +76,14 @@ guardar el cambio, no quedaron pendientes:
   app con Tab.
 - Los campos "hora de fin" y "duración" del formulario de registro no tenían
   nombre propio para un lector de pantalla. Ya lo tienen.
+- Si detenías un cronómetro que había estado en pausa todo el rato, la app
+  decía "guardado como registro" **sin haber guardado nada**. Ahora te avisa
+  claramente de que no había tiempo que guardar, y cuando sí lo hay, te dice
+  cuánto guardó.
+
+También se escribió la documentación de la app en `docs/hourglass/`:
+requerimientos, guía de entrenamiento paso a paso y diagrama del flujo de
+trabajo.
 
 ## Dónde quedó
 

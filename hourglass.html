@@ -1300,9 +1300,16 @@ function trackerAction(act, id){
     if(isPaused(t)) t.pausedIntervals[t.pausedIntervals.length - 1].to = nowIso;
     save(); setMsg('trackers','Cronómetro reanudado.','ok'); say('Cronómetro reanudado');
   }else if(act === 'stop'){
-    stopTracker(t, nowIso);
-    setMsg('trackers','Cronómetro detenido y guardado como registro.','ok');
-    say('Cronómetro detenido y guardado');
+    const guardado = stopTracker(t, nowIso);
+    if(guardado){
+      setMsg('trackers','Cronómetro detenido y guardado como registro de ' + fmtDur(guardado.duracionMin) + '.','ok');
+      say('Cronómetro detenido y guardado');
+    }else{
+      // Sin esto el mensaje decía "guardado como registro" aunque no se
+      // hubiera guardado nada: éxito falso sobre una pérdida de datos.
+      setMsg('trackers','El cronómetro se detuvo, pero NO se guardó ningún registro: todo su tiempo estaba en pausa.','err');
+      say('Cronómetro detenido sin tiempo que guardar');
+    }
   }else if(act === 'discard'){
     if(!confirm('¿Descartar este cronómetro sin guardar el tiempo?')) return;
     state.activeTrackers = state.activeTrackers.filter(x => x.id !== id);
@@ -1323,9 +1330,15 @@ function stopTracker(t, endIso){
     nota: t.nota || '', editado:false, pausas: pausas
   };
   entry.duracionMin = activeMinutes(entry);
-  if(entry.duracionMin > 0) state.entries.push(entry);
+  // Devuelve el registro creado, o null si no había tiempo activo que
+  // guardar (todo el rato quedó dentro de las pausas). Quien llama tiene que
+  // avisar de la diferencia: detener un cronómetro y no guardar nada es una
+  // pérdida de datos, no un éxito.
+  const guardado = entry.duracionMin > 0 ? entry : null;
+  if(guardado) state.entries.push(entry);
   state.activeTrackers = state.activeTrackers.filter(x => x.id !== t.id);
   save();
+  return guardado;
 }
 
 /* ───────────────────── vista: Registros ───────────────────── */
@@ -1924,9 +1937,15 @@ function checkStaleTrackers(){
 
   host.querySelector('#mo-stop').addEventListener('click', () => {
     const iso = new Date().toISOString();
-    staleTrackers().forEach(t => stopTracker(t, iso));
+    let guardados = 0, vacios = 0;
+    staleTrackers().forEach(t => { stopTracker(t, iso) ? guardados++ : vacios++; });
     closeModal();
-    say('Cronómetros detenidos y guardados');
+    switchView('trackers');
+    setMsg('trackers', vacios
+      ? guardados + ' cronómetro(s) guardado(s) como registro. ' + vacios + ' se detuvo(eron) sin guardar nada, porque todo su tiempo estaba en pausa.'
+      : guardados + ' cronómetro(s) detenido(s) y guardado(s) como registro.',
+      vacios ? 'err' : 'ok');
+    say('Cronómetros detenidos');
     render();
   });
   host.querySelector('#mo-fix').addEventListener('click', () => {
