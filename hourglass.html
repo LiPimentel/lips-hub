@@ -1937,7 +1937,16 @@ function renderRegistros(){
     html += '<p class="empty">Primero crea un proyecto en la pestaña Proyectos.</p>';
   }else{
     html += '<div class="row">'
-      + '<div class="field grow"><label for="re-proy">Proyecto</label><select id="re-proy">' + projectOptions(proy, { vacio:'Elige un proyecto', incluirSistema: !!(editing && esEntradaFija(editing)) }) + '</select></div>'
+      /* Un registro de Sueño o Comidas no puede cambiarse de proyecto: esos
+         registros están fuera del cálculo de sobrecarga, y moverlo a un
+         proyecto normal metería 7 h de sueño en la carga del día sin que se
+         note. Se puede corregir su horario, no su identidad. */
+      + '<div class="field grow"><label for="re-proy">Proyecto</label><select id="re-proy"'
+      + (editing && esEntradaFija(editing) ? ' disabled' : '') + '>'
+      + projectOptions(proy, { vacio:'Elige un proyecto', incluirSistema: !!(editing && esEntradaFija(editing)) }) + '</select>'
+      + (editing && esEntradaFija(editing)
+          ? '<span class="hint">Un bloque fijo no cambia de proyecto. Sí puedes ajustar su horario.</span>' : '')
+      + '</div>'
       + '<div class="field"><label for="re-fecha">Fecha</label><input type="date" id="re-fecha" value="' + esc(d) + '"></div>'
       + '<div class="field"><label for="re-inicio">Hora de inicio</label><input type="time" id="re-inicio" value="' + esc(hi) + '"></div>'
       + '</div>'
@@ -2102,7 +2111,10 @@ function saveManualEntry(root){
   const editing = ui.editingEntryId ? state.entries.find(e => e.id === ui.editingEntryId) : null;
   const nota = (root.querySelector('#re-nota').value || '').slice(0, 200);
   if(editing){
-    editing.projectId = proy;
+    // El selector va deshabilitado para los bloques fijos, pero la comprobación
+    // se repite aquí: deshabilitar un control es una ayuda de la interfaz, no
+    // una garantía de que el valor no llegue de otra forma.
+    editing.projectId = esEntradaFija(editing) ? editing.projectId : proy;
     editing.inicio = inicioIso;
     editing.fin = finIso;
     editing.nota = nota;
@@ -2507,20 +2519,40 @@ const FLOAT_PREF_KEY = 'hourglass_float_panel';
 const TITULO_BASE = document.title;
 const fp = { x:null, y:null, min:false, dragging:false };
 
+/* Aislada por usuario como el resto de la caché, aunque sea solo una posición:
+   mantener el mismo patrón `scopedKey` en todo evita tener que razonar caso
+   por caso sobre qué se puede compartir entre cuentas del mismo navegador. */
+function floatPrefKey(){ return scopedKey(FLOAT_PREF_KEY, cachedUserId); }
+
 function loadFloatPref(){
   try{
-    const raw = localStorage.getItem(FLOAT_PREF_KEY);
+    const raw = localStorage.getItem(floatPrefKey());
     if(!raw) return;
     const p = JSON.parse(raw);
-    if(typeof p.x === 'number') fp.x = p.x;
-    if(typeof p.y === 'number') fp.y = p.y;
+    /* Solo números finitos de verdad. Ojo con `isFinite` a secas: convierte
+       antes de comprobar, así que `isFinite(null)` es `true` y un `y:null`
+       manipulado entraba como 0, pegando el panel al borde de arriba. */
+    if(typeof p.x === 'number' && isFinite(p.x)) fp.x = p.x;
+    if(typeof p.y === 'number' && isFinite(p.y)) fp.y = p.y;
     fp.min = !!p.min;
   }catch(e){ /* preferencia ilegible: se usa la posición por defecto */ }
 }
 function saveFloatPref(){
   try{
-    localStorage.setItem(FLOAT_PREF_KEY, JSON.stringify({ x:fp.x, y:fp.y, min:fp.min }));
+    localStorage.setItem(floatPrefKey(), JSON.stringify({ x:fp.x, y:fp.y, min:fp.min }));
   }catch(e){}
+}
+
+/* Franja de arriba que el panel no puede invadir: la cabecera y la barra de
+   pestañas. Medido en móvil, el panel arrastrado hacia arriba se ponía encima
+   de las pestañas y se las comía — un toque en la pestaña aterrizaba en el
+   panel, no en el control de abajo. Se reserva su alto aunque la página esté
+   desplazada, para que el panel no salte de sitio al hacer scroll. */
+function limiteSuperiorFlotante(){
+  const cab = document.querySelector('header.app');
+  const nav = document.querySelector('nav.tabs');
+  const alto = (cab ? cab.offsetHeight : 0) + (nav ? nav.offsetHeight : 0);
+  return Math.max(6, alto + 6);
 }
 
 // Mantiene el panel dentro de la ventana: sin esto, al achicar la ventana
@@ -2528,9 +2560,13 @@ function saveFloatPref(){
 function clampFloat(x, y, el){
   const w = el ? el.offsetWidth : 310;
   const h = el ? el.offsetHeight : 120;
+  const maxY = Math.max(6, window.innerHeight - h - 6);
+  // En una pantalla muy baja la franja reservada podría no dejar sitio: ahí
+  // manda caber en la ventana, que es lo irrecuperable.
+  const minY = Math.min(limiteSuperiorFlotante(), maxY);
   return {
     x: clamp(x, 6, Math.max(6, window.innerWidth - w - 6)),
-    y: clamp(y, 6, Math.max(6, window.innerHeight - h - 6))
+    y: clamp(y, minY, maxY)
   };
 }
 
@@ -2647,8 +2683,8 @@ function wireFloatPanel(panel){
     // de recuperarlo sin arrastrarlo a ciegas.
     if(e.key === 'Home'){
       e.preventDefault();
-      fp.x = 16;
-      fp.y = Math.max(16, window.innerHeight - panel.offsetHeight - 16);
+      const inicio = clampFloat(16, window.innerHeight - panel.offsetHeight - 16, panel);
+      fp.x = inicio.x; fp.y = inicio.y;
       panel.style.left = fp.x + 'px';
       panel.style.top = fp.y + 'px';
       saveFloatPref();
@@ -2802,12 +2838,16 @@ function closeModal(){
 /* ───────────────────── arranque y latido ───────────────────── */
 
 (async () => {
-  loadFloatPref();
   await load();
+  // Después de load(), que es quien resuelve cachedUserId: la preferencia del
+  // panel va aislada por usuario y antes de eso no se sabe cuál es.
+  loadFloatPref();
   cloudSyncReady = true;
-  // Los registros automáticos de sueño y comidas se ponen al día al abrir la
-  // app, y solo se guarda si de verdad se creó alguno.
-  if(generarFijosPendientes()) save();
+  /* Los registros automáticos se ponen al día al abrir la app, pero solo con
+     sesión confirmada. Sin ella, `cachedUserId` es null y guardar escribiría
+     en la clave sin aislar por usuario — el mismo principio de "no guardar
+     nada antes de confirmar quién eres" que ya sigue `load()`. */
+  if(cachedUserId && generarFijosPendientes()) save();
   render();
   checkStaleTrackers();
 })();

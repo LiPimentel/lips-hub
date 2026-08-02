@@ -112,3 +112,109 @@ Verificado y funcionando:
   app. Ver caso borde 5 en `docs/hourglass/requerimientos.md` para el detalle completo y la
   recomendación de fix.
 
+## 2026-08-02 — revisión del commit `64fc5b6` (CR-01 a CR-04 + correcciones de accesibilidad)
+
+Servidor real `http://localhost:8791/`, worktree `claude/hourglass-app` fusionado con `master`.
+Verificado contra `git diff 195c205..64fc5b6` real (no la descripción del encargo). Candado
+quitado con el script de bypass dado en el encargo; nota de método: ese script sobreescribe
+`Element.prototype.setAttribute` para bloquear `inert` — hay que **restaurarlo** (tomando un
+`setAttribute` nativo de un `<iframe>` desechable) antes de poder probar el propio `inert` de la
+app (`lockBehindModal`/`unlockBehindModal`), si no cualquier prueba de "el panel queda bloqueado
+por el modal" da negativo por el propio bypass, no por un bug de la app. Ver también el aviso más
+abajo sobre no mutar `document.body.children` (childList) mientras el candado original sigue sin
+desconectar su `MutationObserver` — reaparece `inert` en todo el body si se hace.
+
+Verificado y funcionando (ejecución real: funciones invocadas en vivo, clics/`dispatchEvent`
+reales sobre DOM ya renderizado, `getBoundingClientRect`/`elementFromPoint` reales, no lectura de
+código salvo donde se diga lo contrario):
+
+- [x] Las 5 apps + el hub siguen con el candado de `auth-gate.js` funcionando tras este cambio:
+      `hourglass.html`, `bitacora-mentor.html`, `StaffGate.html`, `lpbag.html`,
+      `mytravel-pro-v4.html`, `generador_gantt_2.html`, `index.html` — overlay/formulario
+      presentes en las 5 apps, formulario de login presente en el hub, 0 errores de consola en
+      las 7 páginas. El diff de `auth-gate.js` es el mismo desde `3ff7445` (el commit de
+      correcciones de accesibilidad `64fc5b6` no vuelve a tocar ese archivo, confirmado con
+      `git diff 3ff7445..64fc5b6 --stat -- auth-gate.js` sin salida).
+- [x] **CR-02, doble contabilidad (el riesgo #1 del encargo): confirmado que NO existe, con datos
+      inyectados reales.** `relojMin`/`brutoMin` de `summarize()` excluyen los bloques fijos en
+      todos los caminos probados (overload, filtros de Registros vía `filteredEntries()`, vista
+      Año vía `summarizeYear()`); `chartDonut()`/`porSeccion.fijos` sí los incluyen, por una vía de
+      cálculo separada (`indiceFijos()`), no reutilizando los segmentos de `allEntries()`.
+      `blockHours()` y `blockHoursFrom(indiceFijos(),...)` dieron el mismo valor en todas las
+      pruebas. Ver caso borde 26 en `requerimientos.md` para el detalle completo con cifras.
+- [x] **CR-02, generación de bloques fijos:** primera vez solo genera "hoy" (no reescribe el
+      pasado, por diseño); simulando 40 días sin abrir la app, el "ponerse al día" genera
+      exactamente los 31 días más recientes (62 entradas), sin duplicar en una segunda llamada el
+      mismo día. Cambiar el valor por defecto no reescribe un día ya generado; `setHorasFijas()`
+      edita un día puntual sin tocar el otro bloque de ese mismo día.
+- [x] **CR-03, rendimiento de la vista Año (el riesgo #2 del encargo): medido con 1095 y 5110
+      registros reales, escala linealmente, no cuadrática.** `summarizeYear()` ≈129ms/≈525ms,
+      `renderPanel()` en Año ≈130-150ms/≈548ms respectivamente; filtros de Registros con 5110
+      registros responden en ≈77-78ms tanto por función como por evento `input` real sobre el
+      campo ya renderizado. Ver caso borde 22 en `requerimientos.md`.
+- [x] **CR-04, vista Año:** un mes con sobrecarga en sus 28 días de datos sale `sostenida:true`;
+      un mes con carga ligera sale `verde`/`sostenida:false`; la tabla "Mes a mes" y el texto
+      "sobrecarga sostenida" aparecen en el DOM real, no solo en el objeto devuelto por la función.
+- [x] **CR-03, tabla "Día por día" acotada a 62 filas (cierra el caso borde 21 pendiente para
+      `qa-lead`):** confirmado con un rango personalizado de ~200 días — 62 filas de datos
+      exactas + aviso de recorte en el DOM. Ver caso borde 21 (actualizado) en `requerimientos.md`.
+- [x] **Contraste del heatmap corregido y confirmado en el DOM renderizado, no solo en el CSS
+      fuente:** el color de texto de las celdas sin datos en el SVG real es `#5C6670`, ya no
+      `#9AA29B` (el que fallaba AA). Cierra el caso borde 20 de `accessibility-reviewer`.
+- [x] **Regresión funcional (el riesgo #3 del encargo), repetida con el commit final:**
+      solapamiento (bruto 240/reloj 180 con 2 registros de 2h solapados 1h), cruce de medianoche
+      (120/120 repartido entre los dos días), pausas descontadas (`activeMinutes` 105 de 120 con
+      15 min de pausa), `normalize()` descarta una entry con duración absurda (`MAX_ENTRY_DAYS`).
+      Pop-up de cronómetro olvidado probado de punta a punta con un clic real en "Detener todos
+      ahora": modal se cierra, entry se crea, cambia a la pestaña Cronómetros, región `aria-live`
+      anuncia "Cronómetros detenidos". Aviso de "detener sin nada que guardar" (cronómetro cuyo
+      tiempo entero quedó en pausa) probado con un clic real en "⏹ Detener y guardar": no crea
+      ningún registro y el mensaje visible dice explícitamente "NO se guardó ningún registro" —
+      confirma que el fix del caso borde 14 (business-analyst, 2026-07-30) sigue intacto.
+- [x] **El riesgo #5 del encargo — panel flotante junto al pop-up de cronómetro olvidado:**
+      confirmado con `inert` real (no simulado) que mientras el modal está abierto, `#float-host`
+      queda `inert:true` (igual que `header`/`nav`/`main`), un intento de `.focus()` sobre el asa
+      del panel NO mueve el foco ahí, y `modal-host` (el contenedor del propio modal) se queda sin
+      `inert`, como debe ser. Al cerrar el modal (clic real en los 3 botones, en pruebas
+      separadas), todo vuelve a `inert:false`. `#float-host` efectivamente se movió antes de
+      `<main>` en este commit (confirmado por lectura del HTML), y de hecho **mejora el orden de
+      Tab real**: con un cronómetro activo y la vista Registros abierta (antes la más costosa de
+      recorrer), el asa del panel es ahora el 3er elemento enfocable de la página (después del
+      enlace "volver al hub" y la pestaña activa), en vez de tener que recorrer toda la tabla y
+      sus filtros — confirmado con una lista real de elementos enfocables del DOM, no una
+      suposición. Cierra el caso borde 18 de `accessibility-reviewer`.
+
+**Hallazgo nuevo, confirmado con interacción real (no solo lectura de código) — eleva el caso
+borde 17 de `accessibility-reviewer` de "determinista por código" a "reproducido con clic
+bloqueado medido":**
+
+- **El panel flotante SÍ puede taparse con la barra de pestañas en móvil, y un toque real ahí no
+  llegaría a la pestaña.** A 375×812px, enfocando el asa y disparando 20 `keydown` reales de
+  `Shift+ArrowUp` (arrastre por teclado a máxima velocidad — uso normal, no manipulación de datos),
+  el panel queda con **13.330 px² de solape real** sobre `<nav class="tabs">`
+  (`getBoundingClientRect` de ambos). Peor todavía: `document.elementFromPoint()` en el centro
+  exacto de la barra de pestañas devuelve un nodo del panel (`#fp-acts`), no la pestaña — un toque
+  real en un teléfono en ese punto no llega al control de abajo. La tecla `Home` (agregada en este
+  commit) sí lo recupera, pero no hay ninguna pista en la interfaz de que existe ese atajo cuando
+  el panel tapa algo. No bloqueante (nada queda inalcanzable por teclado), pero si el objetivo del
+  panel es "acceso rápido sin estorbar", en móvil sí puede estorbar. Ver caso borde 23 en
+  `requerimientos.md`.
+
+**Hallazgo nuevo, de bajo riesgo, no bloqueante:**
+
+- **La posición/minimizado del panel flotante (`localStorage` clave `hourglass_float_panel`) no
+  está aislada por usuario**, a diferencia del resto de datos de la app (que sí usan
+  `scopedKey()`). Es una decisión de diseño documentada en el propio código ("NO se sincroniza con
+  la nube"), de bajo impacto (una posición en píxeles y un booleano), pero en un navegador
+  compartido entre dos cuentas de la misma usuaria (escenario ya real en este proyecto, no
+  hipotético) se filtra entre cuentas. Ver caso borde 25 en `requerimientos.md`.
+
+**Nota de proceso sobre la herramienta de esta sesión, para quien la retome:** a diferencia de
+las dos revisiones anteriores de `accessibility-reviewer` sobre esta misma app (2026-07-30 y
+2026-08-02), en esta sesión **`computer{action:"javascript_exec"}` funcionó de forma consistente
+durante toda la revisión** (no solo un uso puntual) — se pudo instrumentar el código en vivo,
+medir tiempos reales con `performance.now()`, y disparar eventos de teclado/clic reales sobre el
+DOM. `screenshot` sí falló siempre ("the Browser pane is not displayed"), igual que en las
+sesiones anteriores — ninguna captura visual fue posible, toda la verificación de esta sesión se
+apoyó en medición programática real, no en inspección visual.
+
