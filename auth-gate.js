@@ -44,6 +44,22 @@
     flag: '<path d="M5 21V4"/><path d="M5 4.5h13l-3 4 3 4H5"/>'
   };
 
+  /* Reloj de arena dibujado, compartido por el logo de Hourglass y por su
+     escena de login: mismo dibujo, distinto tamaño y ritmo. Las clases .hg-*
+     que lleva dentro son las que animan la arena y el volteo. */
+  const HOURGLASS_SVG = `<svg viewBox="0 0 40 52" aria-hidden="true">
+    <rect class="hg-wood" x="3" y="0.6" width="34" height="3.8" rx="1.9"/>
+    <rect class="hg-wood" x="3" y="47.6" width="34" height="3.8" rx="1.9"/>
+    <rect class="hg-wood" x="5.2" y="4" width="1.8" height="43.8" rx="0.9"/>
+    <rect class="hg-wood" x="33" y="4" width="1.8" height="43.8" rx="0.9"/>
+    <path class="hg-sand-top" d="M11.4,7 H28.6 C28.6,15 21.2,21.5 20,25.2 C18.8,21.5 11.4,15 11.4,7 Z"/>
+    <rect class="hg-stream" x="19.35" y="25" width="1.3" height="20.6"/>
+    <path class="hg-sand-bot" d="M11.4,45.8 C13.5,39.6 16.8,36.8 20,36.8 C23.2,36.8 26.5,39.6 28.6,45.8 Z"/>
+    <path class="hg-wall" d="M9.5,4.8 H30.5 C30.5,14.4 21.6,21.8 20,26 C18.4,21.8 9.5,14.4 9.5,4.8 Z"/>
+    <path class="hg-wall" d="M9.5,47.2 H30.5 C30.5,37.6 21.6,30.2 20,26 C18.4,30.2 9.5,37.6 9.5,47.2 Z"/>
+    <path class="hg-shine" d="M12.8,7 C13.1,12 15.8,16.6 17.4,19.6 L16.1,20.4 C14.1,17 11.9,12.2 11.7,7 Z"/>
+  </svg>`;
+
   /* El candado es una superposición: el resto de la página sigue existiendo
      detrás y, sin esto, seguía siendo alcanzable con Tab (y por lo tanto
      accionable con teclado) aunque no hubiera sesión. `inert` la saca del
@@ -264,6 +280,26 @@
           .logo-bars .lb-2{ animation:none; transform:scaleY(1); }
           .logo-bars .lb-3{ animation:none; transform:scaleY(0.75); }
         }
+        /* Logo de Hourglass: reloj de arena dibujado, no el emoji ⏳ del
+           sistema (que en Windows se ve como una pegatina de app de mensajes
+           y no combina con nada). Reusa las clases .hg-* de la escena, así
+           que la arena cae y el reloj se voltea con la misma animación. */
+        .logo-hourglass{
+          display:inline-block;
+          vertical-align:-0.3em;
+          margin-right:0.14em;
+          width:1.35em; height:1.75em;
+          --sand:#C9A227;
+          --wood:#B8863B;
+        }
+        .logo-hourglass svg{ width:100%; height:100%; display:block; overflow:visible; }
+        /* Sobre el papel claro de la tarjeta, el cristal se dibuja en oscuro:
+           el trazo claro de la escena (pensado para fondo negro) desaparecía. */
+        .logo-hourglass .hg-wall{
+          fill:rgba(27,36,48,0.06);
+          stroke:rgba(27,36,48,0.55); stroke-width:1.3;
+        }
+        .logo-hourglass .hg-shine{ fill:rgba(255,255,255,0.5); }
         .emoji-wrap{ position:relative; display:inline-block; }
         .coin{
           position:absolute;
@@ -491,6 +527,14 @@
           position:absolute; left:5%; top:10%; height:80%;
           width:min(62%, 1100px, max(0px, calc(86vw - 416px)));
           pointer-events:none;
+          /* Todas las piezas miden en em contra este tamaño, no en rem: el
+             ancho de la escena se encoge mucho entre 900 y 1200px, y con
+             medidas fijas los relojes se amontonaban y el gato terminaba
+             tapando el reloj digital. Escalando todo junto, la composición se
+             mantiene igual de repartida en cualquier ancho.
+             (Recordatorio: este archivo es un template literal, así que en
+             estos comentarios no puede haber acentos graves.) */
+          font-size:clamp(8.5px, 1.05vw, 15px);
         }
         /* Debajo de este ancho la tarjeta de login ocupa casi toda la pantalla.
            El contenedor se encoge a 0, pero sus piezas miden en rem y px (no en
@@ -501,6 +545,10 @@
           .hg-scene{ display:none; }
         }
         .hg-piece{ position:absolute; }
+
+        /* ── Reloj de arena ──
+           Marco de dos postes con tapas redondeadas y bulbos curvos. Antes
+           eran dos triangulos rectos, que se leian como un icono plano. */
         .hg-glass-turn{
           display:block; width:100%; height:100%;
           transform-origin:center center;
@@ -508,54 +556,62 @@
           animation-delay:var(--delay,0s);
         }
         .hg-glass-turn svg{ width:100%; height:100%; display:block; overflow:visible; }
-        .hg-frame{
-          fill:none; stroke:rgba(180,240,238,0.55); stroke-width:1.6;
-          stroke-linecap:round; stroke-linejoin:round;
+        .hg-wood{ fill:var(--wood,#C9A227); opacity:0.88; }
+        .hg-wall{
+          fill:rgba(190,245,242,0.06);
+          stroke:rgba(198,248,245,0.6); stroke-width:1.2;
+          stroke-linejoin:round;
         }
-        /* Las dos masas de arena se escalan hacia su vértice (el cuello del
-           reloj), no en un solo eje: así la de arriba se va consumiendo desde
-           el borde superior hacia el cuello y la de abajo crece desde el
-           cuello hacia el fondo, conservando la forma de triángulo. */
-        .hg-sand-top, .hg-sand-bot{ fill:var(--sand,#7FE3DC); transform-box:fill-box; }
+        .hg-shine{ fill:rgba(255,255,255,0.2); }
+        /* La arena de arriba se escala hacia el cuello del reloj (no en un solo
+           eje) para conservar su forma mientras se consume; la de abajo crece
+           en vertical desde el fondo, como un montoncito que sube. */
+        .hg-sand-top, .hg-sand-bot{ fill:var(--sand,#F2D69B); transform-box:fill-box; }
         .hg-sand-top{
           transform-origin:center bottom;
           animation:hg-sand-top var(--cycle,9s) linear infinite;
           animation-delay:var(--delay,0s);
         }
         .hg-sand-bot{
-          transform-origin:center top;
+          transform-origin:center bottom;
           animation:hg-sand-bot var(--cycle,9s) linear infinite;
           animation-delay:var(--delay,0s);
         }
         .hg-stream{
-          fill:var(--sand,#7FE3DC); opacity:0;
+          fill:var(--sand,#F2D69B); opacity:0;
           animation:hg-stream var(--cycle,9s) linear infinite;
           animation-delay:var(--delay,0s);
         }
+        /* El giro ocupa el ultimo 20% del ciclo y arranca justo cuando la
+           arena de arriba se acaba: se vacia, se voltea, y vuelve a caer. */
         @keyframes hg-turn{
           0%, 80%{ transform:rotate(0deg); }
           96%, 100%{ transform:rotate(360deg); }
         }
-        /* El salto de vuelta (87% → 88%) cae en mitad del giro de 360°, así
-           que el "recargado" del reloj no se ve como un parpadeo. */
+        /* El salto de vuelta (87% → 88%) cae en mitad del giro, así que el
+           "recargado" del reloj no se ve como un parpadeo. */
         @keyframes hg-sand-top{
           0%{ transform:scale(1); }
           80%, 87%{ transform:scale(0); }
           88%, 100%{ transform:scale(1); }
         }
         @keyframes hg-sand-bot{
-          0%{ transform:scale(0); }
-          80%, 87%{ transform:scale(1); }
-          88%, 100%{ transform:scale(0); }
+          0%{ transform:scaleY(0); }
+          80%, 87%{ transform:scaleY(1); }
+          88%, 100%{ transform:scaleY(0); }
         }
         @keyframes hg-stream{
           0%, 2%{ opacity:0; }
-          6%, 76%{ opacity:0.9; }
+          6%, 76%{ opacity:0.85; }
           80%, 100%{ opacity:0; }
         }
+
+        /* ── Reloj analógico ── */
         .hg-clock svg{ width:100%; height:100%; display:block; }
-        .hg-clock .hg-face{ fill:rgba(12,26,30,0.55); stroke:rgba(180,240,238,0.5); stroke-width:1.6; }
-        .hg-clock .hg-tick{ stroke:rgba(180,240,238,0.45); stroke-width:1.4; stroke-linecap:round; }
+        .hg-clock .hg-rim{ fill:none; stroke:var(--rim,#C9A227); stroke-width:3.2; opacity:0.85; }
+        .hg-clock .hg-face{ fill:rgba(10,24,28,0.6); stroke:rgba(198,248,245,0.28); stroke-width:1; }
+        .hg-clock .hg-tick{ stroke:rgba(198,248,245,0.38); stroke-width:1.2; stroke-linecap:round; }
+        .hg-clock .hg-tick-major{ stroke:rgba(198,248,245,0.78); stroke-width:2.6; stroke-linecap:round; }
         /* Las manecillas giran alrededor del centro del reloj (50,50 del
            viewBox), no del centro de su propia caja: por eso NO se les pone
            transform-box:fill-box — con el valor por defecto (view-box) el
@@ -563,30 +619,75 @@
            OJO: este archivo entero es un template literal de JavaScript, así
            que dentro de estos comentarios no puede haber acentos graves. */
         .hg-clock .hg-hand{
-          stroke:#9FEDE6; stroke-linecap:round; fill:none;
+          stroke:#DFF6F3; stroke-linecap:round; fill:none;
           transform-origin:50px 50px;
         }
-        .hg-clock .hg-hand-min{ stroke-width:2.2; animation:hg-spin 8s linear infinite; }
-        .hg-clock .hg-hand-hour{ stroke-width:3.6; animation:hg-spin 96s linear infinite; }
+        .hg-clock .hg-hand-hour{ stroke-width:4; animation:hg-spin var(--hour,144s) linear infinite; }
+        .hg-clock .hg-hand-min{ stroke-width:2.5; animation:hg-spin var(--min,12s) linear infinite; }
+        .hg-clock .hg-hand-sec{
+          stroke:var(--rim,#C9A227); stroke-width:1.2;
+          animation:hg-spin var(--sec,4s) linear infinite;
+        }
+        .hg-clock .hg-pin{ fill:var(--rim,#C9A227); }
         @keyframes hg-spin{
           0%{ transform:rotate(0deg); }
           100%{ transform:rotate(360deg); }
         }
-        .hg-cat{
+
+        /* ── Reloj digital ── */
+        .hg-digital{
+          display:flex; flex-direction:column; align-items:center; gap:0.2em;
+          padding:0.6em 1em 0.55em;
+          border-radius:0.7em;
+          background:linear-gradient(180deg, rgba(15,34,38,0.88), rgba(8,19,23,0.92));
+          border:1px solid rgba(198,248,245,0.26);
+          box-shadow:0 8px 24px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.07);
+        }
+        .hg-dig-time{
+          font-family:ui-monospace,'SFMono-Regular',Menlo,Consolas,monospace;
+          font-size:var(--dig,1.1em);
+          letter-spacing:0.08em;
+          color:#8FEDE4;
+          text-shadow:0 0 10px rgba(127,227,220,0.5);
+          font-variant-numeric:tabular-nums;
+        }
+        .hg-dig-colon{ animation:hg-blink 2s step-end infinite; }
+        .hg-dig-label{
+          font-size:0.55em; letter-spacing:0.22em; text-transform:uppercase;
+          color:rgba(198,248,245,0.48);
+        }
+        @keyframes hg-blink{
+          0%, 49%{ opacity:1; }
+          50%, 100%{ opacity:0.12; }
+        }
+
+        /* ── Gato de Cheshire ──
+           Salta de un reloj a otro. El salto va en dos capas: la de fuera se
+           desplaza a la posicion del reloj destino (transicion de left/top,
+           que si acepta porcentajes del contenedor) y la de dentro hace el
+           arco y el desvanecimiento a mitad de camino — que es justo lo que
+           hace un Gato de Cheshire: no se muda, se esfuma y reaparece. */
+        .hg-cat-hop{
           position:absolute;
+          left:var(--px,10%); top:var(--py,50%);
+          transition:left var(--hop,1200ms) ease-in-out, top var(--hop,1200ms) ease-in-out;
+        }
+        .hg-cat-arc.hopping{ animation:hg-cat-jump var(--hop,1200ms) ease-in-out; }
+        .hg-cat{
           display:block;
-          opacity:0;
           /* La ilustración es un cuadro con fondo casi negro: el degradado de
              máscara difumina el borde para que no se lea como una foto pegada
              encima del fondo. */
           -webkit-mask-image:radial-gradient(circle at 50% 50%, #000 50%, transparent 74%);
           mask-image:radial-gradient(circle at 50% 50%, #000 50%, transparent 74%);
-          animation:hg-cat-fade 17s ease-in-out infinite;
+          opacity:0.94;
         }
-        @keyframes hg-cat-fade{
-          0%, 6%{ opacity:0; }
-          20%, 58%{ opacity:0.92; }
-          78%, 100%{ opacity:0; }
+        @keyframes hg-cat-jump{
+          0%{ transform:translateY(0) scale(1); opacity:0.94; }
+          22%{ transform:translateY(-24%) scale(0.93); opacity:0.5; }
+          50%{ transform:translateY(-32%) scale(0.86); opacity:0.1; }
+          78%{ transform:translateY(-24%) scale(0.93); opacity:0.5; }
+          100%{ transform:translateY(0) scale(1); opacity:0.94; }
         }
         .travel-skyline{
           position:absolute; left:0; right:0; bottom:0; height:46%;
@@ -1211,10 +1312,16 @@
              presente. Sin estas líneas la escena quedaría vacía: el gato y el
              chorro arrancan en opacity:0 y la arena de abajo en scaleY(0). */
           .hg-sand-top{ transform:scale(0.45); }
-          .hg-sand-bot{ transform:scale(0.55); }
-          .hg-stream{ opacity:0.9; }
+          .hg-sand-bot{ transform:scaleY(0.55); }
+          .hg-stream{ opacity:0.85; }
           .hg-glass-turn{ transform:none; }
-          .hg-cat{ opacity:0.92; }
+          /* El gato se queda posado en un reloj, sin saltos ni parpadeo; los
+             saltos además se apagan desde el JS. Los dos puntos del reloj
+             digital se quedan encendidos en vez de parpadear. */
+          .hg-cat{ opacity:0.94; }
+          .hg-cat-hop{ transition:none; }
+          .hg-cat-arc{ transform:none; opacity:1; }
+          .hg-dig-colon{ opacity:1; }
         }
       </style>
       <div class="cover ${window.AIAPPS_LOGIN_LAYOUT === 'right' ? 'align-right' : ''}">
@@ -1429,50 +1536,74 @@
           return `<div class="gantt-scene">${rows}</div>`;
         })() : ''}
         ${window.AIAPPS_LOGIN_SCENE === 'hourglass-time' ? (() => {
-          // Relojes de arena repartidos por la escena, cada uno con su propio
-          // tamaño, ritmo y desfase para que no caigan todos a la vez.
-          const glasses = [
-            { top: 4,  left: 2,  size: 4.6, cycle: 9.5, delay: 0 },
-            { top: 30, left: 16, size: 6.8, cycle: 12,  delay: 2.2 },
-            { top: 6,  left: 38, size: 3.6, cycle: 8,   delay: 4.1 },
-            { top: 58, left: 4,  size: 3.2, cycle: 10.5, delay: 1.3 },
-            { top: 68, left: 46, size: 5.4, cycle: 11,  delay: 3.4 },
-            { top: 40, left: 62, size: 3.4, cycle: 9,   delay: 5.6 }
+          /* Tres clases de reloj repartidas por la escena, no seis iguales:
+             de arena, analógicos y digitales. Las posiciones van a mano (no al
+             azar) para que el peso quede repartido en las dos diagonales en
+             vez de amontonarse. Cada pieza lleva además la posición donde se
+             posa el gato cuando salta hacia ella. */
+          /* `perch` es dónde se posa el gato cuando salta a esa pieza: al lado
+             o justo debajo, nunca encima de un reloj digital, que hay que
+             poder leer. Las posiciones van a mano porque el gato mide en px y
+             las piezas en %: no hay fórmula que quede bien en todos los
+             anchos, y esto se afinó mirándolo entre 1024 y 1920px. */
+          const pieces = [
+            { kind:'glass',   top: 4, left: 1,  size: 5.2, cycle: 8,    delay: 0,   sand:'#F7E3B4', wood:'#C9A227', perch:[11, 6] },
+            { kind:'clock',   top: 3, left: 25, size: 6.6, hour:144,    min:12,  sec:4,   rim:'#C9A227', perch:[36, 5] },
+            { kind:'digital', top:10, left: 57, dig:1.05,  label:'ahora',  mode:'now',     perch:[57, 26] },
+            { kind:'glass',   top:36, left: 10, size: 7.2, cycle: 11,   delay: 2.4, sand:'#F3E0C2', wood:'#B8863B', perch:[24, 38] },
+            { kind:'clock',   top:41, left: 41, size: 4.8, hour:108,    min:9,   sec:3,   rim:'#7FE3DC', perch:[47, 47] },
+            { kind:'digital', top:70, left: 2,  dig:0.95,  label:'sesión', mode:'timer',   perch:[3, 46] },
+            { kind:'glass',   top:63, left: 32, size: 4.4, cycle: 9.5,  delay: 4.8, sand:'#F7E3B4', wood:'#C9A227', perch:[27, 66] },
+            { kind:'clock',   top:66, left: 55, size: 3.8, hour: 96,    min:8,   sec:2.6, rim:'#C9A227', perch:[58, 68] }
           ];
-          const sandTones = ['#7FE3DC', '#5FD3D9', '#A8F0E6'];
-          const glassSvg = `<svg viewBox="0 0 32 34" aria-hidden="true">
-              <path class="hg-sand-top" d="M9 6.4 H23 L16 16.3 Z"/>
-              <path class="hg-sand-bot" d="M9 28.4 H23 L16 18.2 Z"/>
-              <rect class="hg-stream" x="15.45" y="16.3" width="1.1" height="12.1"/>
-              <path class="hg-frame" d="M5.5 3.2 H26.5 M5.5 31.2 H26.5 M8 4 L16 17.2 L8 30.4 M24 4 L16 17.2 L24 30.4"/>
-            </svg>`;
-          const glassHtml = glasses.map((g, i) => `
-            <span class="hg-piece" style="top:${g.top}%; left:${g.left}%; width:${g.size}rem; height:${(g.size * 1.06).toFixed(2)}rem; --cycle:${g.cycle}s; --delay:${g.delay}s; --sand:${sandTones[i % sandTones.length]};">
-              <span class="hg-glass-turn">${glassSvg}</span>
-            </span>`).join('');
-          const ticks = Array.from({ length: 12 }).map((_, i) => {
-            const a = (Math.PI * 2 * i) / 12;
-            const x1 = (50 + Math.sin(a) * 37).toFixed(1);
-            const y1 = (50 - Math.cos(a) * 37).toFixed(1);
-            const x2 = (50 + Math.sin(a) * 42).toFixed(1);
-            const y2 = (50 - Math.cos(a) * 42).toFixed(1);
-            return `<line class="hg-tick" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"/>`;
+
+          // Marcas de la esfera: cada hora en punto va más gruesa que el resto.
+          const dial = Array.from({ length: 60 }).map((_, i) => {
+            const a = (Math.PI * 2 * i) / 60;
+            const major = i % 5 === 0;
+            const r1 = major ? 34 : 38;
+            return `<line class="hg-tick${major ? ' hg-tick-major' : ''}"
+              x1="${(50 + Math.sin(a) * r1).toFixed(1)}" y1="${(50 - Math.cos(a) * r1).toFixed(1)}"
+              x2="${(50 + Math.sin(a) * 42).toFixed(1)}" y2="${(50 - Math.cos(a) * 42).toFixed(1)}"/>`;
           }).join('');
+
+          const html = pieces.map((p) => {
+            if (p.kind === 'glass') {
+              return `<span class="hg-piece" style="top:${p.top}%; left:${p.left}%; width:${p.size}em; height:${(p.size * 1.3).toFixed(2)}em; --cycle:${p.cycle}s; --delay:${p.delay}s; --sand:${p.sand}; --wood:${p.wood};">
+                  <span class="hg-glass-turn">${HOURGLASS_SVG}</span>
+                </span>`;
+            }
+            if (p.kind === 'clock') {
+              return `<span class="hg-piece hg-clock" style="top:${p.top}%; left:${p.left}%; width:${p.size}em; height:${p.size}em; --hour:${p.hour}s; --min:${p.min}s; --sec:${p.sec}s; --rim:${p.rim};">
+                  <svg viewBox="0 0 100 100">
+                    <circle class="hg-face" cx="50" cy="50" r="45"/>
+                    <circle class="hg-rim" cx="50" cy="50" r="46.4"/>
+                    ${dial}
+                    <line class="hg-hand hg-hand-hour" x1="50" y1="56" x2="50" y2="30"/>
+                    <line class="hg-hand hg-hand-min" x1="50" y1="58" x2="50" y2="18"/>
+                    <line class="hg-hand hg-hand-sec" x1="50" y1="62" x2="50" y2="15"/>
+                    <circle class="hg-pin" cx="50" cy="50" r="2.4"/>
+                  </svg>
+                </span>`;
+            }
+            return `<span class="hg-piece hg-digital" style="top:${p.top}%; left:${p.left}%; --dig:${p.dig}em;">
+                <span class="hg-dig-time" data-hg-digital="${p.mode}">00<span class="hg-dig-colon">:</span>00<span class="hg-dig-colon">:</span>00</span>
+                <span class="hg-dig-label">${p.label}</span>
+              </span>`;
+          }).join('');
+
+          const perches = pieces.map((p) => p.perch);
           return `
           <div class="hg-scene" aria-hidden="true">
-            ${glassHtml}
-            <span class="hg-piece hg-clock" style="top:2%; left:60%; width:7.4rem; height:7.4rem;">
-              <svg viewBox="0 0 100 100">
-                <circle class="hg-face" cx="50" cy="50" r="44"/>
-                ${ticks}
-                <line class="hg-hand hg-hand-hour" x1="50" y1="50" x2="50" y2="29"/>
-                <line class="hg-hand hg-hand-min" x1="50" y1="50" x2="50" y2="17"/>
-                <circle cx="50" cy="50" r="2.6" fill="#9FEDE6"/>
-              </svg>
+            ${html}
+            <span class="hg-cat-hop" data-hg-perches='${JSON.stringify(perches)}'
+                  style="--px:${perches[0][0]}%; --py:${perches[0][1]}%;">
+              <span class="hg-cat-arc">
+                <img class="hg-cat" src="./assets/cheshire.png" alt=""
+                     style="width:7.6em;"
+                     onerror="this.style.display='none'">
+              </span>
             </span>
-            <img class="hg-cat" src="./assets/cheshire.png" alt=""
-                 style="bottom:0; left:14%; width:clamp(150px, 26vw, 320px);"
-                 onerror="this.style.display='none'">
           </div>`;
         })() : ''}
         ${window.AIAPPS_LOGIN_SCENE === 'travel-sky' ? (() => {
@@ -1819,6 +1950,9 @@
               if (window.AIAPPS_APP_LOGO_URL && window.AIAPPS_APP_EMOJI) {
                 return `<span class="brand-fallback-emoji" style="display:none">${window.AIAPPS_APP_EMOJI} </span>`;
               }
+              if (window.AIAPPS_LOGO_HOURGLASS) {
+                return `<span class="logo-hourglass" aria-hidden="true" style="--cycle:5.5s"><span class="hg-glass-turn">${HOURGLASS_SVG}</span></span>`;
+              }
               if (window.AIAPPS_LOGO_BARS) {
                 return `<span class="logo-bars" aria-hidden="true"><svg viewBox="0 0 24 24">
                   <rect class="lb-1" x="3" y="4" width="5" height="16" rx="1.4"/>
@@ -1901,6 +2035,90 @@
       host._aiappsCleanups = host._aiappsCleanups || [];
       host._aiappsCleanups.push(() => tiltQuery.removeEventListener("change", onTiltPrefChange));
     }
+
+    /* ── Escena de Hourglass: relojes digitales en vivo y saltos del gato ──
+       Solo hace algo si la escena está en pantalla; en las otras 5 apps estos
+       selectores no encuentran nada y el bloque entero se salta. */
+    (function hourglassScene() {
+      const reduce = () => !!(tiltQuery && tiltQuery.matches);
+      host._aiappsTimers = host._aiappsTimers || [];
+      host._aiappsCleanups = host._aiappsCleanups || [];
+
+      const digitals = shadow.querySelectorAll("[data-hg-digital]");
+      if (digitals.length) {
+        const openedAt = Date.now();
+        const two = (n) => String(n).padStart(2, "0");
+        const colon = '<span class="hg-dig-colon">:</span>';
+        const paint = () => {
+          digitals.forEach((el) => {
+            let h, m, s;
+            if (el.getAttribute("data-hg-digital") === "now") {
+              const d = new Date();
+              h = d.getHours(); m = d.getMinutes(); s = d.getSeconds();
+            } else {
+              // El segundo panel cuenta desde que se abrió el login: es un
+              // cronómetro de verdad, que es de lo que va la app.
+              const t = Math.floor((Date.now() - openedAt) / 1000);
+              h = Math.floor(t / 3600); m = Math.floor(t / 60) % 60; s = t % 60;
+            }
+            el.innerHTML = two(h) + colon + two(m) + colon + two(s);
+          });
+        };
+        paint();
+        if (!reduce()) {
+          const id = setInterval(paint, 1000);
+          host._aiappsTimers.push(id);
+        }
+      }
+
+      const catHop = shadow.querySelector(".hg-cat-hop");
+      if (!catHop) return;
+      const arc = catHop.querySelector(".hg-cat-arc");
+      let perches = [];
+      try {
+        perches = JSON.parse(catHop.getAttribute("data-hg-perches")) || [];
+      } catch (e) {
+        perches = [];
+      }
+      if (perches.length < 2) return;
+
+      let at = 0;
+      let hopTimer = null;
+
+      function hop() {
+        // Salta a cualquier reloj menos al que ya está: se elige entre los
+        // demás y se corrige el índice, en vez de sortear hasta acertar.
+        let next = Math.floor(Math.random() * (perches.length - 1));
+        if (next >= at) next++;
+        at = next;
+        catHop.style.setProperty("--px", perches[at][0] + "%");
+        catHop.style.setProperty("--py", perches[at][1] + "%");
+        arc.classList.remove("hopping");
+        void arc.offsetWidth; // fuerza el reinicio de la animación del arco
+        arc.classList.add("hopping");
+      }
+
+      function startHops() {
+        if (hopTimer !== null) return;
+        hopTimer = setInterval(hop, 4200);
+        host._aiappsTimers.push(hopTimer);
+      }
+      function stopHops() {
+        if (hopTimer === null) return;
+        clearInterval(hopTimer);
+        host._aiappsTimers = host._aiappsTimers.filter((id) => id !== hopTimer);
+        hopTimer = null;
+        arc.classList.remove("hopping");
+      }
+
+      if (!reduce()) startHops();
+      // La preferencia se puede activar con el login ya abierto.
+      if (tiltQuery && typeof tiltQuery.addEventListener === "function") {
+        const onChange = (e) => { if (e.matches) stopHops(); else startHops(); };
+        tiltQuery.addEventListener("change", onChange);
+        host._aiappsCleanups.push(() => tiltQuery.removeEventListener("change", onChange));
+      }
+    })();
 
     /* Al pulsar una moneda que cae, estalla en moneditas que salen disparadas
        y caen. La original se esconde y vuelve sola en la siguiente vuelta de
