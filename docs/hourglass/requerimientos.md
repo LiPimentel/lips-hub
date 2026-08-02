@@ -16,77 +16,104 @@ Hourglass es el registro personal de tiempo de Lissette dentro de LIPS-HUB. Sirv
 2. Al abrir la app con sesión válida, los datos se leen primero de Supabase (tabla `app_data`, fila única por `user_id`+`app_id='hourglass'`); si la nube falla o no responde, se usa la última copia guardada en este navegador (`localStorage`, clave aislada por usuario).
 3. Cada guardado (`save()`) escribe a la vez en el `localStorage` de este navegador y en Supabase; si existe una carpeta local conectada (el badge "📁"), también queda reflejado ahí como un archivo `hourglass.data.json`.
 4. Un cronómetro en marcha **no** dispara un guardado en la nube en cada segundo — solo al iniciar, pausar, reanudar o detener — para no generar escrituras de más mientras corre.
+5. Los registros automáticos de Sueño/Comidas del día (ver más abajo, CR-02) solo se generan y se guardan si hay una sesión confirmada; sin sesión válida la app no crea ni escribe nada, ni siquiera en la caché local (corrección de seguridad del 2026-08-02, ver caso borde 27, cerrado — antes esto podía dejar un registro "huérfano" sin aislar por usuario).
 
-**Las tres secciones y los bloques fijos**
+**Las secciones y los bloques fijos (CR-02)**
 
-5. Las secciones (Trabajo, Voluntariado, Personal) son fijas: no se pueden crear, renombrar ni eliminar desde la interfaz.
-6. El tiempo disponible de un día se calcula como 24 horas menos las horas de sueño menos las horas de comida de ese día. Sueño y comida tienen un valor por defecto configurable en Ajustes (7 h y 3 h de fábrica) que aplica a todos los días salvo que se registre una excepción puntual para una fecha concreta (pestaña Ajustes → "Excepciones de sueño y comida", o directamente desde el Panel cuando se está viendo un solo día).
-7. Sueño y comida de un mismo día no pueden sumar más de 24 horas; la app lo rechaza con un mensaje si se intenta guardar una combinación que se pase.
+6. Hay 4 secciones en total: **Trabajo**, **Voluntariado** y **Personal** son editables (se les crean proyectos a mano); **Bloques Fijos** es una cuarta sección "de sistema" — no admite proyectos propios, no se puede crear/renombrar/eliminar, y solo contiene los dos registros automáticos de "Sueño" y "Comidas".
+7. Cada día, con la app abierta y sesión confirmada, se generan solos un registro de "Sueño" (7 h por defecto) y uno de "Comidas" (3 h por defecto) para todos los días hasta **hoy inclusive** que todavía no los tengan — nunca duplica un día que ya los tiene. Si la app estuvo mucho tiempo sin abrirse, retrocede como máximo 31 días de una sola vez (no genera de golpe meses de historial).
+8. Esos registros automáticos se ven en el Historial y en los gráficos del Panel (dona, barras apiladas) con su propio color, igual que cualquier otro registro — pero quedan **fuera** del cálculo de sobrecarga (tiempo de reloj, tiempo bruto, desglose por sección editable): no compiten por las horas disponibles del día, son justamente las que las definen.
+9. El tiempo disponible de un día sigue siendo 24 horas menos sueño menos comida de ese día, pero esas horas ahora se leen primero de los registros reales que existan ese día; si un día no tiene registros propios todavía (por ejemplo, un día anterior a este cambio), se usa la excepción puntual del modelo anterior si existía, y si no, el valor por defecto de Ajustes.
+10. Sueño y comida de un mismo día siguen sin poder sumar más de 24 horas; la app lo rechaza con un mensaje si se intenta guardar una combinación que se pase, tanto al cambiar los valores por defecto en Ajustes como al corregir un día puntual.
+11. El sueño o la comida de un día concreto se puede corregir de dos formas: desde el Panel, viendo un solo día ("Guardar este día" / "Volver al valor por defecto"), o desde Ajustes → **"Días fuera de lo habitual"**, que lista todos los días cuyo sueño o comida ya no coincide con el valor por defecto vigente (calculado a partir de los registros reales, no de una lista de excepciones aparte) y deja "Volver al valor por defecto" uno por uno.
+12. Cambiar el valor por defecto de sueño/comida en Ajustes **solo aplica hacia adelante**: los días ya generados no se reescriben automáticamente.
+13. Un registro automático de Sueño o Comidas se puede editar (por ejemplo, corregir su horario o agregar una nota), pero **no se puede reasignar a otro proyecto**: al editarlo, el selector de proyecto aparece deshabilitado, mostrando solo el bloque fijo original; el guardado además ignora cualquier otro valor de proyecto que llegara igual, por si el control deshabilitado se pudiera evadir de otra forma.
 
 **Proyectos**
 
-8. Un proyecto pertenece a exactamente una de las tres secciones, tiene un nombre (obligatorio, único sin distinguir mayúsculas/minúsculas), un color, un estado (Activo/Archivado) y, opcionalmente, una meta de horas semanales.
-9. **Archivar** un proyecto lo saca de la lista para iniciar nuevos cronómetros o registros manuales, pero conserva íntegro su historial de tiempo ya registrado; sigue viéndose en los filtros que incluyan archivados y en los reportes de periodos pasados.
-10. **Eliminar** un proyecto es distinto y más drástico: además del proyecto, borra también todos sus registros de tiempo guardados y descarta cualquier cronómetro suyo que esté corriendo. La app muestra una confirmación que dice cuántos registros y cronómetros se perderán, y recuerda explícitamente que "Archivar" es la opción que conserva el historial.
+14. Un proyecto pertenece a exactamente una de las **tres secciones editables** (Trabajo, Voluntariado o Personal — nunca a Bloques Fijos), tiene un nombre (obligatorio, único sin distinguir mayúsculas/minúsculas), un color, un estado (Activo/Archivado) y, opcionalmente, una meta de horas semanales.
+15. **Archivar** un proyecto lo saca de la lista para iniciar nuevos cronómetros o registros manuales, pero conserva íntegro su historial de tiempo ya registrado; sigue viéndose en los filtros que incluyan archivados y en los reportes de periodos pasados.
+16. **Eliminar** un proyecto es distinto y más drástico: además del proyecto, borra también todos sus registros de tiempo guardados y descarta cualquier cronómetro suyo que esté corriendo. La app muestra una confirmación que dice cuántos registros y cronómetros se perderán, y recuerda explícitamente que "Archivar" es la opción que conserva el historial.
 
 **Registro manual de tiempo**
 
-11. Para crear un registro a mano hace falta: proyecto, fecha, hora de inicio, y el final indicado de una de dos formas — hora de fin, o duración directa en minutos (máximo 1440, es decir 24 horas).
-12. Si la hora de fin escrita es igual o anterior a la hora de inicio, la app entiende que la sesión terminó al día siguiente (no lo rechaza como error).
-13. Un registro guardado conserva su hora real de inicio y de fin tal como se introdujeron, aunque cruce la medianoche; el reparto entre los dos días calendario ocurre **solo** al calcular totales para el Panel o el Historial, nunca se reescribe el dato guardado.
-14. Un registro con duración calculada de 0 minutos no se guarda; la app pide revisar el horario.
-15. Cualquier registro (manual o el que resulta de detener un cronómetro) se puede editar después: cambiar proyecto, fecha, horario o nota. Al guardar el cambio queda marcado como "editado".
-16. Cualquier registro se puede eliminar, con una confirmación previa que muestra su duración y su proyecto.
+17. Para crear un registro a mano hace falta: proyecto, fecha, hora de inicio, y el final indicado de una de dos formas — hora de fin, o duración directa en minutos (máximo 1440, es decir 24 horas).
+18. Si la hora de fin escrita es igual o anterior a la hora de inicio, la app entiende que la sesión terminó al día siguiente (no lo rechaza como error).
+19. Un registro guardado conserva su hora real de inicio y de fin tal como se introdujeron, aunque cruce la medianoche; el reparto entre los dos días calendario ocurre **solo** al calcular totales para el Panel o el Historial, nunca se reescribe el dato guardado.
+20. Un registro con duración calculada de 0 minutos no se guarda; la app pide revisar el horario.
+21. Cualquier registro (manual o el que resulta de detener un cronómetro) se puede editar después: cambiar proyecto, fecha, horario o nota — salvo un registro automático de Sueño/Comidas, que no cambia de proyecto (ver punto 13). Al guardar el cambio queda marcado como "editado".
+22. Cualquier registro se puede eliminar, con una confirmación previa que muestra su duración y su proyecto.
 
 **Cronómetros en vivo**
 
-17. Se puede iniciar un cronómetro eligiendo un proyecto activo y, opcionalmente, una nota de qué se está haciendo.
-18. Se pueden tener **varios cronómetros corriendo a la vez, incluso dos o más del mismo proyecto**: ambos tiempos se suman al total "bruto" de ese proyecto, y si sus franjas se solapan en el reloj, esa franja solapada cuenta una sola vez para el indicador de sobrecarga (que siempre usa tiempo de reloj, nunca la suma bruta).
-19. Un cronómetro se puede pausar y reanudar cuantas veces haga falta; el tiempo en pausa no cuenta como tiempo trabajado.
-20. Al detener un cronómetro ("Detener y guardar"), se convierte automáticamente en un registro de tiempo con las pausas ya descontadas de su duración.
-21. "Descartar" un cronómetro (con confirmación) lo elimina sin crear ningún registro — se pierde ese tiempo a propósito.
-22. La cabecera de la app muestra en todo momento un indicador ("N cronómetro(s) en curso") con el tiempo acumulado, que se actualiza cada segundo mientras haya al menos uno corriendo.
-23. Un cronómetro que lleva corriendo más de un número configurable de horas (por defecto 6, ajustable en Ajustes) se marca como "Lleva mucho tiempo" en la lista de cronómetros.
+23. Se puede iniciar un cronómetro eligiendo un proyecto activo y, opcionalmente, una nota de qué se está haciendo.
+24. Se pueden tener **varios cronómetros corriendo a la vez, incluso dos o más del mismo proyecto**: ambos tiempos se suman al total "bruto" de ese proyecto, y si sus franjas se solapan en el reloj, esa franja solapada cuenta una sola vez para el indicador de sobrecarga (que siempre usa tiempo de reloj, nunca la suma bruta).
+25. Un cronómetro se puede pausar y reanudar cuantas veces haga falta; el tiempo en pausa no cuenta como tiempo trabajado.
+26. Al detener un cronómetro ("Detener y guardar"), se convierte automáticamente en un registro de tiempo con las pausas ya descontadas de su duración.
+27. "Descartar" un cronómetro (con confirmación) lo elimina sin crear ningún registro — se pierde ese tiempo a propósito.
+28. La cabecera de la app muestra en todo momento un indicador ("N cronómetro(s) en curso") con el tiempo acumulado, que se actualiza cada segundo mientras haya al menos uno corriendo.
+29. Un cronómetro que lleva corriendo más de un número configurable de horas (por defecto 6, ajustable en Ajustes) se marca como "Lleva mucho tiempo" en la lista de cronómetros.
+
+**Panel flotante de cronómetros (CR-01)**
+
+30. Mientras haya al menos un cronómetro corriendo, un panel flotante permanece visible **en cualquier pestaña de la app** (Panel, Cronómetros, Registros, Proyectos o Ajustes), listando todos los cronómetros activos a la vez con su proyecto, su sección y su tiempo transcurrido en vivo (segundo a segundo); en cuanto se detiene el último cronómetro, el panel desaparece solo.
+31. El panel se puede arrastrar a cualquier posición con ratón, lápiz o dedo (eventos de puntero), y también con las 4 flechas del teclado estando enfocado en su asa (12 px por pulsación, 40 px con Shift para moverlo más rápido); la tecla **Inicio** lo devuelve de inmediato a su posición original si quedó estorbando.
+32. El panel se puede **minimizar a una pastilla pequeña** (solo el tiempo total) sin cerrarse, y volver a expandirse con un clic o toque; tanto la posición como el estado minimizado se recuerdan entre sesiones en este navegador (su propia clave de `localStorage`, aislada por usuario, que **no** se sincroniza con Supabase ni con el puente de carpeta local — es una preferencia de pantalla, no un dato).
+33. Desde el propio panel, sin cambiar de pestaña, se puede pausar, reanudar y detener cada cronómetro por separado, y hay un enlace directo ("Ver todo en Cronómetros →") a la pestaña completa.
+34. El panel reserva siempre la franja de la cabecera y la barra de pestañas (calculada según su alto real en pantalla): ni arrastrándolo con el ratón ni moviéndolo con las flechas del teclado puede quedar tapando esos controles, así que un toque o clic ahí siempre llega al control real y no al panel.
+35. Límite aceptado a propósito (fuera de alcance del CR-01): el panel vive dentro de la página — si se cierra la pestaña del navegador, deja de verse por completo (una página web no puede dibujar nada fuera de su propia ventana). Para no perder el aviso, mientras haya al menos un cronómetro corriendo el **título de la pestaña del navegador** también muestra el tiempo acumulado (por ejemplo, "⏳ 1h 20m · Hourglass"), y si todos los cronómetros están en pausa lo aclara ahí mismo.
 
 **Aviso de cronómetro olvidado**
 
-24. Al abrir la app (después de cargar los datos), si hay al menos un cronómetro corriendo por encima del umbral de horas configurado, aparece automáticamente una ventana emergente **centrada y bloqueante** (no un simple aviso en una esquina): mientras está abierta, el resto de la pantalla no se puede usar ni con clic ni con teclado.
-25. Esa ventana ofrece tres acciones: detener ya todos los cronómetros atrasados (los convierte en registros), ir a la pestaña de Cronómetros para corregirlos a mano, o dejarlos corriendo y cerrar el aviso sin hacer nada. Ninguna de las tres es obligatoria para poder cerrar la ventana (también se puede cerrar con Escape).
+36. Al abrir la app (después de cargar los datos), si hay al menos un cronómetro corriendo por encima del umbral de horas configurado, aparece automáticamente una ventana emergente **centrada y bloqueante** (no un simple aviso en una esquina): mientras está abierta, el resto de la pantalla no se puede usar ni con clic ni con teclado.
+37. Esa ventana ofrece tres acciones: detener ya todos los cronómetros atrasados (los convierte en registros), ir a la pestaña de Cronómetros para corregirlos a mano, o dejarlos corriendo y cerrar el aviso sin hacer nada. Ninguna de las tres es obligatoria para poder cerrar la ventana (también se puede cerrar con Escape).
 
-**Panel principal y cálculo de sobrecarga**
+**Panel principal, gráficos y cálculo de sobrecarga (CR-03)**
 
-26. El Panel muestra un periodo elegido (Día, Semana, Mes o Personalizado) con navegación de "anterior/hoy/siguiente" para día/semana/mes.
-27. Un rango Personalizado se acota a fechas dentro del mismo año calendario; si se eligen fechas de años distintos, la app las ajusta automáticamente (recorta al 31 de diciembre del año de la fecha de inicio) y avisa por qué.
-28. El estado de carga del periodo es siempre uno de tres: verde (tiempo de reloj por debajo del 85% del disponible), amarillo (entre 85% y 100%), o rojo (por encima del 100%, es decir, sobrecarga real). Este cálculo usa siempre **tiempo de reloj** (franjas solapadas fusionadas, contadas una sola vez), nunca la suma bruta por proyecto.
-29. El Panel muestra explícitamente cuatro cifras distintas del periodo: tiempo de reloj, tiempo bruto (suma de todos los proyectos sin fusionar solapes), tiempo disponible, y tiempo "sin registrar" (disponible menos reloj).
-30. El aviso de sobrecarga, cuando aplica, señala cuál de las tres secciones es la que más está aportando al tiempo de reloj de ese periodo.
-31. El desglose por sección/proyecto del Panel se puede filtrar por sección y por proyecto — ese filtro cambia solo lo que se ve en el desglose, **no** cambia el indicador de sobrecarga, que siempre refleja el día/periodo completo.
-32. Si algún proyecto visible tiene una meta de horas semanales, el Panel muestra su comparación Plan vs. Real (la meta semanal se prorratea al tamaño del periodo mostrado: por ejemplo, una semana completa usa la meta tal cual, un solo día usa 1/7 de la meta).
-33. Cuando el periodo elegido abarca más de un día, el Panel agrega una tabla "Día por día" con el estado de cada día individual.
-34. Un cronómetro en curso cuenta como tiempo provisional en todos los cálculos del Panel (hasta el instante actual), para que la alerta de sobrecarga no espere a que se detenga el cronómetro.
+38. El Panel muestra un periodo elegido — **Día, Semana, Mes, Año o Personalizado** — con navegación de "anterior/hoy/siguiente" para día/semana/mes/año.
+39. Un rango Personalizado se acota a fechas dentro del mismo año calendario; si se eligen fechas de años distintos, la app las ajusta automáticamente (recorta al 31 de diciembre del año de la fecha de inicio) y avisa por qué.
+40. El estado de carga del periodo es siempre uno de tres: verde (tiempo de reloj por debajo del 85% del disponible), amarillo (entre 85% y 100%), o rojo (por encima del 100%, es decir, sobrecarga real). Este cálculo usa siempre **tiempo de reloj** (franjas solapadas fusionadas, contadas una sola vez), nunca la suma bruta por proyecto, y nunca incluye los Bloques Fijos.
+41. El Panel muestra explícitamente cuatro cifras distintas del periodo: tiempo de reloj, tiempo bruto (suma de todos los proyectos sin fusionar solapes), tiempo disponible, y tiempo "sin registrar" (disponible menos reloj).
+42. El aviso de sobrecarga, cuando aplica, señala cuál de las tres secciones editables es la que más está aportando al tiempo de reloj de ese periodo.
+43. El desglose por sección/proyecto del Panel se puede filtrar por sección y por proyecto — ese filtro cambia solo lo que se ve en el desglose, **no** cambia el indicador de sobrecarga, que siempre refleja el día/periodo completo.
+44. Si algún proyecto visible tiene una meta de horas semanales, el Panel muestra su comparación Plan vs. Real (la meta semanal se prorratea al tamaño del periodo mostrado: por ejemplo, una semana completa usa la meta tal cual, un solo día usa 1/7 de la meta).
+45. El Panel es ahora mayormente gráfico en vez de tabular: un **anillo de carga** (porcentaje, con su color de estado) encabeza la pantalla; una **dona** reparte el tiempo del periodo entre las 4 secciones (incluida Bloques Fijos); unas **barras apiladas por día** aparecen cuando el rango cubre entre 2 y 62 días; una **línea de tendencia semana a semana** aparece cuando el rango cubre más de 8 días (y además de los puntos de color, escribe en texto cuántas semanas estuvieron en rojo/amarillo/verde, para no depender solo del color); y un **calendario de colores (heatmap)**, con un cuadrito por día, aparece únicamente en la vista Mes. Cada gráfico lleva su resumen también en texto (para lectores de pantalla), y ninguno reemplaza a las tablas de detalle, que se conservan debajo.
+46. Cuando el periodo elegido abarca más de un día (y no es la vista Año), el Panel agrega una tabla **"Día por día (detalle)"** con el estado de cada día individual — ahora **plegada por defecto** (hay que abrirla), y topada a 62 filas para un rango Personalizado largo, con un aviso de cuántos días quedaron fuera si el rango tiene más.
+47. Un cronómetro en curso cuenta como tiempo provisional en todos los cálculos del Panel (hasta el instante actual), para que la alerta de sobrecarga no espere a que se detenga el cronómetro.
+
+**Vista Año (CR-04)**
+
+48. El selector de rango del Panel incluye una opción **Año**, además de Día/Semana/Mes/Personalizado, con su propia navegación "anterior/hoy/siguiente".
+49. En la vista Año, la tabla "Día por día" se sustituye por un **consolidado mes a mes** del año elegido: para cada mes muestra tiempo de reloj, tiempo disponible, horas por cada sección editable, cuántos días de ese mes estuvieron en rojo, y un estado general (verde/amarillo/rojo) para el mes completo.
+50. Un mes puede marcarse como **"sobrecarga sostenida"** aunque su estado general del mes sea verde o amarillo: se marca así cuando el mes completo terminó en rojo, **o** cuando al menos un tercio de sus días con datos (con un mínimo de 3 días con datos) estuvieron individualmente en rojo. Son dos preguntas distintas — "¿el mes en conjunto se pasó?" y "¿hubo una racha de días pesados sueltos?" — y ambas se muestran a la vez, por lo que pueden no coincidir.
 
 **Historial y filtros**
 
-35. El Historial de registros se puede filtrar por proyecto, por rango de fechas, y por texto libre (busca en la nota y en el nombre del proyecto).
-36. La lista de proyectos se puede filtrar por sección, por estado (activo/archivado) y por texto libre en el nombre.
-37. Si hay más de un cronómetro corriendo, la lista de cronómetros se puede filtrar por proyecto.
-38. El historial muestra como máximo los 300 registros más recientes que coincidan con los filtros; si hay más, la app lo indica y sugiere acotar el rango de fechas.
+51. El Historial de registros se puede filtrar por proyecto, por rango de fechas, y por texto libre (busca en la nota y en el nombre del proyecto).
+52. La lista de proyectos se puede filtrar por sección, por estado (activo/archivado) y por texto libre en el nombre.
+53. Si hay más de un cronómetro corriendo, la lista de cronómetros se puede filtrar por proyecto.
+54. El historial muestra como máximo los 300 registros más recientes que coincidan con los filtros; si hay más, la app lo indica y sugiere acotar el rango de fechas.
 
 **Zona horaria**
 
-39. Todos los cálculos de "día calendario" (para repartir totales, para las excepciones de sueño/comida, para el corte de semana/mes) se hacen según la zona horaria configurada en Ajustes, no según la del equipo donde se abre la app.
+55. Todos los cálculos de "día calendario" (para repartir totales, para el sueño/la comida del día, para el corte de semana/mes/año) se hacen según la zona horaria configurada en Ajustes, no según la del equipo donde se abre la app.
+
+**Pantalla de acceso (decorativo)**
+
+56. La escena de login "hourglass-time" se actualizó visualmente: el reloj de arena ya no es el emoji del sistema, sino un ícono dibujado que se voltea al vaciarse; el fondo combina tres tipos de reloj (de arena, de manecillas con segundero, y digitales corriendo con la hora real); y el Gato de Cheshire salta de un reloj a otro, esfumándose a mitad de salto. Con la preferencia de "reducir movimiento" activada, todo queda quieto pero completo (nada desaparece). Es puramente decorativo — no verificado visualmente en esta sesión (ver limitación de herramienta en `docs/hourglass/entrenamiento.md`), documentado a partir de la lectura del código de `auth-gate.js` y de lo ya confirmado por `accessibility-reviewer` el 2026-08-02.
 
 ## Flujo de trabajo
 
 ```mermaid
 flowchart TD
-  A["Candado de login (auth-gate.js)"] -->|Sesión válida| B["Carga de datos: nube, o caché local si falla"]
-  B --> C{"¿Algún cronómetro corre hace más\nde N horas (staleTrackerAlertHours)?"}
+  A["Candado de login (auth-gate.js)\nescena decorativa 'hourglass-time'"] -->|Sesión válida| B["Carga de datos: nube, o caché local si falla"]
+  B --> B2["Se generan solos los registros\nde Sueño/Comidas pendientes (CR-02,\nsolo con sesión confirmada)"]
+  B2 --> C{"¿Algún cronómetro corre hace más\nde N horas (staleTrackerAlertHours)?"}
   C -->|Sí| D["Modal 'Cronómetro olvidado'\n(centrado, bloqueante, atrapa el foco)"]
   D -->|Detener todos ahora| E["Esos cronómetros se convierten\nen registros de tiempo"]
   D -->|Ir a corregir| F["Cambia a la pestaña Cronómetros"]
   D -->|Dejarlo corriendo / Escape| G["Cierra el aviso sin cambios"]
-  C -->|No| H["Pestaña PANEL (vista inicial)"]
+  C -->|No| H["Pestaña PANEL (vista inicial)\nDía / Semana / Mes / Año / Personalizado"]
   E --> H
   F --> H2["Pestaña CRONÓMETROS"]
   G --> H
@@ -95,6 +122,9 @@ flowchart TD
   H <--> J["Pestaña REGISTROS"]
   H <--> K["Pestaña PROYECTOS"]
   H <--> L["Pestaña AJUSTES"]
+
+  H --> H1["Gráficos (CR-03): anillo, dona,\nbarras apiladas, tendencia semanal,\nheatmap (solo en Mes)"]
+  H --> H3["Vista Año (CR-04): consolidado\nmes a mes + 'sobrecarga sostenida'"]
 
   H2 --> I1["Iniciar cronómetro\n(elige proyecto + nota opcional)"]
   I1 --> I2["Cronómetro EN CURSO"]
@@ -105,8 +135,15 @@ flowchart TD
   I2 -->|Descartar + confirmar| I4["Se elimina sin generar registro"]
   I3 --> J
 
+  I2 -.->|mientras corra al menos 1| P["Panel flotante (CR-01)\nvisible en TODAS las pestañas"]
+  P -->|arrastrar (ratón/dedo/flechas), Inicio| P
+  P -->|Minimizar/Expandir| P
+  P -->|Pausar/Reanudar/Detener desde el panel| I2
+  P -->|"Ver todo en Cronómetros →"| H2
+  P -.->|pestaña cerrada = deja de verse| P2["Título de la pestaña del navegador\nmuestra el tiempo acumulado"]
+
   J --> J1["Registrar tiempo a mano\n(proyecto, fecha, inicio, fin o duración, nota)"]
-  J --> J2["Editar un registro existente"]
+  J --> J2["Editar un registro existente\n(Sueño/Comidas: proyecto bloqueado)"]
   J --> J3["Eliminar un registro + confirmar"]
   J --> J4["Filtrar historial\n(proyecto / fechas / texto)"]
 
@@ -116,10 +153,10 @@ flowchart TD
   K --> K4["Eliminar + confirmar\n(borra también sus registros y cronómetros)"]
 
   L --> L1["Zona horaria, sueño/comida por\ndefecto, horas para la alerta"]
-  L --> L2["Excepciones puntuales de\nsueño/comida por fecha"]
+  L --> L2["Días fuera de lo habitual:\ncorregir el sueño/comida de un\ndía puntual (CR-02)"]
 ```
 
-Diagrama derivado de la lectura completa de `hourglass.html` (funciones `switchView`, `wireTrackers`, `trackerAction`, `wireRegistros`, `wireProyectos`, `wireAjustes`, `checkStaleTrackers`) — no se pudo recorrer con clics reales en esta sesión (ver limitación de herramienta explicada en `docs/hourglass/entrenamiento.md`), pero cada nodo y transición corresponde a una rama de código real, y las reglas de negocio (tiempo de reloj vs. bruto, cruce de medianoche, varios cronómetros del mismo proyecto, aviso bloqueante) coinciden con lo que `qa-lead` ya verificó con ejecución real el 2026-07-30 (`docs/hourglass/qa-checklist.md`).
+Diagrama derivado de la lectura completa de `hourglass.html` (funciones `switchView`, `wireTrackers`, `trackerAction`, `wireRegistros`, `wireProyectos`, `wireAjustes`, `checkStaleTrackers`, `renderFloatPanel`, `wireFloatPanel`, `generarFijosPendientes`, `summarizeYear`) — no se pudo recorrer con clics reales en esta sesión (ver limitación de herramienta explicada en `docs/hourglass/entrenamiento.md`; en esta sesión concreta un clic sobre una pestaña real, `ref_3`/"Cronómetros", tampoco tuvo efecto confirmable en `get_page_text`), pero cada nodo y transición corresponde a una rama de código real, y las reglas de negocio (tiempo de reloj vs. bruto, cruce de medianoche, varios cronómetros del mismo proyecto, aviso bloqueante) coinciden con lo que `qa-lead` ya verificó con ejecución real el 2026-07-30 y el 2026-08-02 (`docs/hourglass/qa-checklist.md`).
 
 ## Triaje de casos borde por el tech lead (2026-07-30, antes del primer commit)
 
@@ -188,7 +225,7 @@ Estado de cada caso de la lista de abajo. Ninguno queda sin revisar.
 
 20. **(accessibility-reviewer, 2026-08-02, commit `3ff7445`) El número de día dentro de las celdas "sin registrar" del heatmap de carga no cumple contraste AA.** `chartHeatmap()` pinta el texto del día con `#9AA29B` sobre fondo `#F1F3F0` en las celdas sin tiempo registrado (`hourglass.html:1639` y `1642`) — calculado con la fórmula real de luminancia relativa WCAG 2.x da **≈2,35:1**, muy por debajo del 4,5:1 exigido para texto normal (y del propio 3:1 de texto grande). Las celdas CON datos (verde/ámbar/rojo, texto `#16212B`) sí pasan cómodo (9,8–12,4:1) — el problema es específico del segundo color de texto, más claro, reservado para las celdas vacías. Aclaración de precisión: el encargo pedía medir "`#F1F3F0` con texto `#16212B` encima", pero el código real usa `#9AA29B` para esa celda, no `#16212B` — se reporta el par real, que es el que efectivamente fallaba. No verificado con `getComputedStyle` en vivo (sin herramienta de JS esta sesión), pero es aritmética directa sobre los valores hexadecimales exactos del código. **Pendiente, no bloqueante, arreglo de una línea** — oscurecer `#9AA29B` (por ejemplo, acercarlo a `#5C6670`, que sí da 5,69:1 contra fondos claros similares en este mismo archivo). Detalle completo, con la tabla de los 12 pares medidos, en `docs/hourglass/accessibility-notes.md` (sección 5).
 
-21. **(business-analyst / accessibility-reviewer, 2026-08-02, nota de proceso, no de la app) La tabla "Día por día (detalle)" no tiene ningún tope de filas para un rango Personalizado largo (hasta ~366 días dentro de un año).** A diferencia del historial de Registros (tope documentado de 300, requerimiento 38), `hourglass.html:1444-1458` no acota `sum.days.length` antes de generar una fila de tabla por día. No es un hallazgo de accesibilidad en sí (la tabla sigue siendo navegable), pero es un caso borde de rendimiento/usabilidad que corresponde más al ámbito de `qa-lead` — se anota aquí para que quede en la lista compartida y no se pierda. **Pendiente de revisión por `qa-lead`.**
+21. **(business-analyst / accessibility-reviewer, 2026-08-02, nota de proceso, no de la app) La tabla "Día por día (detalle)" no tiene ningún tope de filas para un rango Personalizado largo (hasta ~366 días dentro de un año).** A diferencia del historial de Registros (tope documentado de 300, requerimiento 54 — renumerado el 2026-08-02 tras el paquete CR-01/CR-04, era el 38 en la versión anterior de este documento), `hourglass.html:1444-1458` no acota `sum.days.length` antes de generar una fila de tabla por día. No es un hallazgo de accesibilidad en sí (la tabla sigue siendo navegable), pero es un caso borde de rendimiento/usabilidad que corresponde más al ámbito de `qa-lead` — se anota aquí para que quede en la lista compartida y no se pierda. **Pendiente de revisión por `qa-lead`.**
 
     **Cerrado por `qa-lead` (2026-08-02, commit `64fc5b6`):** confirmado en vivo (`renderPanel()` real, no lectura de código) que el tope se implementó: `TOPE_FILAS = 62` (`hourglass.html`, dentro de `renderPanel()`), con un `<p class="hint">` explícito cuando el rango supera esas 62 filas. Probado con un rango personalizado de ~200 días (1-ene a 20-jul): la tabla renderizada tiene exactamente 62 filas de datos (63 `<tr>` contando el encabezado) y el aviso "Se muestran los primeros 62 días de los 201..." aparece en el DOM real. **Implementado y verificado.**
 
@@ -209,3 +246,7 @@ Estado de cada caso de la lista de abajo. Ninguno queda sin revisar.
 30. **(qa-lead, 2026-08-02, commit `64fc5b6`) Confirmado con ejecución real, no solo lectura de código, que CR-02 no genera doble contabilidad en ningún camino probado.** Con un proyecto de "Trabajo" con 16 h reales el mismo día que los bloques fijos (7 h sueño + 3 h comida = 10 h): `summarize()` da `relojMin=960` (=16h, solo el trabajo) y `brutoMin=960` (igual, un solo proyecto), `availMin=840` (=24-7-3), estado `rojo` — los bloques fijos NO entran en el cálculo de sobrecarga, tal como se afirmó. `allEntries()` excluye los 2 registros de sueño/comida (`allEntriesCount:1`, solo el de trabajo), pero SÍ aparecen en `chartDonut()` (confirmado: "Bloques Fijos 38% · 10,0 h" en la leyenda real generada) y en `sum.byDay[hoy].porSeccion.fijos` (600 min) para las barras apiladas — por una vía de cálculo separada (`indiceFijos()`/`blockHoursFrom()`), no reutilizando `segs`. `blockHours(fecha,tipo)` y `blockHoursFrom(indiceFijos(), fecha, tipo)` dieron el mismo valor en todas las pruebas (7 y 3). También confirmado: el filtro de "Registros" (`filteredEntries()`, usa `state.entries` directo, no `allEntries()`) SÍ incluye los registros de bloques fijos en el historial — correcto y esperado, coincide con el requerimiento "visibles en historial y dona". Cambiar `sleepHoursDefault` después de generar el bloque de un día no reescribe ese día ya generado (probado: cambio de 7→9 no alteró un día ya creado con 7); editar un día puntual con `setHorasFijas()` sí lo cambia sin tocar el otro bloque del mismo día. El tope de 31 días hacia atrás en el "ponerse al día" (`generarFijosPendientes()`) se confirmó exacto: simulando 40 días sin abrir la app, se generaron exactamente 31 días únicos (62 entradas), los 9 más antiguos se omitieron sin error; una segunda llamada el mismo día no duplicó nada (0 creados). **Todo lo pedido en el punto 1 del encargo (doble contabilidad) se confirma correcto y sin regresión.**
 
 31. **(release-manager, 2026-08-02, verificación previa al merge del bloque CR-01/`3c6fa0a`) `state.entries` no tiene tope de almacenamiento, y `save()` reenvía el documento COMPLETO a Supabase en cada acción, no solo lo nuevo.** Confirmado por lectura de código: `TOPE_FILAS=62` (línea 1455) y el `.slice(0,300)` de Registros (línea 1991) son topes de **cuántas filas se pintan en pantalla**, no de cuántas se guardan — `state.entries` crece sin límite, y `serialize()`/`save()` (líneas 1036-1062, invocada desde 18 puntos distintos del archivo) hace `localStorage.setItem` + `syncToCloud()` con el **estado entero** (`projects`, `entries`, `activeTrackers`, etc.) en cada guardado, vía `upsert` sobre la única fila `(user_id, app_id)` de `app_data` — mismo patrón que ya usan las otras 5 apps del hub (confirmado idéntico en `lpbag.html:885-889`), así que no es un patrón nuevo de esta rama. **Lo que sí es nuevo con CR-02:** por primera vez en el hub, el crecimiento de esa fila deja de depender de cuánto usa la app la usuaria y pasa a depender del calendario — `generarFijosPendientes()` agrega ~2 registros por cada día que pase, la usuaria abra la app o no (acotado a 31 días/62 registros por "puesta al día", pero sin tope total acumulado). Con datos de tamaño realista (~150-250 bytes por entry en JSON), esto son ~110-180 KB/año agregados solo por bloques fijos, indefinidamente mientras la cuenta exista — una cifra pequeña frente al límite de 500 MB de la base de datos del plan gratuito de Supabase (no es un riesgo de agotar espacio en años razonables), pero sí significa que **cada guardado individual sube una porción de datos cada vez más grande**, no incremental, algo que ningún otro caso borde de este archivo había señalado todavía. **Pendiente, no bloqueante, de baja prioridad hoy**: no hay acción necesaria para este release, pero vale la pena que alguien con acceso al panel de Supabase revise de vez en cuando (ej. una vez al año) el tamaño real de la fila de Hourglass en `app_data` (`select pg_column_size(data) from app_data where app_id='hourglass'`, requiere el SQL Editor del dashboard — no verificable desde este entorno con la llave `anon`), para detectar a tiempo si algún día se acerca a un tamaño que haga los guardados perceptiblemente lentos. Detalle también en `docs/infra-watch.md` y `docs/release-log.md`.
+
+32. **(business-analyst, 2026-08-02, commit `3c6fa0a`, hallazgo nuevo) Editar la fecha de un registro automático de Sueño/Comidas puede duplicar las horas de sueño/comida de un día y dejar huérfano el día de origen (que cae de vuelta al valor por defecto sin avisar).** Al editar un registro de Sueño o Comidas desde Registros, el selector de **proyecto** queda deshabilitado (`hourglass.html:1945-1947`, cierra correctamente el caso borde 28 de `security-reviewer`), pero el campo **Fecha** (`re-fecha`, línea 1950) sigue siendo un `<input type="date">` normal, sin deshabilitar ni validar. `saveManualEntry()` (línea 2082 en adelante) permite mover ese registro a cualquier otra fecha sin comprobar si el día destino ya tiene su propio registro automático del mismo tipo. Como `indiceFijos()` (`hourglass.html:887-896`) **suma** `duracionMin` de todos los registros de Sueño (o de Comidas) que caigan en un mismo día, mover un "Sueño" de 7 h al día que ya tenía su propio "Sueño" de 7 h generado deja ese día con **14 h de sueño contabilizadas** (`blockHoursFrom()` las recorta a un máximo de 24 h, línea 899-907, así que no rompe el cálculo, pero sí infla el tiempo disponible restado de ese día sin que la usuaria lo pidiera). El día de **origen**, al quedarse sin ningún registro de Sueño propio, no se regenera (`ultimoDiaFijosGenerado` ya pasó esa fecha) y simplemente cae de vuelta al valor por defecto de Ajustes (`blockHoursFrom()` con `idx[dayKey]` vacío) — sin ningún aviso de que ese día "perdió" su registro específico. Reproducible con clics normales de la interfaz (Registros → Editar sobre un registro de Sueño → cambiar la Fecha → Guardar cambios), no requiere manipular datos fuera de la UI. No verificado con ejecución real en esta sesión (ver limitación de herramienta en `docs/hourglass/entrenamiento.md`); es lectura de código con línea exacta. **Pendiente de decisión con la usuaria** — remedio simple y consistente con el fix ya aplicado al selector de proyecto: cuando `esEntradaFija(editing)` sea verdadero, mostrar la fecha como texto fijo (no editable) en vez de un campo de fecha, igual que ya se hizo con el proyecto, y dejar editables solo la hora y la nota.
+
+33. **(business-analyst, 2026-08-02, commit `3c6fa0a`, seguimiento por lectura de código, no verificado en vivo) El hallazgo 17/23 de `accessibility-reviewer`/`qa-lead` (el panel flotante podía taparse con la barra de pestañas) parece corregido en este commit, pero no se pudo reverificar con interacción real en esta sesión.** El propio mensaje de este commit dice haberlo corregido, y la lectura del código lo confirma: `clampFloat()` (`hourglass.html:2560-2571`) ahora calcula `minY` a partir de una nueva función `limiteSuperiorFlotante()` (líneas 2551-2556), que suma el alto real de `header.app` + `nav.tabs` y reserva esa franja tanto para el arrastre con puntero (`pointermove`, línea 2660) como para el movimiento con flechas de teclado (línea 2702) y para la tecla Inicio (línea 2686, que ahora pasa por `clampFloat()` en vez de fijar `x:16` a mano). En una pantalla muy baja donde esa franja no cupiera, el propio código prioriza que el panel quepa en la ventana (`minY = Math.min(limiteSuperiorFlotante(), maxY)`, línea 2566) sobre respetar la franja completa — un caso extremo razonable, no señalado como problema. **No se pudo confirmar con arrastre real ni con `getBoundingClientRect`/`elementFromPoint()` en esta sesión** (el panel de navegador no compuso frames y un clic de control sobre un elemento interactivo no tuvo efecto verificable — ver limitación de herramienta en `docs/hourglass/entrenamiento.md`), así que esta entrada **no cierra** formalmente los casos 17/23 (eso le corresponde a `accessibility-reviewer`/`qa-lead` con ejecución real, como ya se hizo para el caso 21). Se deja anotado aquí para que quien retome la lista sepa que, por lectura de código, el fix ya está y solo falta la reverificación en vivo — no que el problema siga abierto sin ningún avance.

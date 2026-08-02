@@ -95,6 +95,15 @@ sueltos sí. Son dos preguntas distintas y se responden las dos.
 - Varios ajustes de accesibilidad: contraste del calendario de colores, y que
   la línea de tendencia diga **en texto** cuántas semanas hubo con sobrecarga,
   para no depender de distinguir verde de rojo.
+- En el teléfono, el reloj flotante se podía arrastrar **encima de la barra de
+  pestañas** y esa zona dejaba de responder al toque. Ya no puede subir hasta
+  ahí.
+- Al corregir un registro de Sueño o Comidas se podía cambiar su proyecto o su
+  fecha, y eso **descuadraba las horas del día en silencio** (o las contaba
+  dos veces). Ahora solo se pueden ajustar sus horas; para cambiar otro día se
+  edita el registro de ese día.
+- La app creaba y guardaba los registros automáticos **incluso sin haber
+  iniciado sesión**. Ahora espera a saber de quién son.
 
 ## Dónde quedó
 

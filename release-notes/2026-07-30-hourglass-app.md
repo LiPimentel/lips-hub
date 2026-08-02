@@ -87,5 +87,8 @@ trabajo.
 
 ## Dónde quedó
 
-Solo en la rama `claude/hourglass-app`, pendiente de fusionar a `master`. Una
-vez fusionada se publica sola en https://lips-hub.lissette2402.workers.dev
+**Publicado.** Se fusionó a `master` en el PR #37 y ya está en vivo en
+https://lips-hub.lissette2402.workers.dev
+
+*(Esta nota decía "pendiente de fusionar" hasta el 02/08/2026; se corrigió al
+detectarse que el PR ya estaba fusionado.)*

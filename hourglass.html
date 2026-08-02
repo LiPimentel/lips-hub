@@ -1945,9 +1945,11 @@ function renderRegistros(){
       + (editing && esEntradaFija(editing) ? ' disabled' : '') + '>'
       + projectOptions(proy, { vacio:'Elige un proyecto', incluirSistema: !!(editing && esEntradaFija(editing)) }) + '</select>'
       + (editing && esEntradaFija(editing)
-          ? '<span class="hint">Un bloque fijo no cambia de proyecto. Sí puedes ajustar su horario.</span>' : '')
+          ? '<span class="hint">Un bloque fijo no cambia de proyecto ni de día. Sí puedes ajustar sus horas. '
+            + 'Para cambiar otro día, edita el registro de ese día.</span>' : '')
       + '</div>'
-      + '<div class="field"><label for="re-fecha">Fecha</label><input type="date" id="re-fecha" value="' + esc(d) + '"></div>'
+      + '<div class="field"><label for="re-fecha">Fecha</label><input type="date" id="re-fecha" value="' + esc(d) + '"'
+      + (editing && esEntradaFija(editing) ? ' disabled' : '') + '></div>'
       + '<div class="field"><label for="re-inicio">Hora de inicio</label><input type="time" id="re-inicio" value="' + esc(hi) + '"></div>'
       + '</div>'
       /* Cada campo lleva su propia etiqueta oculta: la etiqueta que envuelve
@@ -2080,12 +2082,21 @@ function wireRegistros(root){
 }
 
 function saveManualEntry(root){
+  const editando = ui.editingEntryId ? state.entries.find(e => e.id === ui.editingEntryId) : null;
   const proy = root.querySelector('#re-proy').value;
-  const fecha = root.querySelector('#re-fecha').value;
+  let fecha = root.querySelector('#re-fecha').value;
   const hi = root.querySelector('#re-inicio').value;
   const modo = ui.manualMode;
   const hf = root.querySelector('#re-fin').value;
   const durVal = root.querySelector('#re-dur').value;
+
+  /* Un bloque fijo tampoco cambia de día. Moverlo a una fecha que ya tiene su
+     propio registro automático haría que ese día contara las horas dos veces,
+     y el día de origen se quedaría en silencio con el valor por defecto. Para
+     cambiar el sueño de otro día se edita el registro de ese día. */
+  if(editando && esEntradaFija(editando)){
+    fecha = dayKeyOf(toZoned(Date.parse(editando.inicio)));
+  }
 
   if(!proy){ setMsg('registros','Elige un proyecto.','err'); render(); return; }
   if(!isDayKey(fecha)){ setMsg('registros','Elige una fecha válida.','err'); render(); return; }
@@ -2108,12 +2119,12 @@ function saveManualEntry(root){
     finIso = new Date(fromZoned(z)).toISOString();
   }
 
-  const editing = ui.editingEntryId ? state.entries.find(e => e.id === ui.editingEntryId) : null;
+  const editing = editando;
   const nota = (root.querySelector('#re-nota').value || '').slice(0, 200);
   if(editing){
-    // El selector va deshabilitado para los bloques fijos, pero la comprobación
-    // se repite aquí: deshabilitar un control es una ayuda de la interfaz, no
-    // una garantía de que el valor no llegue de otra forma.
+    // Los campos van deshabilitados para los bloques fijos, pero la
+    // comprobación se repite aquí: deshabilitar un control es una ayuda de la
+    // interfaz, no una garantía de que el valor no llegue de otra forma.
     editing.projectId = esEntradaFija(editing) ? editing.projectId : proy;
     editing.inicio = inicioIso;
     editing.fin = finIso;
