@@ -185,7 +185,7 @@
 <title>Hourglass — your time slice</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3E%3Crect width='30' height='30' rx='8' fill='%230E1A1E'/%3E%3Ctext x='15' y='22' font-size='16' text-anchor='middle'%3E%E2%8F%B3%3C/text%3E%3C/svg%3E">
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-<script>window.AIAPPS_APP_ID = 'hourglass'; window.AIAPPS_SHOW_ACCOUNT_WIDGET = true; window.AIAPPS_APP_NAME = 'Hourglass'; window.AIAPPS_APP_EMOJI = '⏳'; window.AIAPPS_APP_TAGLINE = 'your time slice'; window.AIAPPS_APP_ACCENT = '#3FB8AE'; window.AIAPPS_APP_BG = '#0E1A1E'; window.AIAPPS_APP_GLOW = 'rgba(63,184,174,0.20)'; window.AIAPPS_LOGIN_SCENE = 'hourglass-time'; window.AIAPPS_LOGIN_LAYOUT = 'right';</script>
+<script>window.AIAPPS_APP_ID = 'hourglass'; window.AIAPPS_SHOW_ACCOUNT_WIDGET = true; window.AIAPPS_APP_NAME = 'Hourglass'; window.AIAPPS_APP_EMOJI = '⏳'; window.AIAPPS_LOGO_HOURGLASS = true; window.AIAPPS_APP_TAGLINE = 'your time slice'; window.AIAPPS_APP_ACCENT = '#3FB8AE'; window.AIAPPS_APP_BG = '#0E1A1E'; window.AIAPPS_APP_GLOW = 'rgba(63,184,174,0.20)'; window.AIAPPS_LOGIN_SCENE = 'hourglass-time'; window.AIAPPS_LOGIN_LAYOUT = 'right';</script>
 <script src="./supabase-client-app.js"></script>
 <script src="./auth-gate.js"></script>
 <style>
@@ -226,6 +226,15 @@
   [role="tabpanel"]:focus-visible{outline:2px solid var(--teal);outline-offset:-2px;border-radius:8px;}
   .panel{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:clamp(13px,2.6vw,18px);margin-bottom:16px;}
   .panel > h2{font-size:12.5px;margin:0 0 12px;color:var(--teal-text);text-transform:uppercase;letter-spacing:0.7px;}
+  /* Tabla de detalle plegable: <details> nativo, que trae el teclado y el
+     estado expandido para lectores de pantalla sin JS de por medio. */
+  details.panel > summary{cursor:pointer;list-style:none;border-radius:5px;}
+  details.panel > summary::-webkit-details-marker{display:none;}
+  details.panel > summary::marker{content:'';}
+  details.panel > summary::before{content:'▸ ';color:var(--muted);}
+  details.panel[open] > summary::before{content:'▾ ';}
+  details.panel > summary h2{margin:0;}
+  details.panel > summary:focus-visible{outline:2px solid var(--teal);outline-offset:2px;}
   .panel > h3{font-size:13.5px;margin:16px 0 8px;color:var(--ink);}
   .row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;}
   .field{display:flex;flex-direction:column;gap:4px;min-width:0;}
@@ -254,6 +263,22 @@
   .estado.verde{background:var(--verde-bg);border-color:#A9D6BE;color:var(--verde-tx);}
   .estado.amarillo{background:var(--ambar-bg);border-color:#E0C27C;color:var(--ambar-tx);}
   .estado.rojo{background:var(--rojo-bg);border-color:#DDA096;color:var(--rojo-tx);}
+
+  /* ── Gráficos del panel (CR-03) ── */
+  .estado-grid{display:flex;gap:16px;align-items:stretch;flex-wrap:wrap;}
+  .estado-ring{flex:none;display:flex;align-items:center;justify-content:center;}
+  .ring{width:130px;height:130px;display:block;}
+  .chart-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;}
+  .chart-box{border:1px solid var(--line);border-radius:9px;padding:12px 13px;background:#FBFCFB;min-width:0;}
+  .chart-box.wide{grid-column:1/-1;}
+  .chart-box h3{font-size:12.5px;margin:0 0 10px;color:var(--teal-text);text-transform:uppercase;letter-spacing:0.6px;}
+  .chart-box .hint{margin-top:8px;}
+  .chart{width:100%;height:auto;display:block;}
+  .donut-wrap{display:flex;gap:14px;align-items:center;flex-wrap:wrap;}
+  .donut{width:140px;height:140px;flex:none;display:block;}
+  .donut-legend{list-style:none;margin:0;padding:0;font-size:12.5px;flex:1 1 130px;min-width:0;}
+  .donut-legend li{padding:3px 0;}
+  .heatmap{width:100%;max-width:260px;height:auto;display:block;}
 
   .bar{height:9px;border-radius:999px;background:#ECEEEA;overflow:hidden;margin-top:6px;}
   .bar > span{display:block;height:100%;border-radius:999px;background:var(--teal);}
@@ -289,6 +314,75 @@
 
   .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0;}
 
+  /* ═══ Panel flotante de cronómetros (CR-01) ═══
+     Se queda encima de toda la app, en cualquier pestaña, mientras haya algo
+     corriendo. Va por debajo del pop-up de cronómetro olvidado (z-index 1000)
+     y del candado de auth-gate, para no taparlos. */
+  #float-panel{
+    position:fixed;z-index:900;
+    background:var(--dark);color:#EAF3F2;
+    border:1px solid rgba(79,209,197,0.35);
+    border-radius:12px;
+    box-shadow:0 14px 40px rgba(0,0,0,0.45);
+    width:min(310px, calc(100vw - 24px));
+    font-size:13px;
+    user-select:none;
+  }
+  #float-panel.min{width:auto;}
+  .fp-head{
+    display:flex;align-items:center;gap:8px;
+    padding:9px 10px 9px 12px;
+    border-bottom:1px solid rgba(255,255,255,0.1);
+  }
+  #float-panel.min .fp-head{border-bottom:none;padding:8px 10px;}
+  /* El asa es lo único que arrastra: así los botones siguen siendo botones.
+     `cursor:grab` y `touch-action:none` para que en pantalla táctil el gesto
+     mueva el panel en vez de desplazar la página. */
+  .fp-grip{
+    display:flex;align-items:center;gap:8px;flex:1;min-width:0;
+    cursor:grab;touch-action:none;
+  }
+  .fp-grip:active{cursor:grabbing;}
+  .fp-grip:focus-visible{outline:2px solid #7FE3DC;outline-offset:2px;border-radius:6px;}
+  .fp-dots{flex:none;color:rgba(234,243,242,0.45);letter-spacing:1px;font-size:11px;}
+  .fp-title{font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .fp-total{font-variant-numeric:tabular-nums;color:#7FE3DC;font-size:12.5px;white-space:nowrap;}
+  .fp-btn{
+    flex:none;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.14);
+    color:#EAF3F2;border-radius:6px;width:26px;height:26px;line-height:1;
+    font-size:14px;cursor:pointer;font-family:inherit;padding:0;
+  }
+  .fp-btn:hover{background:rgba(255,255,255,0.16);}
+  .fp-btn:focus-visible{outline:2px solid #7FE3DC;outline-offset:1px;}
+  .fp-body{max-height:min(50vh, 340px);overflow-y:auto;padding:4px 0;}
+  .fp-item{padding:9px 12px;border-bottom:1px solid rgba(255,255,255,0.07);}
+  .fp-item:last-child{border-bottom:none;}
+  .fp-proj{display:flex;align-items:center;gap:7px;font-weight:600;font-size:12.5px;}
+  .fp-proj .swatch{border-color:rgba(255,255,255,0.3);}
+  .fp-sec{font-size:11px;color:#9FBFBC;text-transform:uppercase;letter-spacing:0.6px;margin-top:2px;}
+  .fp-time{font-size:19px;font-weight:700;font-variant-numeric:tabular-nums;margin-top:3px;}
+  .fp-item.paused .fp-time{color:#9FBFBC;}
+  .fp-acts{display:flex;gap:6px;margin-top:7px;flex-wrap:wrap;}
+  .fp-act{
+    background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.16);
+    color:#EAF3F2;border-radius:6px;padding:4px 9px;font-size:11.5px;
+    cursor:pointer;font-family:inherit;white-space:nowrap;
+  }
+  .fp-act:hover{background:rgba(255,255,255,0.17);}
+  .fp-act:focus-visible{outline:2px solid #7FE3DC;outline-offset:1px;}
+  .fp-act.stop{border-color:rgba(240,160,150,0.5);color:#FFD8D2;}
+  .fp-foot{
+    padding:8px 12px;border-top:1px solid rgba(255,255,255,0.1);
+  }
+  .fp-foot button{
+    width:100%;background:none;border:none;color:#7FE3DC;font-family:inherit;
+    font-size:12px;cursor:pointer;padding:3px;text-align:center;border-radius:5px;
+  }
+  .fp-foot button:hover{background:rgba(127,227,220,0.12);}
+  .fp-foot button:focus-visible{outline:2px solid #7FE3DC;outline-offset:1px;}
+  .fp-pill{display:flex;align-items:center;gap:8px;}
+  .fp-pill .dot{width:8px;height:8px;border-radius:50%;background:#4FD1C5;flex:none;animation:pulse 1.8s ease-in-out infinite;}
+
   @media (max-width:640px){
     .stat .v{font-size:18px;}
     .btn{padding:8px 12px;}
@@ -297,7 +391,7 @@
   @media (prefers-reduced-motion: reduce){
     /* El punto del cronómetro deja de latir; el chip sigue diciendo con
        palabras cuántos hay corriendo, así que no se pierde información. */
-    .running-chip .dot{animation:none;}
+    .running-chip .dot, .fp-pill .dot{animation:none;}
     *{transition:none !important;}
   }
 </style>
@@ -336,6 +430,7 @@
 </main>
 
 <div id="live" class="sr-only" role="status" aria-live="polite"></div>
+<div id="float-host"></div>
 <div id="modal-host"></div>
 
 <script>
@@ -357,13 +452,32 @@ const DAY = 86400000;
    segmentos y 14,58 s de bloqueo con un `fin` en el año 9999. */
 const MAX_ENTRY_DAYS = 31;
 
-/* Las 3 secciones son fijas: viven en el código, no en los datos. */
+/* Las secciones son fijas: viven en el código, no en los datos.
+   "Bloques Fijos" es distinta de las otras tres: no se le crean proyectos a
+   mano y su tiempo NO compite por las horas disponibles del día — es
+   justamente lo que las define (CR-02). */
 const SECTIONS = [
   { id:'trabajo',      nombre:'Trabajo',      color:'#2E8C86' },
   { id:'voluntariado', nombre:'Voluntariado', color:'#B8862F' },
-  { id:'personal',     nombre:'Personal',     color:'#7C6BB0' }
+  { id:'personal',     nombre:'Personal',     color:'#7C6BB0' },
+  { id:'fijos',        nombre:'Bloques Fijos', color:'#6B7A8F', sistema:true }
 ];
 const SECTION_IDS = SECTIONS.map(s => s.id);
+// Secciones donde la usuaria puede crear proyectos.
+const SECCIONES_EDITABLES = SECTIONS.filter(s => !s.sistema);
+
+/* Los dos proyectos automáticos de Bloques Fijos. Existen siempre, no se
+   pueden borrar ni renombrar, y sus registros los genera la app sola. */
+const FIJOS = [
+  { id:'fx-sueno',  tipo:'sueno',  nombre:'Sueño',   color:'#5B6E86', horaInicio:0  },
+  { id:'fx-comida', tipo:'comida', nombre:'Comidas', color:'#8A7B6B', horaInicio:12 }
+];
+const FIJO_POR_TIPO = { sueno: FIJOS[0], comida: FIJOS[1] };
+const FIJO_IDS = FIJOS.map(f => f.id);
+function esProyectoFijo(id){ return FIJO_IDS.indexOf(id) !== -1; }
+// Máximo de días que se generan hacia atrás de una sentada, para que abrir la
+// app después de meses no cree miles de registros de golpe.
+const MAX_DIAS_GENERADOS = 31;
 const PALETTE = ['#2E8C86','#B8862F','#7C6BB0','#4E7A8B','#B85C4E','#5F8A4E','#8B6BA0','#C07A4E'];
 
 const DEFAULTS = {
@@ -384,7 +498,10 @@ function emptyState(){
     projects:[],
     entries:[],
     activeTrackers:[],
-    fixedBlockOverrides:[]
+    fixedBlockOverrides:[],
+    // Último día para el que ya se generaron los registros automáticos de
+    // sueño y comidas, para no repetirlos ni saltárselos.
+    ultimoDiaFijosGenerado:null
   };
 }
 
@@ -428,14 +545,28 @@ function fmtClock(ms){
    donde se abra la app. */
 let tzWarned = false;
 function tzName(){ return state.settings.timezone || DEFAULTS.timezone; }
+
+/* El formateador se guarda y se reusa. Construir un Intl.DateTimeFormat es
+   caro, y `offsetMin` se llama en cada conversión de fecha: creándolo cada vez,
+   la vista Año llegaba a decenas de miles de construcciones y tardaba tanto
+   que parecía colgada. Se rehace solo si cambia la zona horaria. */
+let tzFmt = null, tzFmtName = null;
+function tzFormatter(){
+  const name = tzName();
+  if(tzFmt && tzFmtName === name) return tzFmt;
+  tzFmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: name, hour12:false,
+    year:'numeric', month:'2-digit', day:'2-digit',
+    hour:'2-digit', minute:'2-digit', second:'2-digit'
+  });
+  tzFmtName = name;
+  return tzFmt;
+}
+
 function offsetMin(ms){
   try{
     const p = {};
-    new Intl.DateTimeFormat('en-US', {
-      timeZone: tzName(), hour12:false,
-      year:'numeric', month:'2-digit', day:'2-digit',
-      hour:'2-digit', minute:'2-digit', second:'2-digit'
-    }).formatToParts(new Date(ms)).forEach(x => { if(x.type !== 'literal') p[x.type] = x.value; });
+    tzFormatter().formatToParts(new Date(ms)).forEach(x => { if(x.type !== 'literal') p[x.type] = x.value; });
     let h = +p.hour; if(h === 24) h = 0;
     const asUTC = Date.UTC(+p.year, +p.month - 1, +p.day, h, +p.minute, +p.second);
     return Math.round((asUTC - Math.floor(ms / 1000) * 1000) / 60000);
@@ -494,14 +625,24 @@ function normalize(raw){
 
   (Array.isArray(raw.projects) ? raw.projects : []).forEach((p, i) => {
     if(!p || typeof p !== 'object') return;
+    if(esProyectoFijo(p.id)) return; // se reponen abajo desde la constante
     s.projects.push({
       id: String(p.id || uid('p')),
-      sectionId: SECTION_IDS.indexOf(p.sectionId) !== -1 ? p.sectionId : 'trabajo',
+      sectionId: SECCIONES_EDITABLES.some(x => x.id === p.sectionId) ? p.sectionId : 'trabajo',
       nombre: String(p.nombre || 'Sin nombre').slice(0, 120),
       color: safeColor(p.color, PALETTE[i % PALETTE.length]),
       estado: p.estado === 'archivado' ? 'archivado' : 'activo',
       metaHorasSemanales: p.metaHorasSemanales == null || p.metaHorasSemanales === ''
         ? null : clamp(num(p.metaHorasSemanales, 0), 0, 168)
+    });
+  });
+  /* Los proyectos automáticos se reponen siempre desde la constante, nunca
+     desde el JSON: así no se pueden renombrar, mover de sección ni perder
+     editando el archivo de datos a mano. */
+  FIJOS.forEach(f => {
+    s.projects.push({
+      id: f.id, sectionId:'fijos', nombre: f.nombre, color: f.color,
+      estado:'activo', metaHorasSemanales:null, sistema:true
     });
   });
 
@@ -519,7 +660,7 @@ function normalize(raw){
     const entry = {
       id: String(e.id || uid('e')),
       projectId: String(e.projectId || ''),
-      origen: e.origen === 'tracker' ? 'tracker' : 'manual',
+      origen: (e.origen === 'tracker' || e.origen === 'auto') ? e.origen : 'manual',
       inicio: new Date(e.inicio).toISOString(),
       fin: new Date(e.fin).toISOString(),
       duracionMin: 0,
@@ -554,13 +695,87 @@ function normalize(raw){
     s.fixedBlockOverrides.push({ fecha: o.fecha, tipo: o.tipo, horas: clamp(num(o.horas, 0), 0, 24) });
   });
 
+  if(isDayKey(raw.ultimoDiaFijosGenerado)) s.ultimoDiaFijosGenerado = raw.ultimoDiaFijosGenerado;
+
   // Un proyecto borrado no debe dejar registros huérfanos que no se puedan
   // ver ni corregir desde ninguna pantalla.
   const ids = {};
   s.projects.forEach(p => { ids[p.id] = true; });
   s.entries = s.entries.filter(e => ids[e.projectId]);
-  s.activeTrackers = s.activeTrackers.filter(t => ids[t.projectId]);
+  // Los bloques fijos no se cronometran: un tracker suyo solo puede venir de
+  // un dato manipulado.
+  s.activeTrackers = s.activeTrackers.filter(t => ids[t.projectId] && !esProyectoFijo(t.projectId));
   return s;
+}
+
+/* ── Registros automáticos de sueño y comidas (CR-02) ──
+   Antes sueño y comidas eran solo una resta invisible; ahora son registros de
+   verdad: se ven en el historial y en el panel, y se editan uno por uno.
+   El día del que se generan: se generan para todos los días hasta HOY
+   inclusive, no solo al cerrar el día. Generarlos solo al cierre dejaría el
+   día en curso sin bloques, y entonces el panel diría que hoy hay 24 h
+   disponibles hasta la medianoche — que es justo el número que la app existe
+   para no equivocar. */
+
+function entradasFijasDe(dayKey, tipo){
+  const f = FIJO_POR_TIPO[tipo];
+  if(!f) return [];
+  return state.entries.filter(e => e.projectId === f.id
+    && dayKeyOf(toZoned(Date.parse(e.inicio))) === dayKey);
+}
+
+function crearEntradaFija(dayKey, tipo, horas){
+  const f = FIJO_POR_TIPO[tipo];
+  const h = clamp(num(horas, 0), 0, 24);
+  if(!f || h <= 0) return null;
+  const desde = String(f.horaInicio).padStart(2, '0') + ':00';
+  const inicioIso = isoFromLocal(dayKey, desde);
+  if(!inicioIso) return null;
+  const entry = {
+    id: uid('e'), projectId: f.id, origen:'auto',
+    inicio: inicioIso,
+    fin: new Date(Date.parse(inicioIso) + Math.round(h * 60) * 60000).toISOString(),
+    duracionMin: Math.round(h * 60), nota:'', editado:false, pausas:[]
+  };
+  state.entries.push(entry);
+  return entry;
+}
+
+// Deja ese día con exactamente `horas` de ese bloque, reemplazando lo que
+// hubiera. Es lo que usan los controles del panel y de Ajustes.
+function setHorasFijas(dayKey, tipo, horas){
+  const f = FIJO_POR_TIPO[tipo];
+  if(!f) return;
+  state.entries = state.entries.filter(e => !(e.projectId === f.id
+    && dayKeyOf(toZoned(Date.parse(e.inicio))) === dayKey));
+  crearEntradaFija(dayKey, tipo, horas);
+}
+
+function generarFijosPendientes(){
+  const hoy = todayKey();
+  let desde;
+  if(isDayKey(state.ultimoDiaFijosGenerado)){
+    desde = dayKeyOf(dayStartZ(state.ultimoDiaFijosGenerado) + DAY);
+  }else{
+    desde = hoy; // primera vez: solo hoy, sin reescribir el pasado
+  }
+  if(desde > hoy){ return 0; }
+  let dias = dayKeysInRange(desde, hoy);
+  if(dias.length > MAX_DIAS_GENERADOS) dias = dias.slice(dias.length - MAX_DIAS_GENERADOS);
+  let creados = 0;
+  dias.forEach(d => {
+    ['sueno', 'comida'].forEach(tipo => {
+      if(entradasFijasDe(d, tipo).length) return; // ya existe, no duplicar
+      // Si ese día tenía una excepción del modelo viejo, se respeta al
+      // convertirla en registro.
+      const ov = state.fixedBlockOverrides.find(o => o.fecha === d && o.tipo === tipo);
+      const horas = ov ? ov.horas : (tipo === 'sueno'
+        ? state.settings.sleepHoursDefault : state.settings.mealHoursDefault);
+      if(crearEntradaFija(d, tipo, horas)) creados++;
+    });
+  });
+  state.ultimoDiaFijosGenerado = hoy;
+  return creados;
 }
 
 function projectById(id){ return state.projects.find(p => p.id === id) || null; }
@@ -644,21 +859,55 @@ function trackerAsEntry(t, nowMs){
     nota: t.nota, editado:false, pausas: pausas, live:true
   };
 }
+/* Los registros de bloques fijos NO entran en el cálculo de carga: no compiten
+   por las horas disponibles, son las que las definen. Si entraran, el día
+   arrancaría con 10 h ocupadas de 14 disponibles y todo saldría en rojo
+   siempre. Se muestran aparte, en su propia tarjeta. */
+function esEntradaFija(e){ return esProyectoFijo(e.projectId); }
+
 function allEntries(){
   const now = Date.now();
-  return state.entries.concat(state.activeTrackers.map(t => trackerAsEntry(t, now)));
+  return state.entries.filter(e => !esEntradaFija(e))
+    .concat(state.activeTrackers.map(t => trackerAsEntry(t, now)));
 }
 
-function blockHours(dayKey, tipo){
+/* Las horas de sueño/comida de un día salen de sus REGISTROS, que son ahora
+   la única fuente de verdad (CR-02): editar el registro de un día cambia sus
+   horas disponibles, y cambiar el valor por defecto solo afecta a los días que
+   se generen después. Para días anteriores a este cambio, que no tienen
+   registros, se sigue leyendo la excepción vieja o el valor por defecto. */
+/* Índice día → minutos de sueño/comida, construido de una sola pasada.
+   Sin él, calcular un año entero preguntaba las horas de cada día recorriendo
+   todos los registros: 365 días × 2 bloques × N registros. */
+function indiceFijos(){
+  const idx = {};
+  state.entries.forEach(e => {
+    if(!esEntradaFija(e)) return;
+    const d = dayKeyOf(toZoned(Date.parse(e.inicio)));
+    const tipo = e.projectId === FIJO_POR_TIPO.sueno.id ? 'sueno' : 'comida';
+    if(!idx[d]) idx[d] = { sueno:0, comida:0 };
+    idx[d][tipo] += e.duracionMin;
+  });
+  return idx;
+}
+
+function blockHoursFrom(idx, dayKey, tipo){
+  const dia = idx[dayKey];
+  if(dia && dia[tipo] > 0) return clamp(dia[tipo] / 60, 0, 24);
   const ov = state.fixedBlockOverrides.find(o => o.fecha === dayKey && o.tipo === tipo);
   if(ov) return clamp(num(ov.horas, 0), 0, 24);
   return tipo === 'sueno'
     ? clamp(num(state.settings.sleepHoursDefault, DEFAULTS.sleepHoursDefault), 0, 24)
     : clamp(num(state.settings.mealHoursDefault, DEFAULTS.mealHoursDefault), 0, 24);
 }
-function availableMinutes(dayKey){
-  return Math.max(0, Math.round((24 - blockHours(dayKey,'sueno') - blockHours(dayKey,'comida')) * 60));
+function availableMinutesFrom(idx, dayKey){
+  return Math.max(0, Math.round((24 - blockHoursFrom(idx, dayKey, 'sueno') - blockHoursFrom(idx, dayKey, 'comida')) * 60));
 }
+
+// Versiones sueltas, para los pocos sitios de la interfaz que preguntan por un
+// día concreto (los campos del panel y de Ajustes).
+function blockHours(dayKey, tipo){ return blockHoursFrom(indiceFijos(), dayKey, tipo); }
+function availableMinutes(dayKey){ return availableMinutesFrom(indiceFijos(), dayKey); }
 function dayKeysInRange(from, to){
   const out = [];
   const a = dayStartZ(from), b = dayStartZ(to);
@@ -675,6 +924,8 @@ function summarize(from, to){
   const days = dayKeysInRange(from, to);
   const inRange = {};
   days.forEach(d => { inRange[d] = true; });
+  // Una sola pasada para todo el rango, en vez de una consulta por día.
+  const idxFijos = indiceFijos();
 
   const segs = [];
   allEntries().forEach(e => {
@@ -706,19 +957,37 @@ function summarize(from, to){
     bySection[k].relojMin = mergedMinutes(bySection[k].segs);
   });
 
+  // Reparto por sección dentro de cada día, para las barras apiladas. Incluye
+  // los bloques fijos, que no cuentan para la carga pero sí forman parte de
+  // cómo se repartió el día de verdad.
+  const porDiaSeccion = {};
+  days.forEach(d => {
+    porDiaSeccion[d] = {};
+    SECTIONS.forEach(s => { porDiaSeccion[d][s.id] = 0; });
+  });
+  segs.forEach(sg => {
+    const p = projectById(sg.entry.projectId);
+    const secId = p ? p.sectionId : 'trabajo';
+    porDiaSeccion[sg.day][secId] += (sg.to - sg.from) / 60000;
+  });
+
   let availMin = 0;
   days.forEach(d => {
-    availMin += availableMinutes(d);
+    const disp = availableMinutesFrom(idxFijos, d);
+    availMin += disp;
     byDay[d].brutoMin = Math.round(byDay[d].brutoMin);
     byDay[d].relojMin = mergedMinutes(byDay[d].segs);
-    byDay[d].availMin = availableMinutes(d);
-    byDay[d].estado = statusOf(byDay[d].relojMin, byDay[d].availMin);
+    byDay[d].availMin = disp;
+    byDay[d].estado = statusOf(byDay[d].relojMin, disp);
+    porDiaSeccion[d].fijos = Math.round((blockHoursFrom(idxFijos, d, 'sueno') + blockHoursFrom(idxFijos, d, 'comida')) * 60);
+    SECCIONES_EDITABLES.forEach(s => { porDiaSeccion[d][s.id] = Math.round(porDiaSeccion[d][s.id]); });
+    byDay[d].porSeccion = porDiaSeccion[d];
   });
 
   const relojMin = mergedMinutes(segs);
   const brutoMin = Math.round(segs.reduce((a, sg) => a + (sg.to - sg.from) / 60000, 0));
-  const sleepMin = Math.round(days.reduce((a, d) => a + blockHours(d,'sueno') * 60, 0));
-  const mealMin = Math.round(days.reduce((a, d) => a + blockHours(d,'comida') * 60, 0));
+  const sleepMin = Math.round(days.reduce((a, d) => a + blockHoursFrom(idxFijos, d, 'sueno') * 60, 0));
+  const mealMin = Math.round(days.reduce((a, d) => a + blockHoursFrom(idxFijos, d, 'comida') * 60, 0));
 
   let topSection = null;
   Object.keys(bySection).forEach(k => {
@@ -766,7 +1035,8 @@ function serialize(){
     projects: state.projects,
     entries: state.entries,
     activeTrackers: state.activeTrackers,
-    fixedBlockOverrides: state.fixedBlockOverrides
+    fixedBlockOverrides: state.fixedBlockOverrides,
+    ultimoDiaFijosGenerado: state.ultimoDiaFijosGenerado
   };
 }
 
@@ -882,11 +1152,41 @@ function resolveRange(){
     const last = Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0);
     return { from: dayKeyOf(first), to: dayKeyOf(last) };
   }
+  if(m === 'anio'){
+    const y = new Date(z).getUTCFullYear();
+    return { from: dayKeyOf(Date.UTC(y, 0, 1)), to: dayKeyOf(Date.UTC(y, 11, 31)) };
+  }
   return { from: anchor, to: anchor };
 }
 
+/* Resumen mes a mes de un año, para la vista Año (CR-04). Reutiliza
+   `summarize()` en vez de recalcular: así el indicador de sobrecarga sale del
+   mismo sitio en las cuatro vistas y no pueden divergir. */
+function summarizeYear(anio){
+  const meses = [];
+  for(let m = 0; m < 12; m++){
+    const from = dayKeyOf(Date.UTC(anio, m, 1));
+    const to = dayKeyOf(Date.UTC(anio, m + 1, 0));
+    const s = summarize(from, to);
+    const diasRojos = s.days.filter(d => s.byDay[d].estado === 'rojo').length;
+    const diasConDatos = s.days.filter(d => s.byDay[d].relojMin > 0).length;
+    meses.push({
+      mes: m, from, to, sum: s,
+      diasRojos: diasRojos,
+      diasConDatos: diasConDatos,
+      // "Sobrecarga sostenida" = el mes entero pasado de la raya, o al menos
+      // un tercio de sus días con datos en rojo. Un solo día pesado no marca
+      // un mes; una racha sí.
+      sostenida: s.estado === 'rojo' || (diasConDatos >= 3 && diasRojos / diasConDatos >= 0.34)
+    });
+  }
+  return meses;
+}
+const MESES_CORTOS = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+
 function rangeLabel(r){
   if(ui.range.mode === 'dia') return fmtDayLong(r.from);
+  if(ui.range.mode === 'anio') return 'Año ' + new Date(dayStartZ(r.from)).getUTCFullYear();
   if(ui.range.mode === 'mes'){
     const d = new Date(dayStartZ(r.from));
     const s = d.toLocaleDateString('es-DO', { month:'long', year:'numeric', timeZone:'UTC' });
@@ -898,12 +1198,11 @@ function rangeLabel(r){
 function shiftRange(dir){
   if(ui.range.mode === 'personalizado') return;
   const z = dayStartZ(isDayKey(ui.range.anchor) ? ui.range.anchor : todayKey());
+  const d = new Date(z);
   if(ui.range.mode === 'dia') ui.range.anchor = dayKeyOf(z + dir * DAY);
   else if(ui.range.mode === 'semana') ui.range.anchor = dayKeyOf(z + dir * 7 * DAY);
-  else{
-    const d = new Date(z);
-    ui.range.anchor = dayKeyOf(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + dir, 1));
-  }
+  else if(ui.range.mode === 'anio') ui.range.anchor = dayKeyOf(Date.UTC(d.getUTCFullYear() + dir, 0, 1));
+  else ui.range.anchor = dayKeyOf(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + dir, 1));
 }
 
 /* ───────────────────── piezas de interfaz reutilizables ───────────────────── */
@@ -911,6 +1210,9 @@ function shiftRange(dir){
 function projectOptions(selected, opts){
   const o = opts || {};
   const list = state.projects
+    // Sueño y Comidas no se eligen al crear tiempo (se generan solos), pero sí
+    // aparecen al filtrar y al editar uno de sus registros ya creados.
+    .filter(p => (o.incluirSistema || !p.sistema) || p.id === selected)
     .filter(p => o.incluirArchivados ? true : p.estado === 'activo' || p.id === selected)
     .slice()
     .sort((a, b) => a.sectionId.localeCompare(b.sectionId) || a.nombre.localeCompare(b.nombre));
@@ -926,9 +1228,10 @@ function projectOptions(selected, opts){
   });
   return html;
 }
-function sectionOptions(selected, vacio){
+function sectionOptions(selected, vacio, opts){
+  const lista = (opts && opts.soloEditables) ? SECCIONES_EDITABLES : SECTIONS;
   let html = vacio ? '<option value="">' + esc(vacio) + '</option>' : '';
-  SECTIONS.forEach(s => {
+  lista.forEach(s => {
     html += '<option value="' + s.id + '"' + (s.id === selected ? ' selected' : '') + '>' + esc(s.nombre) + '</option>';
   });
   return html;
@@ -971,9 +1274,9 @@ function renderPanel(){
     + '<h2>Periodo</h2>'
     + '<div class="row">'
     + '<div class="field"><label for="f-modo">Rango</label><select id="f-modo">'
-    + ['dia','semana','mes','personalizado'].map(m =>
+    + ['dia','semana','mes','anio','personalizado'].map(m =>
         '<option value="' + m + '"' + (ui.range.mode === m ? ' selected' : '') + '>'
-        + ({dia:'Día', semana:'Semana', mes:'Mes', personalizado:'Personalizado'})[m] + '</option>').join('')
+        + ({dia:'Día', semana:'Semana', mes:'Mes', anio:'Año', personalizado:'Personalizado'})[m] + '</option>').join('')
     + '</select></div>';
 
   if(ui.range.mode === 'personalizado'){
@@ -991,8 +1294,10 @@ function renderPanel(){
     + '</p>' + msgHtml('panel') + '</div>';
 
   html += '<div class="panel"><h2>Estado de carga</h2>'
-    + '<div class="estado ' + est.clase + '"><h3>' + esc(est.titulo) + '</h3><p>' + esc(mensaje) + '</p></div>'
-    + barHtml(pct, sum.estado === 'rojo')
+    + '<div class="estado-grid">'
+    + '<div class="estado-ring">' + overloadRing(pct, sum.estado, sum.relojMin, sum.availMin) + '</div>'
+    + '<div class="estado ' + est.clase + '" style="flex:1"><h3>' + esc(est.titulo) + '</h3><p>' + esc(mensaje) + '</p></div>'
+    + '</div>'
     + '<p class="hint">La sobrecarga se mide con <strong>tiempo de reloj real</strong>: si dos actividades ocurren a la vez, esa franja cuenta una sola vez. Los filtros de más abajo no cambian este indicador.</p>'
     + '<div class="cards" style="margin-top:12px">'
     + statCard('Tiempo de reloj', fmtDur(sum.relojMin), 'Franjas solapadas contadas una vez')
@@ -1000,6 +1305,22 @@ function renderPanel(){
     + statCard('Disponible', fmtDur(sum.availMin), '24 h − sueño − comida por día')
     + statCard('Sin registrar', fmtDur(sum.sinRegistrarMin), 'Tiempo libre real del periodo')
     + '</div></div>';
+
+  // ── Gráficos (CR-03) ──
+  html += '<div class="panel"><h2>De un vistazo</h2><div class="chart-grid">'
+    + '<div class="chart-box"><h3>Reparto por sección</h3>' + chartDonut(sum) + '</div>';
+  if(sum.days.length > 1 && sum.days.length <= 62){
+    html += '<div class="chart-box wide"><h3>Cómo se repartió cada día</h3>' + chartStackedDays(sum)
+      + '<p class="hint">' + SECTIONS.map(s => '<span class="swatch" style="background:' + s.color + '"></span>' + esc(s.nombre)).join(' · ') + '</p></div>';
+  }
+  if(ui.range.mode === 'mes'){
+    html += '<div class="chart-box"><h3>Calendario de carga</h3>' + chartHeatmap(sum) + '</div>';
+  }
+  const tendencia = sum.days.length > 8 ? chartWeeklyTrend(sum) : '';
+  if(tendencia){
+    html += '<div class="chart-box wide"><h3>Tendencia semana a semana</h3>' + tendencia + '</div>';
+  }
+  html += '</div></div>';
 
   // Bloques fijos
   html += '<div class="panel"><h2>Bloques fijos</h2><div class="cards">'
@@ -1016,19 +1337,23 @@ function renderPanel(){
       + '<div class="field"><button class="btn ghost" id="ov-reset">Volver al valor por defecto</button></div>'
       + '</div>';
   }else{
-    html += '<p class="hint">Para ajustar el sueño o la comida de un día concreto, cambia el rango a «Día», o usa la lista de excepciones en Ajustes.</p>';
+    html += '<p class="hint">Para ajustar el sueño o la comida de un día concreto, cambia el rango a «Día», o usa «Días fuera de lo habitual» en Ajustes.</p>';
   }
+  html += '<p class="hint">Sueño y comidas se registran solos cada día y aparecen en el historial como cualquier otro registro. '
+    + 'No compiten por tus horas disponibles: son justamente las que las definen, por eso no cuentan en el indicador de carga.</p>';
   html += '</div>';
 
   // Desglose con filtros
   html += '<div class="panel"><h2>Desglose por sección y proyecto</h2>'
     + '<div class="row">'
-    + '<div class="field"><label for="pf-sec">Sección</label><select id="pf-sec">' + sectionOptions(ui.panelFilter.seccion, 'Todas las secciones') + '</select></div>'
-    + '<div class="field grow"><label for="pf-proy">Proyecto</label><select id="pf-proy">' + projectOptions(ui.panelFilter.proyecto, { incluirArchivados:true }) + '</select></div>'
+    + '<div class="field"><label for="pf-sec">Sección</label><select id="pf-sec">' + sectionOptions(ui.panelFilter.seccion, 'Todas las secciones', { soloEditables:true }) + '</select></div>'
+    + '<div class="field grow"><label for="pf-proy">Proyecto</label><select id="pf-proy">' + projectOptions(ui.panelFilter.proyecto, { incluirArchivados:true, incluirSistema:true }) + '</select></div>'
     + '<div class="field"><button class="btn ghost" id="pf-limpiar">Limpiar filtros</button></div>'
     + '</div>';
 
-  const secsToShow = SECTIONS.filter(s => !ui.panelFilter.seccion || s.id === ui.panelFilter.seccion);
+  // Bloques Fijos no entra en este desglose: tiene su propia tarjeta y no
+  // compite por las horas disponibles.
+  const secsToShow = SECCIONES_EDITABLES.filter(s => !ui.panelFilter.seccion || s.id === ui.panelFilter.seccion);
   let algo = false;
   secsToShow.forEach(sec => {
     const secData = sum.bySection[sec.id];
@@ -1084,9 +1409,41 @@ function renderPanel(){
   }
   html += '</div>';
 
-  // Detalle por día (cuando el rango tiene más de un día)
-  if(sum.days.length > 1){
-    html += '<div class="panel"><h2>Día por día</h2><div class="tablewrap"><table>'
+  // Vista Año: consolidado mes a mes (CR-04). Sustituye al detalle día a día,
+  // que con 365 filas no se puede leer.
+  if(ui.range.mode === 'anio'){
+    const anio = new Date(dayStartZ(r.from)).getUTCFullYear();
+    const meses = summarizeYear(anio);
+    const conSobrecarga = meses.filter(m => m.sostenida).length;
+    html += '<div class="panel"><h2>Mes a mes de ' + anio + '</h2>'
+      + '<p class="hint">' + (conSobrecarga
+          ? conSobrecarga + ' mes(es) con sobrecarga sostenida — el mes entero pasado de la raya, o al menos un tercio de sus días con datos en rojo.'
+          : 'Ningún mes con sobrecarga sostenida este año.') + '</p>'
+      + '<div class="tablewrap"><table><thead><tr><th>Mes</th><th class="num">Reloj</th><th class="num">Disponible</th>'
+      + SECCIONES_EDITABLES.map(s => '<th class="num">' + esc(s.nombre) + '</th>').join('')
+      + '<th class="num">Días en rojo</th><th>Estado</th></tr></thead><tbody>';
+    meses.forEach(m => {
+      const e = ESTADO_TEXTO[m.sum.estado];
+      const tono = m.sum.estado === 'verde' ? 'verde' : m.sum.estado === 'amarillo' ? 'ambar' : 'rojo';
+      html += '<tr><td>' + esc(MESES_CORTOS[m.mes]) + '</td>'
+        + '<td class="num">' + esc(fmtDur(m.sum.relojMin)) + '</td>'
+        + '<td class="num muted">' + esc(fmtDur(m.sum.availMin)) + '</td>'
+        + SECCIONES_EDITABLES.map(s => '<td class="num">'
+            + (m.sum.bySection[s.id] ? esc(fmtHoursShort(m.sum.bySection[s.id].brutoMin)) : '—') + '</td>').join('')
+        + '<td class="num">' + m.diasRojos + '</td>'
+        + '<td><span class="chip" style="background:var(--' + tono + '-bg);color:var(--' + tono + '-tx)">'
+        + esc(e.titulo) + (m.sostenida ? ' · sostenida' : '') + '</span></td></tr>';
+    });
+    html += '</tbody></table></div></div>';
+  }
+
+  /* Detalle por día (rangos de más de un día, salvo el año). Va plegado: el
+     panel tiene que leerse de un vistazo por los gráficos, no por una tabla de
+     30 filas. Se conserva porque es el dato exacto, y porque es la alternativa
+     accesible a los gráficos para quien use lector de pantalla. */
+  if(sum.days.length > 1 && ui.range.mode !== 'anio'){
+    html += '<details class="panel"><summary><h2 style="display:inline">Día por día (detalle)</h2></summary>'
+      + '<div class="tablewrap" style="margin-top:12px"><table>'
       + '<thead><tr><th>Día</th><th class="num">Reloj</th><th class="num">Bruto</th><th class="num">Disponible</th><th>Estado</th></tr></thead><tbody>';
     sum.days.forEach(d => {
       const x = sum.byDay[d];
@@ -1098,10 +1455,205 @@ function renderPanel(){
         + '<td><span class="chip" style="background:var(--' + (x.estado === 'verde' ? 'verde' : x.estado === 'amarillo' ? 'ambar' : 'rojo') + '-bg);color:var(--'
         + (x.estado === 'verde' ? 'verde' : x.estado === 'amarillo' ? 'ambar' : 'rojo') + '-tx)">' + esc(e.titulo) + '</span></td></tr>';
     });
-    html += '</tbody></table></div></div>';
+    html += '</tbody></table></div></details>';
   }
 
   return html;
+}
+
+/* ═══════════════ GRÁFICOS DEL PANEL (CR-03) ═══════════════
+   Todo se dibuja a mano en SVG: el hub no carga librerías de gráficos y este
+   archivo tiene que seguir funcionando sin red. Cada gráfico lleva
+   `role="img"` con un resumen en `aria-label`, porque un SVG de barras no
+   dice nada por sí solo a un lector de pantalla; el detalle exacto sigue
+   estando en las tablas de más abajo, que no se quitaron. */
+
+const COLOR_SECCION = {};
+SECTIONS.forEach(s => { COLOR_SECCION[s.id] = s.color; });
+
+// Anillo de sobrecarga: es lo primero que se ve al abrir el panel.
+function overloadRing(pct, estado, relojMin, availMin){
+  const R = 52, C = 2 * Math.PI * R;
+  const frac = clamp(pct / 100, 0, 1);
+  const tono = estado === 'verde' ? '#2E7D53' : estado === 'amarillo' ? '#B8862F' : '#B0453A';
+  const resto = Math.max(0, availMin - relojMin);
+  return '<svg class="ring" viewBox="0 0 130 130" role="img" aria-label="'
+    + esc(Math.round(pct) + ' por ciento de las horas disponibles usado: '
+      + fmtDur(relojMin) + ' de ' + fmtDur(availMin) + '. Estado: ' + ESTADO_TEXTO[estado].titulo) + '">'
+    + '<circle cx="65" cy="65" r="' + R + '" fill="none" stroke="#E8EBE7" stroke-width="15"/>'
+    + '<circle cx="65" cy="65" r="' + R + '" fill="none" stroke="' + tono + '" stroke-width="15"'
+    + ' stroke-linecap="round" stroke-dasharray="' + (C * frac).toFixed(1) + ' ' + C.toFixed(1) + '"'
+    + ' transform="rotate(-90 65 65)"/>'
+    + '<text x="65" y="61" text-anchor="middle" font-size="25" font-weight="700" fill="#16212B">' + Math.round(pct) + '%</text>'
+    + '<text x="65" y="80" text-anchor="middle" font-size="10.5" fill="#5C6670">'
+    + esc(pct > 100 ? 'de más' : 'libre ' + fmtHoursShort(resto)) + '</text>'
+    + '</svg>';
+}
+
+// Barras apiladas: cómo se repartió cada día por sección.
+function chartStackedDays(sum){
+  const days = sum.days;
+  if(!days.length) return '';
+  const totales = days.map(d => SECTIONS.reduce((a, s) => a + (sum.byDay[d].porSeccion[s.id] || 0), 0));
+  const maxMin = Math.max(24 * 60, Math.max.apply(null, totales));
+  const W = 720, H = 190, pad = 26;
+  const bw = (W - pad * 2) / days.length;
+  const ancho = Math.min(bw * 0.68, 34);
+  let barras = '', ejes = '';
+  // Líneas guía cada 6 h, para poder leer la altura sin contar cuadritos.
+  for(let h = 6; h <= maxMin / 60; h += 6){
+    const y = H - pad - (h * 60 / maxMin) * (H - pad * 2);
+    ejes += '<line x1="' + pad + '" y1="' + y.toFixed(1) + '" x2="' + (W - pad) + '" y2="' + y.toFixed(1)
+      + '" stroke="#E8EBE7" stroke-width="1"/>'
+      + '<text x="4" y="' + (y + 3.5).toFixed(1) + '" font-size="9.5" fill="#5C6670">' + h + 'h</text>';
+  }
+  days.forEach((d, i) => {
+    const cx = pad + bw * i + bw / 2 - ancho / 2;
+    let y = H - pad;
+    SECTIONS.forEach(s => {
+      const min = sum.byDay[d].porSeccion[s.id] || 0;
+      if(min <= 0) return;
+      const alto = (min / maxMin) * (H - pad * 2);
+      y -= alto;
+      barras += '<rect x="' + cx.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + ancho.toFixed(1)
+        + '" height="' + alto.toFixed(1) + '" fill="' + s.color + '" opacity="' + (s.id === 'fijos' ? '0.5' : '0.92') + '"/>';
+    });
+    // Etiqueta del día: en rangos largos solo cada cierto número, o se pisan.
+    const cada = days.length > 24 ? 5 : days.length > 12 ? 2 : 1;
+    if(i % cada === 0){
+      barras += '<text x="' + (cx + ancho / 2).toFixed(1) + '" y="' + (H - pad + 13)
+        + '" font-size="9.5" fill="#5C6670" text-anchor="middle">'
+        + new Date(dayStartZ(d)).getUTCDate() + '</text>';
+    }
+  });
+  const total = totales.reduce((a, b) => a + b, 0);
+  return '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="'
+    + esc('Barras apiladas de ' + days.length + ' día(s), con el reparto de cada día por sección. '
+      + 'Total del periodo: ' + fmtDur(total) + '. El detalle exacto está en la tabla siguiente.') + '">'
+    + ejes + barras + '</svg>';
+}
+
+// Dona por sección, incluidos los bloques fijos.
+function chartDonut(sum){
+  const trozos = SECTIONS.map(s => ({
+    s,
+    min: s.id === 'fijos'
+      ? sum.sleepMin + sum.mealMin
+      : (sum.bySection[s.id] ? sum.bySection[s.id].brutoMin : 0)
+  })).filter(t => t.min > 0);
+  const total = trozos.reduce((a, t) => a + t.min, 0);
+  if(!total) return '<p class="empty">Sin tiempo registrado en el periodo.</p>';
+
+  const R = 54, r = 33, cx = 70, cy = 70;
+  let ang = -Math.PI / 2, paths = '';
+  trozos.forEach(t => {
+    const barrido = (t.min / total) * Math.PI * 2;
+    const fin = ang + barrido;
+    const grande = barrido > Math.PI ? 1 : 0;
+    const pt = (a, rad) => [(cx + Math.cos(a) * rad).toFixed(2), (cy + Math.sin(a) * rad).toFixed(2)];
+    // Un solo trozo al 100% no se puede dibujar como arco (inicio y fin
+    // coinciden): en ese caso van dos anillos completos.
+    if(trozos.length === 1){
+      paths += '<circle cx="' + cx + '" cy="' + cy + '" r="' + ((R + r) / 2) + '" fill="none" stroke="'
+        + t.s.color + '" stroke-width="' + (R - r) + '"/>';
+    }else{
+      const a1 = pt(ang, R), a2 = pt(fin, R), b1 = pt(fin, r), b2 = pt(ang, r);
+      paths += '<path d="M' + a1[0] + ',' + a1[1] + ' A' + R + ',' + R + ' 0 ' + grande + ' 1 ' + a2[0] + ',' + a2[1]
+        + ' L' + b1[0] + ',' + b1[1] + ' A' + r + ',' + r + ' 0 ' + grande + ' 0 ' + b2[0] + ',' + b2[1]
+        + ' Z" fill="' + t.s.color + '"/>';
+    }
+    ang = fin;
+  });
+  const resumen = trozos.map(t => t.s.nombre + ' ' + Math.round(t.min / total * 100) + '%').join(', ');
+  const leyenda = trozos.map(t => '<li><span class="swatch" style="background:' + t.s.color + '"></span>'
+    + esc(t.s.nombre) + ' <strong>' + Math.round(t.min / total * 100) + '%</strong> '
+    + '<span class="muted">' + esc(fmtHoursShort(t.min)) + '</span></li>').join('');
+  return '<div class="donut-wrap">'
+    + '<svg class="donut" viewBox="0 0 140 140" role="img" aria-label="' + esc('Reparto por sección: ' + resumen) + '">'
+    + paths
+    + '<text x="70" y="68" text-anchor="middle" font-size="15" font-weight="700" fill="#16212B">' + esc(fmtHoursShort(total)) + '</text>'
+    + '<text x="70" y="82" text-anchor="middle" font-size="9" fill="#5C6670">en total</text>'
+    + '</svg><ul class="donut-legend">' + leyenda + '</ul></div>';
+}
+
+// Línea de tendencia semanal: ¿la carga sube o baja?
+function chartWeeklyTrend(sum){
+  const semanas = [];
+  sum.days.forEach(d => {
+    const z = dayStartZ(d);
+    const lunes = dayKeyOf(z - ((new Date(z).getUTCDay() + 6) % 7) * DAY);
+    let w = semanas[semanas.length - 1];
+    if(!w || w.lunes !== lunes){ w = { lunes, relojMin:0, availMin:0 }; semanas.push(w); }
+    w.relojMin += sum.byDay[d].relojMin;
+    w.availMin += sum.byDay[d].availMin;
+  });
+  if(semanas.length < 2) return '';
+  const W = 720, H = 170, pad = 30;
+  const maxMin = Math.max.apply(null, semanas.map(w => Math.max(w.relojMin, w.availMin))) || 1;
+  const x = (i) => pad + (semanas.length === 1 ? 0 : (i * (W - pad * 2)) / (semanas.length - 1));
+  const y = (m) => H - pad - (m / maxMin) * (H - pad * 2);
+  const linea = semanas.map((w, i) => (i ? 'L' : 'M') + x(i).toFixed(1) + ',' + y(w.relojMin).toFixed(1)).join(' ');
+  const disp = semanas.map((w, i) => (i ? 'L' : 'M') + x(i).toFixed(1) + ',' + y(w.availMin).toFixed(1)).join(' ');
+  const puntos = semanas.map((w, i) => {
+    const est = statusOf(w.relojMin, w.availMin);
+    const tono = est === 'verde' ? '#2E7D53' : est === 'amarillo' ? '#B8862F' : '#B0453A';
+    return '<circle cx="' + x(i).toFixed(1) + '" cy="' + y(w.relojMin).toFixed(1) + '" r="4.2" fill="' + tono + '"/>';
+  }).join('');
+  const etiquetas = semanas.map((w, i) => {
+    const cada = semanas.length > 12 ? 3 : 1;
+    if(i % cada) return '';
+    return '<text x="' + x(i).toFixed(1) + '" y="' + (H - pad + 14) + '" font-size="9.5" fill="#5C6670" text-anchor="middle">'
+      + esc(fmtDayShort(w.lunes)) + '</text>';
+  }).join('');
+  const primera = semanas[0].relojMin, ultima = semanas[semanas.length - 1].relojMin;
+  const rumbo = ultima > primera * 1.1 ? 'subiendo' : ultima < primera * 0.9 ? 'bajando' : 'estable';
+  return '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="'
+    + esc('Tendencia de ' + semanas.length + ' semanas: la carga va ' + rumbo
+      + '. De ' + fmtDur(primera) + ' la primera semana a ' + fmtDur(ultima) + ' la última.') + '">'
+    + '<path d="' + disp + '" fill="none" stroke="#B6BEB8" stroke-width="1.6" stroke-dasharray="5 4"/>'
+    + '<path d="' + linea + '" fill="none" stroke="#1F6763" stroke-width="2.6" stroke-linejoin="round"/>'
+    + puntos + etiquetas + '</svg>'
+    + '<p class="hint"><span class="swatch" style="background:#1F6763"></span> Horas registradas · '
+    + '<span class="swatch" style="background:#B6BEB8"></span> Horas disponibles · la carga va <strong>' + rumbo + '</strong></p>';
+}
+
+// Heatmap tipo calendario: un cuadrito por día, coloreado por su estado.
+function chartHeatmap(sum){
+  const days = sum.days;
+  if(!days.length) return '';
+  const primera = dayStartZ(days[0]);
+  const offset = (new Date(primera).getUTCDay() + 6) % 7; // 0 = lunes
+  const cel = 30, gap = 4, W = 7 * (cel + gap) - gap;
+  const filas = Math.ceil((offset + days.length) / 7);
+  const H = filas * (cel + gap) - gap + 18;
+  const TONO = { verde:'#BFE3CE', amarillo:'#F2DFAE', rojo:'#EFBDB4' };
+  const BORDE = { verde:'#7FBF9C', amarillo:'#D2AC5E', rojo:'#C98376' };
+  let celdas = '';
+  days.forEach((d, i) => {
+    const pos = offset + i;
+    const cx = (pos % 7) * (cel + gap);
+    const cy = 18 + Math.floor(pos / 7) * (cel + gap);
+    const x = sum.byDay[d];
+    const vacio = x.relojMin === 0;
+    celdas += '<rect x="' + cx + '" y="' + cy + '" width="' + cel + '" height="' + cel + '" rx="6"'
+      + ' fill="' + (vacio ? '#F1F3F0' : TONO[x.estado]) + '"'
+      + ' stroke="' + (vacio ? '#E2E5E0' : BORDE[x.estado]) + '" stroke-width="1"/>'
+      + '<text x="' + (cx + cel / 2) + '" y="' + (cy + cel / 2 + 3.5) + '" text-anchor="middle" font-size="10.5"'
+      + ' fill="' + (vacio ? '#9AA29B' : '#16212B') + '">' + new Date(dayStartZ(d)).getUTCDate() + '</text>';
+  });
+  const cab = ['L','M','X','J','V','S','D'].map((n, i) =>
+    '<text x="' + (i * (cel + gap) + cel / 2) + '" y="10" text-anchor="middle" font-size="9.5" fill="#5C6670">' + n + '</text>').join('');
+  const cuenta = { verde:0, amarillo:0, rojo:0 };
+  days.forEach(d => { if(sum.byDay[d].relojMin > 0) cuenta[sum.byDay[d].estado]++; });
+  return '<svg class="heatmap" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="'
+    + esc('Calendario de carga: ' + cuenta.rojo + ' día(s) en rojo, ' + cuenta.amarillo
+      + ' en amarillo y ' + cuenta.verde + ' en verde. Los días sin color no tienen tiempo registrado.') + '">'
+    + cab + celdas + '</svg>'
+    + '<p class="hint">'
+    + '<span class="swatch" style="background:#BFE3CE"></span> Bien (' + cuenta.verde + ') · '
+    + '<span class="swatch" style="background:#F2DFAE"></span> Al límite (' + cuenta.amarillo + ') · '
+    + '<span class="swatch" style="background:#EFBDB4"></span> Sobrecarga (' + cuenta.rojo + ') · '
+    + '<span class="swatch" style="background:#F1F3F0"></span> Sin registrar</p>';
 }
 
 function statCard(k, v, s){
@@ -1166,10 +1718,10 @@ function wirePanel(root){
     if(sueno + comida > 24){
       setMsg('panel','Sueño y comida no pueden sumar más de 24 horas.','err'); render(); return;
     }
-    setOverride(r.from, 'sueno', sueno);
-    setOverride(r.from, 'comida', comida);
+    setHorasFijas(r.from, 'sueno', sueno);
+    setHorasFijas(r.from, 'comida', comida);
     save();
-    setMsg('panel','Bloques fijos de ' + fmtDayShort(r.from) + ' actualizados.','ok');
+    setMsg('panel','Bloques fijos de ' + fmtDayShort(r.from) + ' actualizados. Solo cambia ese día.','ok');
     say('Bloques fijos guardados');
     render();
   });
@@ -1177,16 +1729,12 @@ function wirePanel(root){
   if(reset) reset.addEventListener('click', () => {
     const r = resolveRange();
     state.fixedBlockOverrides = state.fixedBlockOverrides.filter(o => o.fecha !== r.from);
+    setHorasFijas(r.from, 'sueno', state.settings.sleepHoursDefault);
+    setHorasFijas(r.from, 'comida', state.settings.mealHoursDefault);
     save();
     setMsg('panel','Ese día vuelve a usar los valores por defecto.','ok');
     render();
   });
-}
-
-function setOverride(fecha, tipo, horas){
-  const i = state.fixedBlockOverrides.findIndex(o => o.fecha === fecha && o.tipo === tipo);
-  if(i === -1) state.fixedBlockOverrides.push({ fecha, tipo, horas });
-  else state.fixedBlockOverrides[i].horas = horas;
 }
 
 /* ───────────────────── vista: Cronómetros ───────────────────── */
@@ -1359,7 +1907,7 @@ function renderRegistros(){
     html += '<p class="empty">Primero crea un proyecto en la pestaña Proyectos.</p>';
   }else{
     html += '<div class="row">'
-      + '<div class="field grow"><label for="re-proy">Proyecto</label><select id="re-proy">' + projectOptions(proy, { vacio:'Elige un proyecto' }) + '</select></div>'
+      + '<div class="field grow"><label for="re-proy">Proyecto</label><select id="re-proy">' + projectOptions(proy, { vacio:'Elige un proyecto', incluirSistema: !!(editing && esEntradaFija(editing)) }) + '</select></div>'
       + '<div class="field"><label for="re-fecha">Fecha</label><input type="date" id="re-fecha" value="' + esc(d) + '"></div>'
       + '<div class="field"><label for="re-inicio">Hora de inicio</label><input type="time" id="re-inicio" value="' + esc(hi) + '"></div>'
       + '</div>'
@@ -1389,7 +1937,7 @@ function renderRegistros(){
 
   html += '<div class="panel"><h2>Historial</h2>'
     + '<div class="row">'
-    + '<div class="field grow"><label for="rf-proy">Proyecto</label><select id="rf-proy">' + projectOptions(f.proyecto, { incluirArchivados:true }) + '</select></div>'
+    + '<div class="field grow"><label for="rf-proy">Proyecto</label><select id="rf-proy">' + projectOptions(f.proyecto, { incluirArchivados:true, incluirSistema:true }) + '</select></div>'
     + '<div class="field"><label for="rf-desde">Desde</label><input type="date" id="rf-desde" value="' + esc(f.desde) + '"></div>'
     + '<div class="field"><label for="rf-hasta">Hasta</label><input type="date" id="rf-hasta" value="' + esc(f.hasta) + '"></div>'
     + '<div class="field grow"><label for="rf-texto">Buscar en la nota</label><input type="search" id="rf-texto" value="' + esc(f.texto) + '" placeholder="texto libre"></div>'
@@ -1411,7 +1959,7 @@ function renderRegistros(){
         + ((e.pausas && e.pausas.length) ? ' <span class="chip">' + e.pausas.length + ' pausa(s)</span>' : '')
         + '</td>'
         + '<td class="num">' + esc(fmtDur(e.duracionMin)) + '</td>'
-        + '<td><span class="chip">' + (e.origen === 'tracker' ? 'Cronómetro' : 'Manual') + (e.editado ? ' · editado' : '') + '</span></td>'
+        + '<td><span class="chip">' + (e.origen === 'tracker' ? 'Cronómetro' : e.origen === 'auto' ? 'Automático' : 'Manual') + (e.editado ? ' · editado' : '') + '</span></td>'
         + '<td>' + esc(e.nota || '') + '</td>'
         + '<td><button class="btn ghost small" data-edit="' + esc(e.id) + '">Editar</button> '
         + '<button class="btn danger small" data-del="' + esc(e.id) + '">Eliminar</button></td></tr>';
@@ -1562,7 +2110,7 @@ function renderProyectos(){
   let html = '<div class="panel"><h2>' + (editing ? 'Editar proyecto' : 'Nuevo proyecto') + '</h2>'
     + '<div class="row">'
     + '<div class="field grow"><label for="pr-nombre">Nombre</label><input type="text" id="pr-nombre" maxlength="80" value="' + esc(editing ? editing.nombre : '') + '"></div>'
-    + '<div class="field"><label for="pr-sec">Sección</label><select id="pr-sec">' + sectionOptions(editing ? editing.sectionId : 'trabajo', '') + '</select></div>'
+    + '<div class="field"><label for="pr-sec">Sección</label><select id="pr-sec">' + sectionOptions(editing ? editing.sectionId : 'trabajo', '', { soloEditables:true }) + '</select></div>'
     + '<div class="field"><label for="pr-color">Color</label><input type="color" id="pr-color" value="' + safeColor(editing ? editing.color : PALETTE[state.projects.length % PALETTE.length]) + '"></div>'
     + '<div class="field"><label for="pr-meta">Meta semanal (horas)</label><input type="number" id="pr-meta" min="0" max="168" step="0.5" placeholder="opcional" value="'
     + (editing && editing.metaHorasSemanales != null ? esc(editing.metaHorasSemanales) : '') + '"></div>'
@@ -1605,10 +2153,15 @@ function renderProyectos(){
         + '<td>' + esc(sectionById(p.sectionId).nombre) + '</td>'
         + '<td class="num">' + (p.metaHorasSemanales != null ? esc(fmtHoursShort(p.metaHorasSemanales * 60)) : '—') + '</td>'
         + '<td class="num">' + esc(fmtDur(totales[p.id] || 0)) + '</td>'
-        + '<td><span class="chip">' + (p.estado === 'archivado' ? 'Archivado' : 'Activo') + '</span></td>'
-        + '<td><button class="btn ghost small" data-pedit="' + esc(p.id) + '">Editar</button> '
-        + '<button class="btn ghost small" data-parch="' + esc(p.id) + '">' + (p.estado === 'archivado' ? 'Reactivar' : 'Archivar') + '</button> '
-        + '<button class="btn danger small" data-pdel="' + esc(p.id) + '">Eliminar</button></td></tr>';
+        + '<td><span class="chip">' + (p.sistema ? 'Automático' : (p.estado === 'archivado' ? 'Archivado' : 'Activo')) + '</span></td>'
+        // Sueño y Comidas no se editan aquí: se ajustan día por día desde el
+        // Panel o desde Ajustes, y su registro se corrige como cualquier otro.
+        + '<td>' + (p.sistema
+            ? '<span class="muted">Se genera solo. Ajusta sus horas en Ajustes.</span>'
+            : '<button class="btn ghost small" data-pedit="' + esc(p.id) + '">Editar</button> '
+              + '<button class="btn ghost small" data-parch="' + esc(p.id) + '">' + (p.estado === 'archivado' ? 'Reactivar' : 'Archivar') + '</button> '
+              + '<button class="btn danger small" data-pdel="' + esc(p.id) + '">Eliminar</button>')
+        + '</td></tr>';
     });
     html += '</tbody></table></div>';
   }
@@ -1625,7 +2178,7 @@ function wireProyectos(root){
     const metaRaw = root.querySelector('#pr-meta').value;
     const estado = root.querySelector('#pr-estado').value === 'archivado' ? 'archivado' : 'activo';
     if(!nombre){ setMsg('proyectos','El proyecto necesita un nombre.','err'); render(); return; }
-    if(SECTION_IDS.indexOf(sec) === -1){ setMsg('proyectos','Sección no válida.','err'); render(); return; }
+    if(!SECCIONES_EDITABLES.some(x => x.id === sec)){ setMsg('proyectos','Sección no válida.','err'); render(); return; }
     const meta = metaRaw === '' ? null : clamp(num(metaRaw, 0), 0, 168);
 
     const editing = ui.editingProjectId ? projectById(ui.editingProjectId) : null;
@@ -1712,24 +2265,41 @@ function renderAjustes(){
     + '<div class="field"><label for="aj-stale">Avisar si un cronómetro lleva más de (horas)</label><input type="number" id="aj-stale" min="1" max="48" step="1" value="' + esc(s.staleTrackerAlertHours) + '"></div>'
     + '<div class="field"><button class="btn" id="aj-guardar">Guardar preferencias</button></div>'
     + '</div>'
-    + '<p class="hint">Con estos valores, cada día tiene ' + esc(fmtDur(Math.max(0, (24 - num(s.sleepHoursDefault,0) - num(s.mealHoursDefault,0)) * 60))) + ' disponibles.</p>'
+    + '<p class="hint">Con estos valores, cada día tiene ' + esc(fmtDur(Math.max(0, (24 - num(s.sleepHoursDefault,0) - num(s.mealHoursDefault,0)) * 60))) + ' disponibles. '
+    + 'Cambiarlos <strong>solo afecta a los días que vienen</strong>: los días ya registrados se quedan como estaban.</p>'
     + msgHtml('ajustes') + '</div>';
 
-  // Excepciones de bloques fijos
+  /* Días cuyo sueño o comida se apartó del valor por defecto. Ya no se leen de
+     una lista de excepciones aparte: se deducen de los registros reales, que
+     son la única fuente de verdad desde CR-02. */
   const f = ui.ovFilter;
-  const lista = state.fixedBlockOverrides.filter(o => {
-    if(isDayKey(f.desde) && o.fecha < f.desde) return false;
-    if(isDayKey(f.hasta) && o.fecha > f.hasta) return false;
-    return true;
-  }).sort((a, b) => b.fecha.localeCompare(a.fecha) || a.tipo.localeCompare(b.tipo));
+  const porDefecto = { sueno: num(s.sleepHoursDefault, 7), comida: num(s.mealHoursDefault, 3) };
+  const diasConFijos = {};
+  state.entries.filter(esEntradaFija).forEach(e => {
+    const d = dayKeyOf(toZoned(Date.parse(e.inicio)));
+    const tipo = e.projectId === FIJO_POR_TIPO.sueno.id ? 'sueno' : 'comida';
+    if(!diasConFijos[d]) diasConFijos[d] = { sueno:0, comida:0 };
+    diasConFijos[d][tipo] += e.duracionMin / 60;
+  });
+  const lista = [];
+  Object.keys(diasConFijos).forEach(d => {
+    ['sueno','comida'].forEach(tipo => {
+      const h = diasConFijos[d][tipo];
+      if(Math.abs(h - porDefecto[tipo]) < 0.001) return;
+      if(isDayKey(f.desde) && d < f.desde) return;
+      if(isDayKey(f.hasta) && d > f.hasta) return;
+      lista.push({ fecha:d, tipo, horas: Math.round(h * 100) / 100 });
+    });
+  });
+  lista.sort((a, b) => b.fecha.localeCompare(a.fecha) || a.tipo.localeCompare(b.tipo));
 
-  html += '<div class="panel"><h2>Excepciones de sueño y comida</h2>'
-    + '<p class="hint">Días concretos en los que dormiste o comiste distinto de lo habitual.</p>'
+  html += '<div class="panel"><h2>Días fuera de lo habitual</h2>'
+    + '<p class="hint">Sueño y comidas se registran solos todos los días. Aquí puedes corregir un día concreto — por ejemplo, si dormiste menos — sin tocar el resto.</p>'
     + '<div class="row">'
     + '<div class="field"><label for="ovn-fecha">Fecha</label><input type="date" id="ovn-fecha" value="' + esc(todayKey()) + '"></div>'
-    + '<div class="field"><label for="ovn-tipo">Tipo</label><select id="ovn-tipo"><option value="sueno">Sueño</option><option value="comida">Comida</option></select></div>'
+    + '<div class="field"><label for="ovn-tipo">Bloque</label><select id="ovn-tipo"><option value="sueno">Sueño</option><option value="comida">Comidas</option></select></div>'
     + '<div class="field"><label for="ovn-horas">Horas</label><input type="number" id="ovn-horas" min="0" max="24" step="0.5" value="6"></div>'
-    + '<div class="field"><button class="btn" id="ovn-add">Agregar excepción</button></div>'
+    + '<div class="field"><button class="btn" id="ovn-add">Ajustar ese día</button></div>'
     + '</div>'
     + '<div class="row" style="margin-top:10px">'
     + '<div class="field"><label for="ovf-desde">Desde</label><input type="date" id="ovf-desde" value="' + esc(f.desde) + '"></div>'
@@ -1737,14 +2307,15 @@ function renderAjustes(){
     + '<div class="field"><button class="btn ghost" id="ovf-limpiar">Limpiar filtro</button></div>'
     + '</div>';
   if(!lista.length){
-    html += '<p class="empty">' + (state.fixedBlockOverrides.length ? 'Ninguna excepción en ese rango.' : 'No hay excepciones: todos los días usan los valores por defecto.') + '</p>';
+    html += '<p class="empty">Ningún día se aparta de los valores por defecto en ese rango.</p>';
   }else{
-    html += '<div class="tablewrap"><table><thead><tr><th>Fecha</th><th>Tipo</th><th class="num">Horas</th><th>Acciones</th></tr></thead><tbody>';
+    html += '<div class="tablewrap"><table><thead><tr><th>Fecha</th><th>Bloque</th><th class="num">Horas</th><th class="num">Por defecto</th><th>Acciones</th></tr></thead><tbody>';
     lista.forEach(o => {
       html += '<tr><td>' + esc(fmtDayShort(o.fecha)) + ' ' + esc(o.fecha.slice(0,4)) + '</td>'
-        + '<td>' + (o.tipo === 'sueno' ? 'Sueño' : 'Comida') + '</td>'
+        + '<td>' + (o.tipo === 'sueno' ? 'Sueño' : 'Comidas') + '</td>'
         + '<td class="num">' + esc(o.horas) + ' h</td>'
-        + '<td><button class="btn danger small" data-ovdel="' + esc(o.fecha + '|' + o.tipo) + '">Quitar</button></td></tr>';
+        + '<td class="num muted">' + esc(porDefecto[o.tipo]) + ' h</td>'
+        + '<td><button class="btn ghost small" data-ovdel="' + esc(o.fecha + '|' + o.tipo) + '">Volver al valor por defecto</button></td></tr>';
     });
     html += '</tbody></table></div>';
   }
@@ -1787,10 +2358,10 @@ function wireAjustes(root){
     if(horas + blockHours(fecha, otro) > 24){
       setMsg('ajustes','Sueño y comida de ese día no pueden sumar más de 24 horas.','err'); render(); return;
     }
-    setOverride(fecha, tipo, horas);
+    setHorasFijas(fecha, tipo, horas);
     save();
-    setMsg('ajustes','Excepción guardada.','ok');
-    say('Excepción guardada');
+    setMsg('ajustes','Listo: ese día queda con ' + horas + ' h de ' + (tipo === 'sueno' ? 'sueño' : 'comidas') + '.','ok');
+    say('Bloque fijo ajustado');
     render();
   });
 
@@ -1805,8 +2376,9 @@ function wireAjustes(root){
   root.querySelectorAll('[data-ovdel]').forEach(b => b.addEventListener('click', () => {
     const [fecha, tipo] = b.dataset.ovdel.split('|');
     state.fixedBlockOverrides = state.fixedBlockOverrides.filter(o => !(o.fecha === fecha && o.tipo === tipo));
+    setHorasFijas(fecha, tipo, tipo === 'sueno' ? state.settings.sleepHoursDefault : state.settings.mealHoursDefault);
     save();
-    setMsg('ajustes','Excepción quitada.','ok');
+    setMsg('ajustes','Ese día vuelve al valor por defecto.','ok');
     render();
   }));
 }
@@ -1849,6 +2421,7 @@ function renderInto(view, keepFocus){
 function render(){
   renderInto(ui.view, false);
   renderRunningChip();
+  renderFloatPanel();
 }
 
 function renderRunningChip(){
@@ -1885,6 +2458,205 @@ document.querySelectorAll('[role="tab"]').forEach(tab => {
     else if(e.key === 'End') next = tabs[tabs.length - 1];
     if(next){ e.preventDefault(); next.focus(); switchView(next.dataset.view); }
   });
+});
+
+/* ───────────────────── panel flotante de cronómetros (CR-01) ─────────────────────
+   Se ve en cualquier pestaña de la app mientras haya algo corriendo, se
+   arrastra a donde sea, se minimiza a una pastilla, y deja pausar, reanudar y
+   detener sin volver a la pantalla de Cronómetros.
+
+   Límite conocido y aceptado (CR-01 §3.3): esto vive dentro de la página. Si
+   se cierra la pestaña deja de verse; para cubrir eso, el tiempo también se
+   escribe en el título del documento, que sí se lee desde la barra del
+   navegador estando en otra página. */
+
+// La posición y el estado minimizado son preferencias de pantalla, no datos:
+// van en su propia clave de localStorage y NO se sincronizan con la nube ni
+// con el puente de carpeta (que solo mira las claves con prefijo hourglass_v1).
+const FLOAT_PREF_KEY = 'hourglass_float_panel';
+const TITULO_BASE = document.title;
+const fp = { x:null, y:null, min:false, dragging:false };
+
+function loadFloatPref(){
+  try{
+    const raw = localStorage.getItem(FLOAT_PREF_KEY);
+    if(!raw) return;
+    const p = JSON.parse(raw);
+    if(typeof p.x === 'number') fp.x = p.x;
+    if(typeof p.y === 'number') fp.y = p.y;
+    fp.min = !!p.min;
+  }catch(e){ /* preferencia ilegible: se usa la posición por defecto */ }
+}
+function saveFloatPref(){
+  try{
+    localStorage.setItem(FLOAT_PREF_KEY, JSON.stringify({ x:fp.x, y:fp.y, min:fp.min }));
+  }catch(e){}
+}
+
+// Mantiene el panel dentro de la ventana: sin esto, al achicar la ventana
+// podía quedar fuera de la pantalla sin forma de recuperarlo.
+function clampFloat(x, y, el){
+  const w = el ? el.offsetWidth : 310;
+  const h = el ? el.offsetHeight : 120;
+  return {
+    x: clamp(x, 6, Math.max(6, window.innerWidth - w - 6)),
+    y: clamp(y, 6, Math.max(6, window.innerHeight - h - 6))
+  };
+}
+
+function renderFloatPanel(){
+  const host = document.getElementById('float-host');
+  const n = state.activeTrackers.length;
+  if(!n){
+    host.innerHTML = '';
+    document.title = TITULO_BASE;
+    return;
+  }
+  if(fp.dragging) return; // no reconstruir el nodo que se está arrastrando
+
+  const nowMs = Date.now();
+  const total = state.activeTrackers.reduce((a, t) => a + trackerElapsed(t, nowMs), 0);
+  const enPausa = state.activeTrackers.filter(isPaused).length;
+
+  let html = '<div id="float-panel" class="' + (fp.min ? 'min' : '') + '" role="complementary" aria-label="Cronómetros en curso">'
+    + '<div class="fp-head">'
+    + '<span class="fp-grip" tabindex="0" role="button" aria-describedby="fp-drag-help"'
+    + ' title="Arrastra para mover. Con el teclado, usa las flechas.">'
+    + '<span class="fp-dots" aria-hidden="true">⠿</span>';
+
+  if(fp.min){
+    html += '<span class="fp-pill"><span class="dot" aria-hidden="true"></span>'
+      + '<span class="fp-total" data-fp-total>' + fmtClock(total) + '</span></span>';
+  }else{
+    html += '<span class="fp-title">' + n + (n === 1 ? ' cronómetro' : ' cronómetros') + '</span>'
+      + '<span class="fp-total" data-fp-total>' + fmtClock(total) + '</span>';
+  }
+  html += '</span>'
+    + '<button class="fp-btn" data-fp="toggle" aria-expanded="' + (fp.min ? 'false' : 'true') + '"'
+    + ' aria-label="' + (fp.min ? 'Expandir el panel de cronómetros' : 'Minimizar el panel de cronómetros') + '">'
+    + (fp.min ? '▣' : '—') + '</button>'
+    + '</div>'
+    + '<span id="fp-drag-help" class="sr-only">Arrastra este panel con el ratón, o muévelo con las flechas del teclado cuando esté enfocado.</span>';
+
+  if(!fp.min){
+    html += '<div class="fp-body">';
+    state.activeTrackers.forEach(t => {
+      const p = projectById(t.projectId);
+      const pausado = isPaused(t);
+      html += '<div class="fp-item' + (pausado ? ' paused' : '') + '">'
+        + '<div class="fp-proj">' + projectChip(p) + '</div>'
+        + '<div class="fp-sec">' + esc(p ? sectionById(p.sectionId).nombre : 'Sin sección')
+        + (pausado ? ' · en pausa' : '') + '</div>'
+        + '<div class="fp-time" data-elapsed="' + esc(t.id) + '">' + fmtClock(trackerElapsed(t, nowMs)) + '</div>'
+        + '<div class="fp-acts">'
+        + (pausado
+            ? '<button class="fp-act" data-act="resume" data-id="' + esc(t.id) + '">▶ Reanudar</button>'
+            : '<button class="fp-act" data-act="pause" data-id="' + esc(t.id) + '">⏸ Pausar</button>')
+        + '<button class="fp-act stop" data-act="stop" data-id="' + esc(t.id) + '">⏹ Detener</button>'
+        + '</div></div>';
+    });
+    html += '</div><div class="fp-foot"><button data-fp="ir">Ver todo en Cronómetros →</button></div>';
+  }
+  html += '</div>';
+  host.innerHTML = html;
+
+  const panel = document.getElementById('float-panel');
+  // Posición por defecto: abajo a la izquierda, lejos del widget de cuenta y
+  // de la insignia de carpeta, que viven abajo a la derecha.
+  if(fp.x === null || fp.y === null){
+    fp.x = 16;
+    fp.y = Math.max(16, window.innerHeight - panel.offsetHeight - 16);
+  }
+  const pos = clampFloat(fp.x, fp.y, panel);
+  fp.x = pos.x; fp.y = pos.y;
+  panel.style.left = fp.x + 'px';
+  panel.style.top = fp.y + 'px';
+
+  wireFloatPanel(panel);
+  // Aviso pasivo también en el título de la pestaña, para cuando la app no
+  // está a la vista (CR-01 §3.3 deja fuera las notificaciones del sistema).
+  document.title = '⏳ ' + fmtClock(total) + (enPausa === n ? ' (en pausa)' : '') + ' · Hourglass';
+}
+
+function wireFloatPanel(panel){
+  const grip = panel.querySelector('.fp-grip');
+
+  // Arrastre con puntero: sirve igual para ratón, lápiz y dedo.
+  grip.addEventListener('pointerdown', (e) => {
+    if(e.button !== undefined && e.button !== 0) return;
+    const r = panel.getBoundingClientRect();
+    const dx = e.clientX - r.left;
+    const dy = e.clientY - r.top;
+    fp.dragging = true;
+    grip.setPointerCapture(e.pointerId);
+
+    const move = (ev) => {
+      const pos = clampFloat(ev.clientX - dx, ev.clientY - dy, panel);
+      fp.x = pos.x; fp.y = pos.y;
+      panel.style.left = fp.x + 'px';
+      panel.style.top = fp.y + 'px';
+    };
+    const up = () => {
+      fp.dragging = false;
+      grip.removeEventListener('pointermove', move);
+      grip.removeEventListener('pointerup', up);
+      grip.removeEventListener('pointercancel', up);
+      saveFloatPref();
+    };
+    grip.addEventListener('pointermove', move);
+    grip.addEventListener('pointerup', up);
+    grip.addEventListener('pointercancel', up);
+    e.preventDefault();
+  });
+
+  // Mismo movimiento con teclado: arrastrar con el ratón no puede ser la
+  // única forma de recolocarlo.
+  grip.addEventListener('keydown', (e) => {
+    const paso = e.shiftKey ? 40 : 12;
+    let dx = 0, dy = 0;
+    if(e.key === 'ArrowLeft') dx = -paso;
+    else if(e.key === 'ArrowRight') dx = paso;
+    else if(e.key === 'ArrowUp') dy = -paso;
+    else if(e.key === 'ArrowDown') dy = paso;
+    else return;
+    e.preventDefault();
+    const pos = clampFloat(fp.x + dx, fp.y + dy, panel);
+    fp.x = pos.x; fp.y = pos.y;
+    panel.style.left = fp.x + 'px';
+    panel.style.top = fp.y + 'px';
+    saveFloatPref();
+  });
+
+  panel.querySelector('[data-fp="toggle"]').addEventListener('click', () => {
+    fp.min = !fp.min;
+    saveFloatPref();
+    renderFloatPanel();
+    const b = document.querySelector('#float-panel [data-fp="toggle"]');
+    if(b) b.focus();
+    say(fp.min ? 'Panel de cronómetros minimizado' : 'Panel de cronómetros expandido');
+  });
+
+  const ir = panel.querySelector('[data-fp="ir"]');
+  if(ir) ir.addEventListener('click', () => {
+    switchView('trackers');
+    const tab = document.getElementById('tab-trackers');
+    if(tab) tab.focus();
+  });
+
+  // trackerAction ya llama a render(), que redibuja también este panel.
+  panel.querySelectorAll('[data-act]').forEach(b => {
+    b.addEventListener('click', () => trackerAction(b.dataset.act, b.dataset.id));
+  });
+}
+
+// Al achicar la ventana, el panel podría quedar fuera de la pantalla.
+window.addEventListener('resize', () => {
+  const panel = document.getElementById('float-panel');
+  if(!panel || fp.x === null) return;
+  const pos = clampFloat(fp.x, fp.y, panel);
+  fp.x = pos.x; fp.y = pos.y;
+  panel.style.left = fp.x + 'px';
+  panel.style.top = fp.y + 'px';
 });
 
 /* ───────────────────── aviso de cronómetro olvidado ─────────────────────
@@ -1987,8 +2759,12 @@ function closeModal(){
 /* ───────────────────── arranque y latido ───────────────────── */
 
 (async () => {
+  loadFloatPref();
   await load();
   cloudSyncReady = true;
+  // Los registros automáticos de sueño y comidas se ponen al día al abrir la
+  // app, y solo se guarda si de verdad se creó alguno.
+  if(generarFijosPendientes()) save();
   render();
   checkStaleTrackers();
 })();
@@ -1999,12 +2775,19 @@ function closeModal(){
 setInterval(() => {
   if(!state.activeTrackers.length) return;
   const nowMs = Date.now();
+  // Un solo selector para los dos sitios donde se ve el tiempo: la lista de
+  // la pestaña Cronómetros y el panel flotante.
   document.querySelectorAll('[data-elapsed]').forEach(el => {
     const t = state.activeTrackers.find(x => x.id === el.dataset.elapsed);
     if(t) el.textContent = fmtClock(trackerElapsed(t, nowMs));
   });
+  const total = state.activeTrackers.reduce((a, t) => a + trackerElapsed(t, nowMs), 0);
   const chip = document.querySelector('[data-chip-total]');
-  if(chip) chip.textContent = fmtClock(state.activeTrackers.reduce((a, t) => a + trackerElapsed(t, nowMs), 0));
+  if(chip) chip.textContent = fmtClock(total);
+  document.querySelectorAll('[data-fp-total]').forEach(el => { el.textContent = fmtClock(total); });
+  const enPausa = state.activeTrackers.filter(isPaused).length;
+  document.title = '⏳ ' + fmtClock(total)
+    + (enPausa === state.activeTrackers.length ? ' (en pausa)' : '') + ' · Hourglass';
 }, 1000);
 
 /* El panel sí depende del reloj (un cronómetro en curso mueve los totales),
