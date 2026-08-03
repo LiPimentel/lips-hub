@@ -2675,6 +2675,13 @@ async function abrirVentanaFlotante(opts){
     /* Si mientras se esperaba llegó a abrirse otra por otra vía, esta sobra:
        se cierra en vez de dejarla huérfana sin nadie que la controle. */
     if(pipActivo()){ w.close(); return; }
+    /* Y la situación pudo cambiar durante la espera: la petición se dispara con
+       un gesto, pero la ventana llega después, y para entonces la usuaria puede
+       estar ya en la vista de Cronómetros — donde la regla es que no haya nada
+       flotando. Comprobarlo solo ANTES no bastaba: dos cambios de vista
+       seguidos dejaban la ventana abierta encima de la lista, y ahí se quedaba,
+       porque nada la vuelve a mirar hasta el próximo cambio de vista. */
+    if(enVistaDeCronometros() || !state.activeTrackers.length){ w.close(); return; }
     pipWin = w;
   }catch(e){
     console.warn('[Hourglass] No se pudo abrir la ventana aparte:', e);
@@ -2709,9 +2716,22 @@ async function abrirVentanaFlotante(opts){
   pipWin.document.documentElement.lang = 'es';
   pipWin.document.body.className = 'pip-body';
 
-  // Si la usuaria la cierra con la X, el panel vuelve a la página.
+  /* Si la usuaria la cierra con la X de la ventana, el panel vuelve a la
+     página y se respeta esa decisión: no se le reabre sola al siguiente
+     cambio de vista. Se rearma cuando vuelva a la vista de Cronómetros.
+
+     El `if` de abajo distingue quién cerró. `pagehide` también se dispara
+     cuando la cierra el propio código (al volver a la vista de Cronómetros, o
+     al detenerse el último cronómetro), y sin esa comprobación esos cierres
+     automáticos se contaban como decisión de ella: la app dejaba de ofrecerle
+     la ventana para el resto de la sesión. Quien cierra por código pone
+     `pipWin` en null antes, así que si al llegar aquí ya no apunta a esta
+     ventana, no fue ella. */
+  const estaVentana = pipWin;
   pipWin.addEventListener('pagehide', () => {
+    if(pipWin !== estaVentana) return;
     pipWin = null;
+    pipCerradaAMano = true;
     render();
     say('El cronómetro volvió a la página');
   });
@@ -2720,9 +2740,19 @@ async function abrirVentanaFlotante(opts){
   say('Cronómetro abierto en una ventana aparte');
 }
 
-function cerrarVentanaFlotante(){
-  if(pipActivo()) pipWin.close();
+/* Si la usuaria la cierra ella misma, no se le vuelve a abrir sola en cuanto
+   cambia de vista: eso sería discutirle una decisión que acaba de tomar. La
+   apertura automática se rearma cuando vuelve a la vista de Cronómetros, que
+   es el punto natural donde el ciclo empieza de nuevo. */
+let pipCerradaAMano = false;
+
+function cerrarVentanaFlotante(opts){
+  if(opts && opts.manual) pipCerradaAMano = true;
+  // La referencia se suelta ANTES de cerrar: es lo que le dice al manejador de
+  // `pagehide` que este cierre lo pidió el código y no la usuaria.
+  const w = pipWin;
   pipWin = null;
+  if(w && !w.closed) w.close();
   /* Se redibuja aquí mismo y no se espera al `pagehide` de la ventana: ese
      evento avisa cuando la cierra la usuaria con la X, pero cerrándola desde
      el código el recordatorio de la página se quedaba puesto, señalando a una
@@ -2735,6 +2765,7 @@ function cerrarVentanaFlotante(){
    acepta como permiso para abrirla. */
 function abrirVentanaSiCorresponde(){
   if(!state.settings.autoVentanaFlotante) return;
+  if(pipCerradaAMano) return; // la cerró ella; no insistir hasta reiniciar el ciclo
   if(!pipDisponible() || pipActivo() || abriendoPip) return;
   if(!state.activeTrackers.length) return;
   // Estando en la vista de Cronómetros no hace falta: la lista ya está a la
@@ -2753,6 +2784,9 @@ function enVistaDeCronometros(){
 function ajustarVentanaSegunVista(){
   if(!state.settings.autoVentanaFlotante) return;
   if(enVistaDeCronometros()){
+    // Volver a la vista de Cronómetros reinicia el ciclo: si la había cerrado
+    // a mano, a partir de la próxima salida vuelve a ofrecérsela.
+    pipCerradaAMano = false;
     if(pipActivo()) cerrarVentanaFlotante();
   }else{
     abrirVentanaSiCorresponde();
@@ -2826,12 +2860,21 @@ function pintarPip(){
   panel.querySelectorAll('[data-act]').forEach(b => {
     b.addEventListener('click', () => trackerAction(b.dataset.act, b.dataset.id));
   });
-  panel.querySelector('[data-fp="cerrar-pip"]').addEventListener('click', cerrarVentanaFlotante);
+  panel.querySelector('[data-fp="cerrar-pip"]').addEventListener('click', () => cerrarVentanaFlotante({ manual:true }));
 }
 
 function renderFloatPanel(){
   const host = document.getElementById('float-host');
   const n = state.activeTrackers.length;
+
+  /* Sin nada corriendo, la ventana aparte no tiene función: se cierra sola en
+     vez de quedarse flotando encima del escritorio diciendo "nada corriendo".
+     No cuenta como cierre manual — el ciclo automático sigue vivo. */
+  if(pipActivo() && !n){
+    const w = pipWin;
+    pipWin = null;          // igual que arriba: marca que el cierre es del código
+    if(!w.closed) w.close();
+  }
 
   /* En la vista de Cronómetros el panel no se dibuja: sería repetir encima la
      misma lista que ya ocupa la pantalla. El título de la pestaña sí sigue
@@ -2858,7 +2901,7 @@ function renderFloatPanel(){
     marcador.style.left = fp.x + 'px';
     marcador.style.top = fp.y + 'px';
     wireFloatPanel(marcador);
-    marcador.querySelector('[data-fp="volver-pip"]').addEventListener('click', cerrarVentanaFlotante);
+    marcador.querySelector('[data-fp="volver-pip"]').addEventListener('click', () => cerrarVentanaFlotante({ manual:true }));
     pintarPip();
     document.title = n ? ('⏳ ' + fmtClock(state.activeTrackers.reduce((a, t) => a + trackerElapsed(t, Date.now()), 0)) + ' · Hourglass') : TITULO_BASE;
     return;

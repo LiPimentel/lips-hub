@@ -321,3 +321,93 @@ ejecución real:**
   dispara `pagehide` solo con `.close()`, hubo que simularlo a mano). Queda anotado como confirmación
   pendiente, no como fallo.
 
+## 2026-08-03 — revisión del PR #40 (commit `8801b2f`, "la ventana flotante aparece y desaparece sola")
+
+Servidor propio del worktree (`.claude/static-server.ps1` + `.claude/launch.json`, recreados en esta
+sesión porque no existían al empezar — ambos sin trackear). Candado quitado con el script del encargo.
+`document.visibilityState` y `window.innerWidth/innerHeight` verificados reales antes de cada bloque
+(mismos dos artefactos de entorno que el tech lead advirtió el 2026-08-02, reconfirmados presentes en
+esta sesión también: con el panel oculto, `visibilityState` da `'hidden'` y por sí solo hace que la app
+abra la ventana estando en Cronómetros — no es un bug, y se usó
+`Object.defineProperty(document,'visibilityState',{get:()=>...})` para simular visibilidad real antes de
+medir el comportamiento genuino). `window.documentPictureInPicture.requestWindow` sustituido por un mock
+que resuelve con el `contentWindow` de un `iframe` del mismo origen, anidado dentro de `<main>` (no como
+hijo directo de `<body>`, para no reactivar el `MutationObserver` del candado tras quitarlo a mano).
+Proyecto y cronómetro creados con clics/`dispatchEvent` reales sobre el DOM ya renderizado (no
+inyectados directo en `state`), confirmando que `computer{action:"left_click"/"type"}` no entrega
+interacción real en esta sesión (mismo patrón ya documentado varias veces por este equipo) — toda la
+interacción real se hizo con `.click()`/`dispatchEvent()` vía `javascript_exec`.
+
+**Retando las 13 comprobaciones que el tech lead dio por hechas — confirmado con ejecución real:**
+
+- [x] En Cronómetros, con visibilidad real (`'visible'`) y vista `'trackers'`, no se dibuja nada
+      flotante: `abrirVentanaSiCorresponde()` invocada en vivo no abre ninguna ventana
+      (`requestWindowCalls` se queda en 0), `float-host` queda vacío.
+- [x] Arrancar un cronómetro real (clic real en "▶ Iniciar" con un proyecto creado por la UI) estando en
+      Cronómetros no abre la ventana — coincide con lo esperado.
+- [x] Salir a Panel (`switchView('panel')`) con visibilidad real SÍ abre la ventana sola
+      (`requestWindowCalls` sube, `pipActivo():true`, recordatorio visible en `float-host`).
+- [x] Volver a Cronómetros (`switchView('trackers')`) SÍ la cierra sola (`pipActivo():false`,
+      `float-host` vacío).
+- [x] Ida y vuelta de pestaña del navegador (`visibilitychange` real vía el mock de visibilidad):
+      recalcula según la vista — estando en Cronómetros, ocultar y volver a mostrar la pestaña no abre
+      nada; estando en otra vista, no duplica la apertura si ya estaba abierta (confirmado que
+      `requestWindowCalls` no sube de más en un ciclo oculto→visible con la petición ya resuelta).
+- [x] Preferencia `autoVentanaFlotante` apagada (clic real en el checkbox de Ajustes + clic real en
+      "Guardar preferencias"): 4 cambios de vista seguidos (`trackers`→`panel`→`ajustes`→`registros`) no
+      abren la ventana ninguna vez (`requestWindowCalls` se queda en 0). Reactivada del mismo modo con
+      clic real, y el checkbox refleja el valor persistido al volver a entrar a Ajustes.
+- [x] El listener de "primer gesto" tras "recargar" (simulado invocando `armarAperturaEnPrimerGesto()`
+      directamente, ya que no hay sesión de Supabase de prueba disponible para persistir un cronómetro
+      activo a través de un `reload()` real de la página — ver nota de alcance más abajo): sin gesto no
+      abre nada; el primer `keydown` real (`dispatchEvent`) la abre exactamente una vez; un segundo
+      `keydown` y un `pointerdown` posteriores no vuelven a llamar `requestWindow` — los listeners se
+      quitan de verdad tras dispararse.
+- [x] Móvil (375×812, con `innerWidth` real vía `resize_window`, no 0): el recordatorio no solapa
+      `<nav class="tabs">` ni en su posición por defecto ni arrastrado al tope con 20 `Shift+ArrowUp`
+      reales (0px² de solape en ambos casos) — coincide con lo que ya había confirmado la sesión
+      anterior para este marcado más chico.
+- [x] Resto de Hourglass sin regresión: crear proyecto, iniciar/detener cronómetro (crea 1 entry real),
+      vista Año (`switchView` a modo `anio` sin error), Registros muestra el entry nuevo — 0 errores de
+      consola en toda la sesión.
+
+**Hallazgo que ESTA revisión eleva de "deducido por lectura de código" a CONFIRMADO CON EJECUCIÓN
+REAL, más amplio de lo descrito — la discrepancia más importante de esta revisión, ver caso 37/38 en
+`requerimientos.md` para el detalle completo con el mecanismo línea por línea:**
+
+- **La carrera entre el gesto/cambio de vista y el `await` de `requestWindow()` es real, no
+  hipotética, y NO se autocorrige con el paso del tiempo — solo con la siguiente interacción.**
+  Reproducida con 2 `switchView()` sucesivos sin esperar entre sí (`'panel'` → `'trackers'`, el mismo
+  patrón que produce el escenario descrito por `security-reviewer` para un clic sobre la pestaña
+  Cronómetros): la promesa de apertura sigue pendiente cuando la vista ya volvió a `'trackers'`, y al
+  resolver deja `pipActivo():true` con el recordatorio "⧉ En ventana aparte" **visible en el DOM real de
+  la vista de Cronómetros** — viola literalmente "en Cronómetros no se dibuja nada flotante". Confirmado
+  además que ningún temporizador de la app (ni el latido de 1s ni el refresco de 60s) llama a
+  `ajustarVentanaSegunVista()`/`renderFloatPanel()` para repararlo solo — si la usuaria se queda mirando
+  Cronómetros sin volver a interactuar, el recordatorio fantasma (y la ventana real, en un navegador
+  real) puede quedar así indefinidamente, no solo una fracción de segundo. No bloqueante (recuperable
+  con una interacción más, sin pérdida de datos), coincide con la severidad baja que ya le dio
+  `security-reviewer`, pero la escala del riesgo es mayor de lo que "se autocorrige en el siguiente
+  cambio de vista" sugiere.
+
+**Hallazgo nuevo de esta sesión, para triage con la usuaria, no reportado como bug — ver caso 39 en
+`requerimientos.md`:**
+
+- Cerrar la ventana a mano (simulado con `pagehide`) no "pega": el siguiente cambio de vista la reabre
+  sola sin distinguir "nunca se abrió" de "la usuaria la cerró a propósito". Coincide con la letra del
+  encargo tal como está escrita, así que se anota como decisión de producto a confirmar, no como
+  defecto.
+
+**Brecha de alcance explícita, no una debilidad oculta:** no se pudo probar el escenario real de
+"recargar la página con un cronómetro corriendo" con una recarga de navegador genuina — sin sesión de
+Supabase de prueba, `load()` retorna antes de leer nada de `localStorage` (código existente, no de este
+PR: `if(!session) return;`), así que cualquier `state` inyectado en memoria se pierde en una recarga
+real. Se probó la función `armarAperturaEnPrimerGesto()` invocándola directamente con datos ya
+inyectados (equivalente funcional al momento exacto en que correría tras un `reload()` real), pero **no
+es lo mismo que una recarga de navegador de punta a punta** — si el equipo consigue credenciales de
+prueba de Supabase para esta app, valdría la pena repetir este punto con una recarga real. Tampoco se
+pudo disparar `requestWindow()` real (exige gesto humano genuino, no disponible con
+`computer{action:"left_click"}` en esta sesión, mismo límite ya documentado varias veces por este
+equipo) — toda la verificación se hizo con el mock de `iframe` ya usado en revisiones anteriores de
+esta misma app.
+
