@@ -20,10 +20,26 @@ Ya no hace falta acordarse de que un cronómetro sigue corriendo.
 - Desde ahí mismo puedes **pausar, reanudar y detener** cada cronómetro, sin
   ir a ninguna pantalla. Y tiene un enlace directo a Cronómetros.
 
-**Lo que este panel no puede hacer:** vive dentro de la página. Si cierras la
-pestaña, deja de verse — una página web no puede poner nada encima de Windows.
-Para tapar ese hueco, **el tiempo aparece también en el título de la pestaña**,
-así lo ves en la barra del navegador aunque estés en otro sitio.
+**El botón ⧉ "ventana aparte" — esto es lo importante.** El panel de arriba
+vive dentro de la página: por mucho que lo arrastres nunca sale del área de
+Hourglass, y desaparece si cambias de pestaña o minimizas. Eso es un límite del
+navegador, no algo que se pueda ajustar.
+
+Para verlo **por encima de cualquier programa**, pulsa el botón **⧉** del
+panel. Se abre una **ventana pequeña de verdad**, del sistema, que:
+
+- se queda **siempre encima** de lo que estés haciendo (Word, correo, lo que
+  sea),
+- la mueves **por toda la pantalla**, no solo dentro del navegador,
+- **sigue ahí** aunque te vayas a otra pestaña o **minimices el navegador**,
+- deja **pausar, reanudar y detener** desde ella misma.
+
+Se cierra sola si cierras la pestaña de Hourglass, y con el botón "Devolver a
+la página" vuelve donde estaba. Funciona en **Chrome y Edge**; en otros
+navegadores el botón no aparece.
+
+Como tercer aviso, **el tiempo también sale en el título de la pestaña**, para
+verlo en la barra del navegador sin abrir nada.
 
 ### Sueño y comidas ahora son registros de verdad (CR-02)
 

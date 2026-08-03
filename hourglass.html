@@ -383,6 +383,16 @@
   .fp-pill{display:flex;align-items:center;gap:8px;}
   .fp-pill .dot{width:8px;height:8px;border-radius:50%;background:#4FD1C5;flex:none;animation:pulse 1.8s ease-in-out infinite;}
 
+  /* Dentro de la ventana aparte no hay página que esquivar: el panel ocupa
+     todo y de moverlo se encarga la ventana del sistema. */
+  .pip-body{margin:0;background:var(--dark);}
+  #float-panel.pip{
+    position:static;width:100%;border:none;border-radius:0;box-shadow:none;
+    min-height:100vh;display:flex;flex-direction:column;
+  }
+  #float-panel.pip .fp-body{max-height:none;flex:1;}
+  #float-panel.pip .fp-grip{cursor:default;}
+
   @media (max-width:640px){
     .stat .v{font-size:18px;}
     .btn{padding:8px 12px;}
@@ -2518,10 +2528,20 @@ document.querySelectorAll('[role="tab"]').forEach(tab => {
    arrastra a donde sea, se minimiza a una pastilla, y deja pausar, reanudar y
    detener sin volver a la pantalla de Cronómetros.
 
-   Límite conocido y aceptado (CR-01 §3.3): esto vive dentro de la página. Si
-   se cierra la pestaña deja de verse; para cubrir eso, el tiempo también se
-   escribe en el título del documento, que sí se lee desde la barra del
-   navegador estando en otra página. */
+   Una página web NO puede dibujar fuera de su pestaña: por eso este panel, por
+   mucho que se arrastre, nunca sale del área de la página, y desaparece al
+   cambiar de pestaña o minimizar. Eso no se arregla con CSS, es un límite del
+   navegador.
+
+   Para lo que hace falta de verdad —ver el cronómetro por encima de cualquier
+   otro programa— está el botón "Ventana aparte", que usa Picture-in-Picture de
+   documento: una ventana de verdad del sistema, siempre encima, que se mueve
+   por toda la pantalla y sobrevive a cambiar de pestaña y a minimizar el
+   navegador. Solo existe en Chrome y Edge (116+); donde no está, el botón lo
+   explica en vez de fallar.
+
+   El título de la pestaña sigue llevando el tiempo como tercer aviso, para
+   quien no abra la ventana aparte. */
 
 // La posición y el estado minimizado son preferencias de pantalla, no datos:
 // van en su propia clave de localStorage y NO se sincronizan con la nube ni
@@ -2581,9 +2601,149 @@ function clampFloat(x, y, el){
   };
 }
 
+/* ── Ventana aparte (Picture-in-Picture de documento) ──
+   Es la única forma que tiene una página web de poner algo encima del resto
+   del escritorio. La ventana la dibuja el navegador, no la página: se queda
+   por encima de todo, se mueve por toda la pantalla y sigue ahí aunque la
+   pestaña de Hourglass pase a segundo plano o el navegador se minimice.
+   Se cierra si se cierra la pestaña que la abrió. */
+let pipWin = null;
+
+function pipDisponible(){
+  return !!(window.documentPictureInPicture && window.documentPictureInPicture.requestWindow);
+}
+function pipActivo(){ return !!(pipWin && !pipWin.closed); }
+
+// El tiempo en vivo se refresca en la página y en la ventana aparte a la vez.
+function docsConPanel(){
+  return pipActivo() ? [document, pipWin.document] : [document];
+}
+
+async function abrirVentanaFlotante(){
+  if(!pipDisponible()){
+    setMsg('trackers','Tu navegador no puede abrir la ventana aparte. Funciona en Chrome y Edge (versión 116 o más nueva).','err');
+    render();
+    return;
+  }
+  if(pipActivo()){ pipWin.focus(); return; }
+  try{
+    const alto = Math.min(460, 130 + state.activeTrackers.length * 108);
+    pipWin = await window.documentPictureInPicture.requestWindow({ width: 300, height: alto });
+  }catch(e){
+    console.warn('[Hourglass] No se pudo abrir la ventana aparte:', e);
+    /* Los dos motivos reales son distintos y llevan a soluciones distintas:
+       `NotAllowedError` es "el navegador exige que esto salga de un clic tuyo"
+       (pasa si algo lo dispara solo, o si el permiso está bloqueado);
+       `InvalidStateError` es "ya hay otra ventana de estas abierta". Decir
+       siempre lo segundo mandaba a buscar una ventana que no existía. */
+    setMsg('trackers', e && e.name === 'InvalidStateError'
+      ? 'Ya tienes otra ventana flotante abierta en el navegador. Ciérrala y vuelve a intentarlo.'
+      : 'El navegador no dejó abrir la ventana aparte. Tiene que abrirse con un clic tuyo en este botón; si acabas de hacerlo, revisa que no esté bloqueada en los permisos del sitio.',
+      'err');
+    render();
+    return;
+  }
+
+  // La ventana nace vacía: hay que llevarle los estilos de la app.
+  Array.prototype.forEach.call(document.styleSheets, (ss) => {
+    try{
+      const css = Array.prototype.map.call(ss.cssRules, (r) => r.cssText).join('\n');
+      const el = pipWin.document.createElement('style');
+      el.textContent = css;
+      pipWin.document.head.appendChild(el);
+    }catch(e){ /* hoja inaccesible (otro origen): se ignora */ }
+  });
+  pipWin.document.documentElement.lang = 'es';
+  pipWin.document.body.className = 'pip-body';
+
+  // Si la usuaria la cierra con la X, el panel vuelve a la página.
+  pipWin.addEventListener('pagehide', () => {
+    pipWin = null;
+    render();
+    say('El cronómetro volvió a la página');
+  });
+
+  render();
+  say('Cronómetro abierto en una ventana aparte');
+}
+
+function cerrarVentanaFlotante(){
+  if(pipActivo()) pipWin.close();
+  pipWin = null;
+}
+
+// Lista de cronómetros, igual en la página y en la ventana aparte.
+function fpListaHtml(nowMs){
+  let html = '<div class="fp-body">';
+  state.activeTrackers.forEach(t => {
+    const p = projectById(t.projectId);
+    const pausado = isPaused(t);
+    html += '<div class="fp-item' + (pausado ? ' paused' : '') + '">'
+      + '<div class="fp-proj">' + projectChip(p) + '</div>'
+      + '<div class="fp-sec">' + esc(p ? sectionById(p.sectionId).nombre : 'Sin sección')
+      + (pausado ? ' · en pausa' : '') + '</div>'
+      + '<div class="fp-time" data-elapsed="' + esc(t.id) + '">' + fmtClock(trackerElapsed(t, nowMs)) + '</div>'
+      + '<div class="fp-acts">'
+      + (pausado
+          ? '<button class="fp-act" data-act="resume" data-id="' + esc(t.id) + '">▶ Reanudar</button>'
+          : '<button class="fp-act" data-act="pause" data-id="' + esc(t.id) + '">⏸ Pausar</button>')
+      + '<button class="fp-act stop" data-act="stop" data-id="' + esc(t.id) + '">⏹ Detener</button>'
+      + '</div></div>';
+  });
+  return html + '</div>';
+}
+
+/* Contenido de la ventana aparte. No lleva asa de arrastre ni botón de
+   minimizar: de mover y redimensionar se encarga la ventana del sistema. */
+function pintarPip(){
+  if(!pipActivo()) return;
+  const nowMs = Date.now();
+  const n = state.activeTrackers.length;
+  const total = state.activeTrackers.reduce((a, t) => a + trackerElapsed(t, nowMs), 0);
+  let html = '<div id="float-panel" class="pip" role="complementary" aria-label="Cronómetros en curso">'
+    + '<div class="fp-head">'
+    + '<span class="fp-grip" style="cursor:default">'
+    + '<span class="fp-title">' + n + (n === 1 ? ' cronómetro' : ' cronómetros') + '</span>'
+    + '<span class="fp-total" data-fp-total>' + fmtClock(total) + '</span></span>'
+    + '</div>';
+  html += n ? fpListaHtml(nowMs)
+            : '<div class="fp-body"><div class="fp-item"><div class="fp-sec">Nada corriendo ahora mismo</div></div></div>';
+  html += '<div class="fp-foot"><button data-fp="cerrar-pip">Devolver a la página</button></div></div>';
+  pipWin.document.body.innerHTML = html;
+
+  const panel = pipWin.document.getElementById('float-panel');
+  panel.querySelectorAll('[data-act]').forEach(b => {
+    b.addEventListener('click', () => trackerAction(b.dataset.act, b.dataset.id));
+  });
+  panel.querySelector('[data-fp="cerrar-pip"]').addEventListener('click', cerrarVentanaFlotante);
+}
+
 function renderFloatPanel(){
   const host = document.getElementById('float-host');
   const n = state.activeTrackers.length;
+
+  if(pipActivo()){
+    // Con la ventana aparte abierta, en la página solo queda un recordatorio
+    // de dónde está el cronómetro, para no tener lo mismo dos veces.
+    host.innerHTML = '<div id="float-panel" role="complementary" aria-label="Cronómetros en curso">'
+      + '<div class="fp-head"><span class="fp-grip" tabindex="0" role="button"'
+      + ' aria-describedby="fp-drag-help" title="Arrastra para mover.">'
+      + '<span class="fp-dots" aria-hidden="true">⠿</span>'
+      + '<span class="fp-title">⧉ En ventana aparte</span></span></div>'
+      + '<div class="fp-foot"><button data-fp="volver-pip">Devolver a la página</button></div></div>'
+      + '<span id="fp-drag-help" class="sr-only">Arrastra este panel con el ratón, o muévelo con las flechas del teclado.</span>';
+    const marcador = document.getElementById('float-panel');
+    const pos = clampFloat(fp.x === null ? 16 : fp.x, fp.y === null ? window.innerHeight - 90 : fp.y, marcador);
+    fp.x = pos.x; fp.y = pos.y;
+    marcador.style.left = fp.x + 'px';
+    marcador.style.top = fp.y + 'px';
+    wireFloatPanel(marcador);
+    marcador.querySelector('[data-fp="volver-pip"]').addEventListener('click', cerrarVentanaFlotante);
+    pintarPip();
+    document.title = n ? ('⏳ ' + fmtClock(state.activeTrackers.reduce((a, t) => a + trackerElapsed(t, Date.now()), 0)) + ' · Hourglass') : TITULO_BASE;
+    return;
+  }
+
   if(!n){
     host.innerHTML = '';
     document.title = TITULO_BASE;
@@ -2609,6 +2769,10 @@ function renderFloatPanel(){
       + '<span class="fp-total" data-fp-total>' + fmtClock(total) + '</span>';
   }
   html += '</span>'
+    + (pipDisponible()
+        ? '<button class="fp-btn" data-fp="pip" title="Sacar a una ventana aparte, siempre encima de todo"'
+          + ' aria-label="Sacar el cronómetro a una ventana aparte, siempre visible encima de otros programas">⧉</button>'
+        : '')
     + '<button class="fp-btn" data-fp="toggle" aria-expanded="' + (fp.min ? 'false' : 'true') + '"'
     + ' aria-label="' + (fp.min ? 'Expandir el panel de cronómetros' : 'Minimizar el panel de cronómetros') + '">'
     + (fp.min ? '▣' : '—') + '</button>'
@@ -2616,23 +2780,8 @@ function renderFloatPanel(){
     + '<span id="fp-drag-help" class="sr-only">Arrastra este panel con el ratón, o muévelo con las flechas del teclado cuando esté enfocado. La tecla Inicio lo devuelve a su posición original.</span>';
 
   if(!fp.min){
-    html += '<div class="fp-body">';
-    state.activeTrackers.forEach(t => {
-      const p = projectById(t.projectId);
-      const pausado = isPaused(t);
-      html += '<div class="fp-item' + (pausado ? ' paused' : '') + '">'
-        + '<div class="fp-proj">' + projectChip(p) + '</div>'
-        + '<div class="fp-sec">' + esc(p ? sectionById(p.sectionId).nombre : 'Sin sección')
-        + (pausado ? ' · en pausa' : '') + '</div>'
-        + '<div class="fp-time" data-elapsed="' + esc(t.id) + '">' + fmtClock(trackerElapsed(t, nowMs)) + '</div>'
-        + '<div class="fp-acts">'
-        + (pausado
-            ? '<button class="fp-act" data-act="resume" data-id="' + esc(t.id) + '">▶ Reanudar</button>'
-            : '<button class="fp-act" data-act="pause" data-id="' + esc(t.id) + '">⏸ Pausar</button>')
-        + '<button class="fp-act stop" data-act="stop" data-id="' + esc(t.id) + '">⏹ Detener</button>'
-        + '</div></div>';
-    });
-    html += '</div><div class="fp-foot"><button data-fp="ir">Ver todo en Cronómetros →</button></div>';
+    html += fpListaHtml(nowMs)
+      + '<div class="fp-foot"><button data-fp="ir">Ver todo en Cronómetros →</button></div>';
   }
   html += '</div>';
   host.innerHTML = html;
@@ -2717,7 +2866,11 @@ function wireFloatPanel(panel){
     saveFloatPref();
   });
 
-  panel.querySelector('[data-fp="toggle"]').addEventListener('click', () => {
+  /* El recordatorio que queda en la página cuando el cronómetro está en la
+     ventana aparte comparte esta función pero no trae botón de minimizar:
+     por eso todos los controles de aquí abajo se buscan antes de engancharse. */
+  const toggle = panel.querySelector('[data-fp="toggle"]');
+  if(toggle) toggle.addEventListener('click', () => {
     fp.min = !fp.min;
     saveFloatPref();
     renderFloatPanel();
@@ -2732,6 +2885,11 @@ function wireFloatPanel(panel){
     const tab = document.getElementById('tab-trackers');
     if(tab) tab.focus();
   });
+
+  // Tiene que salir de un clic: el navegador no deja abrir esta ventana desde
+  // código suelto.
+  const pip = panel.querySelector('[data-fp="pip"]');
+  if(pip) pip.addEventListener('click', abrirVentanaFlotante);
 
   // trackerAction ya llama a render(), que redibuja también este panel.
   panel.querySelectorAll('[data-act]').forEach(b => {
@@ -2869,16 +3027,17 @@ function closeModal(){
 setInterval(() => {
   if(!state.activeTrackers.length) return;
   const nowMs = Date.now();
-  // Un solo selector para los dos sitios donde se ve el tiempo: la lista de
-  // la pestaña Cronómetros y el panel flotante.
-  document.querySelectorAll('[data-elapsed]').forEach(el => {
-    const t = state.activeTrackers.find(x => x.id === el.dataset.elapsed);
-    if(t) el.textContent = fmtClock(trackerElapsed(t, nowMs));
-  });
   const total = state.activeTrackers.reduce((a, t) => a + trackerElapsed(t, nowMs), 0);
+  // Los mismos selectores en la página y en la ventana aparte, si está abierta.
+  docsConPanel().forEach(doc => {
+    doc.querySelectorAll('[data-elapsed]').forEach(el => {
+      const t = state.activeTrackers.find(x => x.id === el.dataset.elapsed);
+      if(t) el.textContent = fmtClock(trackerElapsed(t, nowMs));
+    });
+    doc.querySelectorAll('[data-fp-total]').forEach(el => { el.textContent = fmtClock(total); });
+  });
   const chip = document.querySelector('[data-chip-total]');
   if(chip) chip.textContent = fmtClock(total);
-  document.querySelectorAll('[data-fp-total]').forEach(el => { el.textContent = fmtClock(total); });
   const enPausa = state.activeTrackers.filter(isPaused).length;
   document.title = '⏳ ' + fmtClock(total)
     + (enPausa === state.activeTrackers.length ? ' (en pausa)' : '') + ' · Hourglass';
