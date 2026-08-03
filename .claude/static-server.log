@@ -1,9 +1,0 @@
-Exception calling "Start" with "0" argument(s): "Failed to listen on prefix 'http://localhost:8791/' because it 
-conflicts with an existing registration on the machine."
-At C:\Users\LissetteIPS\Documents\AI APPs\.claude\worktrees\charming-franklin-1e3d5d\.claude\static-server.ps1:4 char:1
-+ $listener.Start()
-+ ~~~~~~~~~~~~~~~~~
-    + CategoryInfo          : NotSpecified: (:) [], MethodInvocationException
-    + FullyQualifiedErrorId : HttpListenerException
- 
-Serving C:\Users\LissetteIPS\Documents\AI APPs\.claude\worktrees\charming-franklin-1e3d5d on http://localhost:8791/
