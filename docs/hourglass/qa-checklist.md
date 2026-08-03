@@ -218,3 +218,106 @@ DOM. `screenshot` sí falló siempre ("the Browser pane is not displayed"), igua
 sesiones anteriores — ninguna captura visual fue posible, toda la verificación de esta sesión se
 apoyó en medición programática real, no en inspección visual.
 
+## 2026-08-02 — revisión del commit `e59d03c` ("el cronómetro puede salir a una ventana propia")
+
+Servidor propio del worktree levantado con un `HttpListener` de PowerShell (`.claude/static-server.ps1`
++ `.claude/launch.json`, ambos sin trackear, no tocan código de la app) porque `http://localhost:8791/`
+no respondía al iniciar esta sesión y no había `node`/`python`/`npx` reales disponibles (los alias de
+`python`/`python3` en `WindowsApps` solo abren la Microsoft Store). Confirmado `location.href` antes de
+cada bloque de pruebas. Candado quitado con el script del encargo + restauración de `setAttribute`
+nativo vía `iframe` descartable, como dejó anotado `qa-lead` el 2026-08-02 anterior.
+
+**Aviso de herramienta nuevo esta sesión, confirmado con un control limpio:** `computer{action:
+"left_click"}` (por coordenada o por `ref`) **no entregó ningún clic real a la página** — ni al botón
+⧉ de verdad, ni a un `<button>` recién creado en el light DOM sin ningún otro listener ni reposicionamiento,
+con un listener de `click` fresco que nunca se disparó (0 de 2 intentos, confirmado con `window.__testClicks`
+vacío tras el clic). `document.elementFromPoint()` en las coordenadas del botón de control devolvió `BODY`,
+no el botón, pese a que su `getBoundingClientRect()` confirmaba que ocupaba ese punto — consistente con que
+`screenshot`/`zoom` fallan con "the Browser pane is not displayed, so the page is not compositing frames"
+en esta misma sesión: si el panel no compone frames, los clics por coordenada tampoco tienen un layout real
+contra el cual resolverse. Además, en un punto de la sesión un `screenshot` fallido dejó la pestaña
+navegada de vuelta a `http://localhost:8791/` (la URL inicial de `preview_start`) en vez de quedarse en
+`hourglass.html` — hay que revalidar `location.href` después de cualquier intento de `screenshot`, no
+asumirlo. Toda la interacción real de esta sesión se hizo con `javascript_exec` (invocación directa de
+funciones y `dispatchEvent`/`.click()` reales sobre nodos ya renderizados), igual que las dos sesiones
+anteriores de `qa-lead` sobre esta misma app.
+
+**Lo que el encargo pedía verificar como propio y aparte del reporte del tech lead — confirmado con
+ejecución real:**
+
+- [x] El botón ⧉ solo existe cuando `pipDisponible()` es verdadero y solo aparece con al menos un
+      cronómetro activo (vive dentro del `if(!n)` temprano de `renderFloatPanel()`); en este navegador
+      `documentPictureInPicture` sí existe (`!!window.documentPictureInPicture === true`).
+- [x] La llamada real a `requestWindow()` **confirmada inalcanzable en esta sesión, con evidencia
+      directa, no solo por el argumento teórico del encargo**: invocada sin envoltorio, el propio
+      Chrome/Edge real de este entorno la rechaza con `NotAllowedError: "...Document PiP requires user
+      activation"` y `navigator.userActivation.isActive:false` — y confirmado aparte que ningún clic de
+      `computer` genera esa activación (ver aviso de herramienta arriba), así que no había forma de
+      generar el gesto real necesario en esta sesión, ni para mí ni para nadie que reintente con las
+      mismas herramientas.
+- [x] Mensajes de error distintos por causa, ambos ejercitados de verdad: `NotAllowedError` real (de la
+      llamada sin envoltorio de arriba, capturada por la propia `abrirVentanaFlotante()`) deja el mensaje
+      "El navegador no dejó abrir la ventana aparte..."; `InvalidStateError` simulado (mock de
+      `requestWindow` que rechaza con ese nombre) deja "Ya tienes otra ventana flotante abierta...". Los
+      dos textos son distintos entre sí y coinciden con lo que describe el commit.
+- [x] Con `pipWin` sustituido por el `contentWindow` de un `iframe` del mismo origen (mismo método que
+      usó el propio commit para verificarse): la ventana recibe la lista real (proyecto, sección,
+      cronómetro con clase `paused` correcta), pausar/reanudar/detener desde los botones **de la ventana
+      aparte** modifican `state.activeTrackers`/`state.entries` de verdad y refrescan ambas ventanas; el
+      latido de 1 s (`docsConPanel()`) actualiza el tiempo en vivo en la ventana simulada (confirmado
+      con un `setTimeout` real de 2,2 s, 00:03:59 → 00:04:03); la copia de estilos deja exactamente 1
+      `<style>` en la ventana nueva sin ningún error ni duplicado en `document.styleSheets` de la página
+      principal tras 3 ciclos de abrir/cerrar seguidos (se mantiene en 1 todo el tiempo); en la página
+      solo queda el recordatorio (sin lista duplicada), con su propio botón "Devolver a la página".
+- [x] Abrir/cerrar **secuencialmente** 3 veces seguidas (no en carrera): `pipActivo()` acierta en los 6
+      pasos (`true` tras abrir, `false` tras el `pagehide` simulado de cierre), `pipWin` queda en `null`
+      cada vez, sin arrastrar ningún estado de la apertura anterior.
+- [x] El panel normal (arrastre por teclado con flechas/`Shift`, tecla Inicio, minimizar/expandir con
+      persistencia en `localStorage`, cambio de vista, vista Año, gráficos, bloques fijos) no mostró
+      ningún error de consola al recorrer las 5 pestañas + modo Año con datos reales inyectados
+      (proyecto, entry, cronómetro activo). `wireFloatPanel()` con el marcado del recordatorio (sin
+      botón de minimizar/"ir") no lanzó ninguna excepción al engancharse — los 3 controles que le
+      faltan (`toggle`, `ir`, `data-act` vacío) están todos protegidos con `if(...)` antes de
+      `addEventListener`, confirmado leyendo el código y ejercitado en vivo sin error.
+- [x] A 375×812px, el recordatorio (el marcado nuevo y más pequeño que muestra la página cuando la
+      ventana aparte está abierta) arrastrado al tope con 20 pulsaciones reales de `Shift+ArrowUp` **no
+      solapa** `<nav class="tabs">` (0px² de solape, `clampFloat()` lo detiene en y:165 con el nav
+      terminando en 159) — a diferencia del panel completo (caso borde 17/23, con 13.330px² de solape
+      medido por la sesión anterior), este marcado más chico no reproduce esa colisión, porque usa el
+      mismo `clampFloat()`/`limiteSuperiorFlotante()` ya corregido.
+- [x] Las 5 apps + el hub: **no verificado de nuevo en esta sesión, por indicación explícita del tech
+      lead a mitad de tarea** ("ignora el punto 5... este commit no puede afectar a bitácora-mentor,
+      StaffGate, lpbag, mytravel ni al hub", tras confirmar con `git show --name-only` que el commit
+      solo toca `hourglass.html` y la nota de versión). Antes de recibir esa corrección sí llegué a
+      cargar `index.html` y `bitacora-mentor.html` en pestañas separadas y confirmar candado presente
+      + 0 errores de consola en ambas — coincide con lo que la corrección del tech lead esperaba
+      encontrar (nada roto, porque nada compartido cambió), así que queda como reconfirmación
+      redundante, no contradicha.
+
+**2 hallazgos nuevos, confirmados con ejecución real, ninguno bloqueante — ver casos borde 35-37 en
+`requerimientos.md` para el detalle completo:**
+
+- **Caso 35 — eleva la severidad que le dio `security-reviewer` al caso 34.** `security-reviewer` asumió
+  (por lectura de código, sin probarlo) que un doble clic rápido sobre ⧉ sería rechazado solo por el
+  navegador real con `InvalidStateError`, sin consecuencia. Lo probé con dos promesas de `requestWindow`
+  pendientes de verdad (no una asunción): **las dos se resuelven**, porque el único guard que existe en
+  la app (`if(pipActivo())`) no distingue "ya hay una petición en camino" de "no hay ninguna ventana
+  todavía" — ambas dan `false` mientras la primera sigue pendiente. Confirmado que `pipWin` termina
+  apuntando solo a la segunda, la primera queda huérfana, y cerrar la huérfana (con `pagehide`) anula la
+  referencia a la segunda aunque siga abierta — un escenario más severo que "un mensaje de más". No se
+  pudo confirmar contra el `requestWindow()` real de Chrome (mismo límite de activación de toda la
+  sesión), así que **no queda demostrado que esto ocurra en producción**, solo que el código de la app
+  no lo impide por sí solo — es la discrepancia más importante de esta revisión frente a lo que el
+  reporte anterior daba por descartado, y se reporta como tal, no se concilia en silencio.
+- **Caso 36 — nuevo, no reportado por nadie más.** El aviso de "cronómetro olvidado" bloquea la página
+  con `inert` pero no alcanza la ventana aparte (otro `document`): confirmado que detener el cronómetro
+  desde los botones de la ventana aparte mientras el aviso está abierto en la página deja el aviso
+  mostrando un texto que ya no es cierto, y si se completa desde ahí igual, el mensaje final dice
+  "0 cronómetro(s) detenido(s)..." — confuso pero sin pérdida ni duplicado de datos.
+- **Caso 37 — brecha de verificación explícita, no un bug confirmado.** El regreso automático del panel
+  al cerrar la ventana aparte depende enteramente de que el navegador dispare `pagehide` al llamar
+  `.close()` sobre una ventana real — comportamiento documentado de la propia API, pero que ni esta
+  sesión ni la del propio commit pudieron observar con una ventana real (el sustituto de `iframe` no
+  dispara `pagehide` solo con `.close()`, hubo que simularlo a mano). Queda anotado como confirmación
+  pendiente, no como fallo.
+

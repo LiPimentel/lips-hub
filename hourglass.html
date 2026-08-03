@@ -1904,6 +1904,9 @@ function trackerAction(act, id){
     save(); setMsg('trackers','Cronómetro descartado.','ok'); say('Cronómetro descartado');
   }
   render();
+  // Si el aviso de olvidado estaba abierto, ponerlo al día: la acción pudo
+  // venir de la ventana aparte, que es otro documento.
+  refrescarAvisoStale();
 }
 
 function stopTracker(t, endIso){
@@ -2608,6 +2611,13 @@ function clampFloat(x, y, el){
    pestaña de Hourglass pase a segundo plano o el navegador se minimice.
    Se cierra si se cierra la pestaña que la abrió. */
 let pipWin = null;
+/* Guarda contra el doble clic. `pipActivo()` no sirve para esto: mientras la
+   primera petición sigue pendiente, `pipWin` todavía es null y da `false`, así
+   que un segundo clic abría UNA SEGUNDA ventana. `pipWin` se quedaba apuntando
+   solo a la última, la primera quedaba huérfana, y cerrar la huérfana anulaba
+   la referencia a la que seguía abierta — con lo que su botón "Devolver a la
+   página" terminaba cerrando la ventana equivocada. */
+let abriendoPip = false;
 
 function pipDisponible(){
   return !!(window.documentPictureInPicture && window.documentPictureInPicture.requestWindow);
@@ -2626,9 +2636,17 @@ async function abrirVentanaFlotante(){
     return;
   }
   if(pipActivo()){ pipWin.focus(); return; }
+  if(abriendoPip) return; // ya hay una petición en vuelo
+  abriendoPip = true;
+  const boton = document.querySelector('[data-fp="pip"]');
+  if(boton) boton.disabled = true;
   try{
     const alto = Math.min(460, 130 + state.activeTrackers.length * 108);
-    pipWin = await window.documentPictureInPicture.requestWindow({ width: 300, height: alto });
+    const w = await window.documentPictureInPicture.requestWindow({ width: 300, height: alto });
+    /* Si mientras se esperaba llegó a abrirse otra por otra vía, esta sobra:
+       se cierra en vez de dejarla huérfana sin nadie que la controle. */
+    if(pipActivo()){ w.close(); return; }
+    pipWin = w;
   }catch(e){
     console.warn('[Hourglass] No se pudo abrir la ventana aparte:', e);
     /* Los dos motivos reales son distintos y llevan a soluciones distintas:
@@ -2642,6 +2660,10 @@ async function abrirVentanaFlotante(){
       'err');
     render();
     return;
+  }finally{
+    abriendoPip = false;
+    const b = document.querySelector('[data-fp="pip"]');
+    if(b) b.disabled = false;
   }
 
   // La ventana nace vacía: hay que llevarle los estilos de la app.
@@ -2919,7 +2941,33 @@ function staleTrackers(){
   return state.activeTrackers.filter(t => (nowMs - Date.parse(t.startedAt)) > limite);
 }
 
+/* El aviso vive en la página, pero los cronómetros se pueden detener desde la
+   ventana aparte, que es otro documento. Sin esto, el aviso se quedaba
+   hablando de cronómetros que ya no existían, y su botón "Detener todos"
+   respondía "0 cronómetro(s) detenido(s)". */
+function refrescarAvisoStale(){
+  const host = document.getElementById('modal-host');
+  if(!host.children.length) return;
+  if(!staleTrackers().length){
+    closeModal();
+    say('El aviso se cerró: ya no queda ningún cronómetro olvidado');
+    return;
+  }
+  pintarAvisoStale();
+}
+
 function checkStaleTrackers(){
+  if(!staleTrackers().length) return;
+  modalPrevFocus = document.activeElement;
+  lockBehindModal(document.getElementById('modal-host'));
+  pintarAvisoStale();
+  const primero = document.querySelector('#modal-host .modal button');
+  if(primero) primero.focus();
+}
+
+// Dibuja (o vuelve a dibujar) el contenido del aviso con la lista al día.
+// No toca el bloqueo del fondo ni el foco: de eso se encarga quien lo abre.
+function pintarAvisoStale(){
   const viejos = staleTrackers();
   if(!viejos.length) return;
   const host = document.getElementById('modal-host');
@@ -2938,11 +2986,8 @@ function checkStaleTrackers(){
     + '<button class="btn ghost" id="mo-later">Dejarlo corriendo</button>'
     + '</div></div></div>';
 
-  modalPrevFocus = document.activeElement;
-  lockBehindModal(host);
   const modal = host.querySelector('.modal');
   const focusables = () => Array.from(modal.querySelectorAll('button'));
-  focusables()[0].focus();
 
   // Trampa de foco: mientras el aviso está abierto, el Tab no debe salirse a
   // la página de atrás.
