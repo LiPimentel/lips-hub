@@ -499,7 +499,9 @@ const DEFAULTS = {
   timezone:'America/Santo_Domingo',
   sleepHoursDefault:7,
   mealHoursDefault:3,
-  staleTrackerAlertHours:6
+  staleTrackerAlertHours:6,
+  // Abrir sola la ventana flotante al poner en marcha un cronómetro.
+  autoVentanaFlotante:true
 };
 
 let state = emptyState();
@@ -637,6 +639,8 @@ function normalize(raw){
   s.settings.sleepHoursDefault = clamp(num(set.sleepHoursDefault, DEFAULTS.sleepHoursDefault), 0, 24);
   s.settings.mealHoursDefault = clamp(num(set.mealHoursDefault, DEFAULTS.mealHoursDefault), 0, 24);
   s.settings.staleTrackerAlertHours = clamp(num(set.staleTrackerAlertHours, DEFAULTS.staleTrackerAlertHours), 1, 48);
+  s.settings.autoVentanaFlotante = set.autoVentanaFlotante === undefined
+    ? DEFAULTS.autoVentanaFlotante : !!set.autoVentanaFlotante;
 
   (Array.isArray(raw.projects) ? raw.projects : []).forEach((p, i) => {
     if(!p || typeof p !== 'object') return;
@@ -1868,6 +1872,11 @@ function wireTrackers(root){
     setMsg('trackers','Cronómetro iniciado.','ok');
     say('Cronómetro iniciado para ' + projectName(sel.value));
     render();
+    /* Aquí es donde puede abrirse sola la ventana flotante: este clic es el
+       gesto que el navegador exige, y cambiar de pestaña no lo es. Abriéndola
+       al arrancar el cronómetro, cuando la usuaria se va a otra pestaña la
+       ventana ya está puesta, sin haber tenido que pulsar nada aparte. */
+    abrirVentanaSiCorresponde();
   });
   const filtro = root.querySelector('#trf-proy');
   if(filtro) filtro.addEventListener('change', () => { ui.trackerFilter.proyecto = filtro.value; render(); });
@@ -2331,6 +2340,14 @@ function renderAjustes(){
     + '<div class="field"><label for="aj-stale">Avisar si un cronómetro lleva más de (horas)</label><input type="number" id="aj-stale" min="1" max="48" step="1" value="' + esc(s.staleTrackerAlertHours) + '"></div>'
     + '<div class="field"><button class="btn" id="aj-guardar">Guardar preferencias</button></div>'
     + '</div>'
+    + '<div class="row" style="margin-top:12px"><div class="field grow">'
+    + '<label><input type="checkbox" id="aj-autopip"' + (s.autoVentanaFlotante ? ' checked' : '') + '> '
+    + 'Sacar el cronómetro a una ventana aparte al ponerlo en marcha</label>'
+    + '<span class="hint">' + (pipDisponible()
+        ? 'La ventana se abre sola al arrancar un cronómetro y se queda encima de todo, aunque cambies de pestaña o minimices. '
+          + 'No puede abrirse sola justo al cambiar de pestaña: el navegador solo la deja aparecer a partir de algo que tú pulses.'
+        : 'Tu navegador no puede abrir esa ventana. Funciona en Chrome y Edge (versión 116 o más nueva).')
+    + '</span></div></div>'
     + '<p class="hint">Con estos valores, cada día tiene ' + esc(fmtDur(Math.max(0, (24 - num(s.sleepHoursDefault,0) - num(s.mealHoursDefault,0)) * 60))) + ' disponibles. '
     + 'Cambiarlos <strong>solo afecta a los días que vienen</strong>: los días ya registrados se quedan como estaban.</p>'
     + msgHtml('ajustes') + '</div>';
@@ -2407,6 +2424,8 @@ function wireAjustes(root){
     state.settings.sleepHoursDefault = sueno;
     state.settings.mealHoursDefault = comida;
     state.settings.staleTrackerAlertHours = stale;
+    const auto = root.querySelector('#aj-autopip');
+    if(auto) state.settings.autoVentanaFlotante = auto.checked;
     tzWarned = false;
     save();
     setMsg('ajustes','Preferencias guardadas.','ok');
@@ -2510,6 +2529,10 @@ function switchView(view){
     document.getElementById('view-' + t.dataset.view).hidden = !on;
   });
   render();
+  /* Cambiar de vista es un clic, y un clic es el permiso que el navegador
+     exige para abrir la ventana flotante. Por eso se decide aquí: al salir de
+     Cronómetros se abre, y al volver se cierra. */
+  ajustarVentanaSegunVista();
 }
 
 document.querySelectorAll('[role="tab"]').forEach(tab => {
@@ -2629,10 +2652,16 @@ function docsConPanel(){
   return pipActivo() ? [document, pipWin.document] : [document];
 }
 
-async function abrirVentanaFlotante(){
+/* `silencioso` es para las aperturas automáticas: si el navegador dice que no,
+   no tiene sentido soltarle un error a alguien que no pidió nada. Los errores
+   sí se muestran cuando fue ella quien pulsó el botón. */
+async function abrirVentanaFlotante(opts){
+  const silencioso = !!(opts && opts.silencioso);
   if(!pipDisponible()){
-    setMsg('trackers','Tu navegador no puede abrir la ventana aparte. Funciona en Chrome y Edge (versión 116 o más nueva).','err');
-    render();
+    if(!silencioso){
+      setMsg('trackers','Tu navegador no puede abrir la ventana aparte. Funciona en Chrome y Edge (versión 116 o más nueva).','err');
+      render();
+    }
     return;
   }
   if(pipActivo()){ pipWin.focus(); return; }
@@ -2646,6 +2675,13 @@ async function abrirVentanaFlotante(){
     /* Si mientras se esperaba llegó a abrirse otra por otra vía, esta sobra:
        se cierra en vez de dejarla huérfana sin nadie que la controle. */
     if(pipActivo()){ w.close(); return; }
+    /* Y la situación pudo cambiar durante la espera: la petición se dispara con
+       un gesto, pero la ventana llega después, y para entonces la usuaria puede
+       estar ya en la vista de Cronómetros — donde la regla es que no haya nada
+       flotando. Comprobarlo solo ANTES no bastaba: dos cambios de vista
+       seguidos dejaban la ventana abierta encima de la lista, y ahí se quedaba,
+       porque nada la vuelve a mirar hasta el próximo cambio de vista. */
+    if(enVistaDeCronometros() || !state.activeTrackers.length){ w.close(); return; }
     pipWin = w;
   }catch(e){
     console.warn('[Hourglass] No se pudo abrir la ventana aparte:', e);
@@ -2654,11 +2690,13 @@ async function abrirVentanaFlotante(){
        (pasa si algo lo dispara solo, o si el permiso está bloqueado);
        `InvalidStateError` es "ya hay otra ventana de estas abierta". Decir
        siempre lo segundo mandaba a buscar una ventana que no existía. */
-    setMsg('trackers', e && e.name === 'InvalidStateError'
-      ? 'Ya tienes otra ventana flotante abierta en el navegador. Ciérrala y vuelve a intentarlo.'
-      : 'El navegador no dejó abrir la ventana aparte. Tiene que abrirse con un clic tuyo en este botón; si acabas de hacerlo, revisa que no esté bloqueada en los permisos del sitio.',
-      'err');
-    render();
+    if(!silencioso){
+      setMsg('trackers', e && e.name === 'InvalidStateError'
+        ? 'Ya tienes otra ventana flotante abierta en el navegador. Ciérrala y vuelve a intentarlo.'
+        : 'El navegador no dejó abrir la ventana aparte. Tiene que abrirse con un clic tuyo en este botón; si acabas de hacerlo, revisa que no esté bloqueada en los permisos del sitio.',
+        'err');
+      render();
+    }
     return;
   }finally{
     abriendoPip = false;
@@ -2678,9 +2716,22 @@ async function abrirVentanaFlotante(){
   pipWin.document.documentElement.lang = 'es';
   pipWin.document.body.className = 'pip-body';
 
-  // Si la usuaria la cierra con la X, el panel vuelve a la página.
+  /* Si la usuaria la cierra con la X de la ventana, el panel vuelve a la
+     página y se respeta esa decisión: no se le reabre sola al siguiente
+     cambio de vista. Se rearma cuando vuelva a la vista de Cronómetros.
+
+     El `if` de abajo distingue quién cerró. `pagehide` también se dispara
+     cuando la cierra el propio código (al volver a la vista de Cronómetros, o
+     al detenerse el último cronómetro), y sin esa comprobación esos cierres
+     automáticos se contaban como decisión de ella: la app dejaba de ofrecerle
+     la ventana para el resto de la sesión. Quien cierra por código pone
+     `pipWin` en null antes, así que si al llegar aquí ya no apunta a esta
+     ventana, no fue ella. */
+  const estaVentana = pipWin;
   pipWin.addEventListener('pagehide', () => {
+    if(pipWin !== estaVentana) return;
     pipWin = null;
+    pipCerradaAMano = true;
     render();
     say('El cronómetro volvió a la página');
   });
@@ -2689,9 +2740,81 @@ async function abrirVentanaFlotante(){
   say('Cronómetro abierto en una ventana aparte');
 }
 
-function cerrarVentanaFlotante(){
-  if(pipActivo()) pipWin.close();
+/* Si la usuaria la cierra ella misma, no se le vuelve a abrir sola en cuanto
+   cambia de vista: eso sería discutirle una decisión que acaba de tomar. La
+   apertura automática se rearma cuando vuelve a la vista de Cronómetros, que
+   es el punto natural donde el ciclo empieza de nuevo. */
+let pipCerradaAMano = false;
+
+function cerrarVentanaFlotante(opts){
+  if(opts && opts.manual) pipCerradaAMano = true;
+  // La referencia se suelta ANTES de cerrar: es lo que le dice al manejador de
+  // `pagehide` que este cierre lo pidió el código y no la usuaria.
+  const w = pipWin;
   pipWin = null;
+  if(w && !w.closed) w.close();
+  /* Se redibuja aquí mismo y no se espera al `pagehide` de la ventana: ese
+     evento avisa cuando la cierra la usuaria con la X, pero cerrándola desde
+     el código el recordatorio de la página se quedaba puesto, señalando a una
+     ventana que ya no existe. */
+  renderFloatPanel();
+}
+
+/* Abre la ventana sola si la preferencia está puesta. Se llama desde dentro de
+   un clic real (arrancar un cronómetro), que es lo único que el navegador
+   acepta como permiso para abrirla. */
+function abrirVentanaSiCorresponde(){
+  if(!state.settings.autoVentanaFlotante) return;
+  if(pipCerradaAMano) return; // la cerró ella; no insistir hasta reiniciar el ciclo
+  if(!pipDisponible() || pipActivo() || abriendoPip) return;
+  if(!state.activeTrackers.length) return;
+  // Estando en la vista de Cronómetros no hace falta: la lista ya está a la
+  // vista. La ventana se abre justo al salir de esa vista.
+  if(ui.view === 'trackers' && document.visibilityState === 'visible') return;
+  abrirVentanaFlotante({ silencioso:true });
+}
+
+/* La regla que pidió la usuaria: estando en la vista de Cronómetros, con la
+   página delante, no debe haber nada flotando encima — la lista ya está ahí.
+   En cuanto se va a otra vista, a otra pestaña o fuera del navegador, sí. */
+function enVistaDeCronometros(){
+  return ui.view === 'trackers' && document.visibilityState === 'visible';
+}
+
+function ajustarVentanaSegunVista(){
+  if(!state.settings.autoVentanaFlotante) return;
+  if(enVistaDeCronometros()){
+    // Volver a la vista de Cronómetros reinicia el ciclo: si la había cerrado
+    // a mano, a partir de la próxima salida vuelve a ofrecérsela.
+    pipCerradaAMano = false;
+    if(pipActivo()) cerrarVentanaFlotante();
+  }else{
+    abrirVentanaSiCorresponde();
+  }
+}
+
+/* Al volver a la pestaña estando en Cronómetros, la ventana sobra y se cierra.
+   Al revés no se puede: irse de la pestaña no es un gesto que el navegador
+   acepte para ABRIRLA, por eso se abre antes, al navegar dentro de la app. */
+document.addEventListener('visibilitychange', () => {
+  if(document.visibilityState === 'visible') ajustarVentanaSegunVista();
+});
+
+/* Caso aparte: recargar la página con un cronómetro ya corriendo. Ahí no hay
+   ningún gesto del que colgarse, así que se espera al primero que llegue —
+   cualquier clic o tecla— y se abre entonces. Es de una sola vez: si la
+   usuaria la cierra a mano, no vuelve a insistir. */
+function armarAperturaEnPrimerGesto(){
+  if(!state.settings.autoVentanaFlotante) return;
+  if(!pipDisponible() || pipActivo()) return;
+  if(!state.activeTrackers.length) return;
+  const alGesto = () => {
+    document.removeEventListener('pointerdown', alGesto, true);
+    document.removeEventListener('keydown', alGesto, true);
+    abrirVentanaSiCorresponde();
+  };
+  document.addEventListener('pointerdown', alGesto, true);
+  document.addEventListener('keydown', alGesto, true);
 }
 
 // Lista de cronómetros, igual en la página y en la ventana aparte.
@@ -2737,12 +2860,30 @@ function pintarPip(){
   panel.querySelectorAll('[data-act]').forEach(b => {
     b.addEventListener('click', () => trackerAction(b.dataset.act, b.dataset.id));
   });
-  panel.querySelector('[data-fp="cerrar-pip"]').addEventListener('click', cerrarVentanaFlotante);
+  panel.querySelector('[data-fp="cerrar-pip"]').addEventListener('click', () => cerrarVentanaFlotante({ manual:true }));
 }
 
 function renderFloatPanel(){
   const host = document.getElementById('float-host');
   const n = state.activeTrackers.length;
+
+  /* Sin nada corriendo, la ventana aparte no tiene función: se cierra sola en
+     vez de quedarse flotando encima del escritorio diciendo "nada corriendo".
+     No cuenta como cierre manual — el ciclo automático sigue vivo. */
+  if(pipActivo() && !n){
+    const w = pipWin;
+    pipWin = null;          // igual que arriba: marca que el cierre es del código
+    if(!w.closed) w.close();
+  }
+
+  /* En la vista de Cronómetros el panel no se dibuja: sería repetir encima la
+     misma lista que ya ocupa la pantalla. El título de la pestaña sí sigue
+     llevando el tiempo. */
+  if(n && ui.view === 'trackers' && !pipActivo()){
+    host.innerHTML = '';
+    document.title = '⏳ ' + fmtClock(state.activeTrackers.reduce((a, t) => a + trackerElapsed(t, Date.now()), 0)) + ' · Hourglass';
+    return;
+  }
 
   if(pipActivo()){
     // Con la ventana aparte abierta, en la página solo queda un recordatorio
@@ -2760,7 +2901,7 @@ function renderFloatPanel(){
     marcador.style.left = fp.x + 'px';
     marcador.style.top = fp.y + 'px';
     wireFloatPanel(marcador);
-    marcador.querySelector('[data-fp="volver-pip"]').addEventListener('click', cerrarVentanaFlotante);
+    marcador.querySelector('[data-fp="volver-pip"]').addEventListener('click', () => cerrarVentanaFlotante({ manual:true }));
     pintarPip();
     document.title = n ? ('⏳ ' + fmtClock(state.activeTrackers.reduce((a, t) => a + trackerElapsed(t, Date.now()), 0)) + ' · Hourglass') : TITULO_BASE;
     return;
@@ -3064,6 +3205,7 @@ function closeModal(){
   if(cachedUserId && generarFijosPendientes()) save();
   render();
   checkStaleTrackers();
+  armarAperturaEnPrimerGesto();
 })();
 
 /* El cronómetro en pantalla se refresca cada segundo, pero NO se guarda cada

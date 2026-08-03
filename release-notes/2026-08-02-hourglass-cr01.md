@@ -38,6 +38,24 @@ Se cierra sola si cierras la pestaña de Hourglass, y con el botón "Devolver a
 la página" vuelve donde estaba. Funciona en **Chrome y Edge**; en otros
 navegadores el botón no aparece.
 
+**Y no tienes que pulsar nada: aparece y desaparece sola según dónde estés.**
+
+| Dónde estás | Qué ves |
+|---|---|
+| Mirando la lista de **Cronómetros** | Nada flotando — la lista ya está ahí |
+| En **Panel, Registros, Proyectos o Ajustes** | La ventanita, encima de todo |
+| En **otra pestaña** o fuera del navegador | La ventanita sigue puesta |
+| Vuelves a **Cronómetros** | Se cierra sola |
+
+Se puede apagar en Ajustes si algún día estorba.
+
+*Un detalle honesto:* la ventana **no puede** nacer justo en el instante en que
+cambias de pestaña — el navegador solo la deja aparecer a partir de algo que
+tú pulses, y cambiar de pestaña no cuenta. Por eso se abre un momento antes, en
+el clic con el que sales de la vista de Cronómetros, y para cuando te vas ya
+está puesta. El único hueco: si estás en Cronómetros y te vas directo a otra
+pestaña sin tocar nada más, no aparece hasta que vuelvas y navegues.
+
 Como tercer aviso, **el tiempo también sale en el título de la pestaña**, para
 verlo en la barra del navegador sin abrir nada.
 

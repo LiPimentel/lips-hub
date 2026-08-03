@@ -7,3 +7,7 @@ dist/
 # Dependencias instaladas por agentes al probar; nunca van al repo.
 node_modules/
 package-lock.json
+
+# Infra local de prueba de los agentes (servidor estatico), no contenido del repo
+.claude/static-server.log
+.claude/launch.json
