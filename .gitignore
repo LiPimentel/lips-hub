@@ -10,4 +10,5 @@ package-lock.json
 
 # Infra local de prueba de los agentes (servidor estatico), no contenido del repo
 .claude/static-server.log
+.claude/static-server.ps1
 .claude/launch.json

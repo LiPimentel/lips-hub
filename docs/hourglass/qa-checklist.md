@@ -411,3 +411,75 @@ pudo disparar `requestWindow()` real (exige gesto humano genuino, no disponible 
 equipo) — toda la verificación se hizo con el mock de `iframe` ya usado en revisiones anteriores de
 esta misma app.
 
+## 2026-08-04 — revisión de la rama `hourglass-ventana-pastilla-siempre-visible` (diff sin commitear, "la ventana aparte se queda siempre abierta y se colapsa a pastilla")
+
+Servidor propio del worktree (`.claude/static-server.ps1`, puerto 8791) — el primer intento de
+arrancarlo chocó con un servidor ya corriendo en ese puerto de **otra sesión concurrente** (ver
+aviso de proceso más abajo); en vez de matarlo, navegué directo a `http://localhost:8791/` y
+confirmé que servía el `hourglass.html` de este mismo worktree. Candado quitado ocultando el
+overlay (`display:none`) y quitando `inert` de los hermanos del `<body>`, sin tocar
+`Element.prototype.setAttribute`. `window.documentPictureInPicture.requestWindow` sustituido por un
+mock que resuelve con el `contentWindow` de un `iframe` del mismo origen (a veces con un `setTimeout`
+de 200ms para forzar carreras reales); `document.visibilityState` fijado con
+`Object.defineProperty` para alternar `'visible'`/`'hidden'` a voluntad. Proyectos y cronómetros
+creados con clics/`dispatchEvent` reales sobre el DOM ya renderizado.
+
+Verificado y funcionando (ejecución real):
+
+- [x] Arrancar un cronómetro estando en la vista Cronómetros abre la ventana ya nacida en modo
+      pastilla (`class="pip pip-mini"` desde el primer pintado), no la lista completa que se encoge
+      después.
+- [x] **El caso exacto reportado por la usuaria** (quedarse en Cronómetros y cambiar de pestaña del
+      navegador, sin tocar nada más): alternar `document.visibilityState` entre `'hidden'` y
+      `'visible'` **sin cambiar de vista** expande/colapsa la misma ventana ya abierta, sin pedir una
+      ventana nueva (`pipRequests` se mantiene en 1 en todo el ciclo).
+- [x] Cambiar de vista (Cronómetros ↔ cualquier otra) expande/colapsa la misma ventana con
+      `resizeTo()`, sin cerrarla ni pedir una nueva.
+- [x] Cerrar la pastilla a mano (`.fp-mini-close`, botón real con `tabIndex:0` y
+      `aria-label="Cerrar la ventana aparte"`) marca `pipCerradaAMano=true` y bloquea la reapertura
+      automática en cambios de vista posteriores (probado con 3 cambios de vista seguidos, ninguno
+      reabre).
+- [x] Arrancar un cronómetro nuevo resetea `pipCerradaAMano` y vuelve a ofrecer la ventana.
+- [x] Detener el último cronómetro cierra la ventana sola (`pipActivo()` pasa a `false`).
+- [x] **Camino de recuperación tras un cierre a mano sin arrancar un cronómetro nuevo:** navegar a
+      cualquier vista que no sea Cronómetros muestra el panel normal de la página con su botón "⧉",
+      que llama a `abrirVentanaFlotante` directo (sin comprobar `pipCerradaAMano`) — un clic real ahí
+      reabre la ventana. Mismo mecanismo preexistente, no tocado por este diff.
+- [x] **Carrera de apertura tardía forzada a propósito** (mock demorado 200ms + 2 `switchView()`
+      sucesivos sin esperar, `'panel'`→`'trackers'`, en el mismo tick síncrono): la ventana se abre
+      *después* de que la vista ya volvió a Cronómetros y aun así pinta correctamente colapsada
+      (`pip-mini`), nunca la lista completa encima de la lista de la página — no reabre los casos
+      37/38 ni con esta variante más agresiva que la probada por el tech lead.
+- [x] `resizeTo()` fallando (mockeado para lanzar) o ausente (`delete pipWin.resizeTo`): ambos casos
+      absorbidos por el `try/catch` existente sin excepción no capturada; la app sigue funcionando
+      con normalidad y el contenido correcto queda en el DOM.
+- [x] Total en vivo de la pastilla con 2 cronómetros corriendo y uno pausado a mitad de camino:
+      medido con tiempo real (no simulado) — ritmo ~2× con ambos corriendo, ~1× tras pausar uno,
+      confirma que el `setInterval` de 1s sigue actualizando `[data-fp-total]` dentro de la ventana
+      aparte en su nuevo estado `pip-mini`.
+- [x] 0 errores de consola durante toda la sesión.
+
+Hallazgos (ninguno bloqueante, ver detalle completo y casos borde en `docs/hourglass/requerimientos.md`,
+caso 43):
+
+- **`.fp-mini-close` mide 20.95×20px reales** (`getBoundingClientRect`), por debajo de las 24×24px
+  de WCAG 2.2 SC 2.5.8 — confirma de forma independiente la cifra de `accessibility-reviewer`
+  (~20×20px). Contraste del glifo "×" ≈5,95:1, por encima del 4,5:1 exigido — el tamaño del objetivo
+  es el problema, no el contraste.
+- **Pérdida de foco confirmada con ejecución real:** enfocar `.fp-mini-close` dentro de la ventana
+  simulada y luego disparar cualquier `render()` global de la app (ej. pausar un cronómetro) deja el
+  foco en `BODY` de la ventana aparte — eleva el hallazgo de `accessibility-reviewer` (deducido por
+  lectura de código) a demostrado con ejecución real.
+
+**Aviso de proceso, no de la app:** dos llamadas de `javascript_exec`/`computer{action:"wait"}` sin
+`tabId` explícito se ejecutaron contra `tab-3` (otra sesión concurrente real, con datos distintos —
+proyecto "Truelogic") en vez de mi propia `tab-2`, porque la pestaña "activa" del navegador
+compartido cambia sola entre pestañas de distintos agentes. Una de esas llamadas ejecutó
+`switchView()` sobre esa sesión ajena (no destructivo, sin pérdida de datos, pero interacción real
+no solicitada). Desde ese punto especifiqué `tabId` en cada llamada — recomendado para cualquiera
+que retome esta app en una sesión donde pueda haber otro agente trabajando en paralelo. Detalle en
+`docs/team-memory.md`.
+
+**Veredicto: APROBADO.** Ver el detalle completo del razonamiento en el caso borde 43 de
+`docs/hourglass/requerimientos.md`.
+
