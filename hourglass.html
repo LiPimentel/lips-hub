@@ -392,6 +392,22 @@
   }
   #float-panel.pip .fp-body{max-height:none;flex:1;}
   #float-panel.pip .fp-grip{cursor:default;}
+  /* Pastilla colapsada dentro de la ventana aparte (mirando Cronómetros):
+     mismo look que la pastilla en página, pero centrada en la ventanita
+     chica en vez de ocupar todo el alto. */
+  #float-panel.pip.pip-mini{min-height:0;justify-content:center;padding:14px 4px;}
+  #float-panel.pip.pip-mini .fp-pill{justify-content:center;}
+  .fp-mini-close{
+    flex:none;background:none;border:none;color:rgba(234,243,242,0.6);
+    font-size:16px;line-height:1;cursor:pointer;font-family:inherit;
+    /* 26x26, igual que .fp-btn: por debajo de eso el objetivo táctil quedaba
+       más chico que cualquier otro botón del mismo panel (hallazgo de
+       accessibility-reviewer, 2026-08-04). */
+    width:26px;height:26px;display:inline-flex;align-items:center;justify-content:center;
+    padding:0;border-radius:6px;margin-left:2px;
+  }
+  .fp-mini-close:hover{background:rgba(255,255,255,0.14);color:#EAF3F2;}
+  .fp-mini-close:focus-visible{outline:2px solid #7FE3DC;outline-offset:1px;}
 
   @media (max-width:640px){
     .stat .v{font-size:18px;}
@@ -1875,7 +1891,10 @@ function wireTrackers(root){
     /* Aquí es donde puede abrirse sola la ventana flotante: este clic es el
        gesto que el navegador exige, y cambiar de pestaña no lo es. Abriéndola
        al arrancar el cronómetro, cuando la usuaria se va a otra pestaña la
-       ventana ya está puesta, sin haber tenido que pulsar nada aparte. */
+       ventana ya está puesta, sin haber tenido que pulsar nada aparte. Un
+       cronómetro nuevo es también el punto natural para volver a ofrecerla
+       si la había cerrado a mano en la tanda anterior. */
+    pipCerradaAMano = false;
     abrirVentanaSiCorresponde();
   });
   const filtro = root.querySelector('#trf-proy');
@@ -2344,8 +2363,8 @@ function renderAjustes(){
     + '<label><input type="checkbox" id="aj-autopip"' + (s.autoVentanaFlotante ? ' checked' : '') + '> '
     + 'Sacar el cronómetro a una ventana aparte al ponerlo en marcha</label>'
     + '<span class="hint">' + (pipDisponible()
-        ? 'La ventana se abre sola al arrancar un cronómetro y se queda encima de todo, aunque cambies de pestaña o minimices. '
-          + 'No puede abrirse sola justo al cambiar de pestaña: el navegador solo la deja aparecer a partir de algo que tú pulses.'
+        ? 'La ventana se abre sola al arrancar un cronómetro y se queda encima de todo el resto del tiempo, aunque cambies de pestaña o minimices. '
+          + 'En la pantalla de Cronómetros se reduce a una pastillita con el tiempo, para no repetir la lista que ya está ahí.'
         : 'Tu navegador no puede abrir esa ventana. Funciona en Chrome y Edge (versión 116 o más nueva).')
     + '</span></div></div>'
     + '<p class="hint">Con estos valores, cada día tiene ' + esc(fmtDur(Math.max(0, (24 - num(s.sleepHoursDefault,0) - num(s.mealHoursDefault,0)) * 60))) + ' disponibles. '
@@ -2670,18 +2689,20 @@ async function abrirVentanaFlotante(opts){
   const boton = document.querySelector('[data-fp="pip"]');
   if(boton) boton.disabled = true;
   try{
-    const alto = Math.min(460, 130 + state.activeTrackers.length * 108);
+    /* Se le pide de entrada el tamaño que le va a tocar (pastilla o lista
+       completa) para no abrirla grande y encogerla de inmediato: ese salto
+       se notaba como un parpadeo. */
+    const colapsadaAlNacer = state.activeTrackers.length > 0 && enVistaDeCronometros();
+    const alto = colapsadaAlNacer ? 64 : Math.min(460, 130 + state.activeTrackers.length * 108);
     const w = await window.documentPictureInPicture.requestWindow({ width: 300, height: alto });
     /* Si mientras se esperaba llegó a abrirse otra por otra vía, esta sobra:
        se cierra en vez de dejarla huérfana sin nadie que la controle. */
     if(pipActivo()){ w.close(); return; }
-    /* Y la situación pudo cambiar durante la espera: la petición se dispara con
-       un gesto, pero la ventana llega después, y para entonces la usuaria puede
-       estar ya en la vista de Cronómetros — donde la regla es que no haya nada
-       flotando. Comprobarlo solo ANTES no bastaba: dos cambios de vista
-       seguidos dejaban la ventana abierta encima de la lista, y ahí se quedaba,
-       porque nada la vuelve a mirar hasta el próximo cambio de vista. */
-    if(enVistaDeCronometros() || !state.activeTrackers.length){ w.close(); return; }
+    /* Ya no se cierra por estar en la vista de Cronómetros: ahí se queda,
+       pero colapsada a una pastilla (pintarPip se encarga según la vista en
+       el momento de pintar, no en el momento de pedir la ventana). Solo se
+       descarta si para cuando llega ya no queda ningún cronómetro corriendo. */
+    if(!state.activeTrackers.length){ w.close(); return; }
     pipWin = w;
   }catch(e){
     console.warn('[Hourglass] No se pudo abrir la ventana aparte:', e);
@@ -2717,16 +2738,16 @@ async function abrirVentanaFlotante(opts){
   pipWin.document.body.className = 'pip-body';
 
   /* Si la usuaria la cierra con la X de la ventana, el panel vuelve a la
-     página y se respeta esa decisión: no se le reabre sola al siguiente
-     cambio de vista. Se rearma cuando vuelva a la vista de Cronómetros.
+     página y se respeta esa decisión: no se le vuelve a ofrecer sola hasta
+     que arranque otro cronómetro (ahí se reinicia el ciclo, ver el clic de
+     "Iniciar" en wireTrackers).
 
      El `if` de abajo distingue quién cerró. `pagehide` también se dispara
-     cuando la cierra el propio código (al volver a la vista de Cronómetros, o
-     al detenerse el último cronómetro), y sin esa comprobación esos cierres
-     automáticos se contaban como decisión de ella: la app dejaba de ofrecerle
-     la ventana para el resto de la sesión. Quien cierra por código pone
-     `pipWin` en null antes, así que si al llegar aquí ya no apunta a esta
-     ventana, no fue ella. */
+     cuando la cierra el propio código (al detenerse el último cronómetro),
+     y sin esa comprobación esos cierres automáticos se contaban como
+     decisión de ella: la app dejaba de ofrecerle la ventana para el resto de
+     la sesión. Quien cierra por código pone `pipWin` en null antes, así que
+     si al llegar aquí ya no apunta a esta ventana, no fue ella. */
   const estaVentana = pipWin;
   pipWin.addEventListener('pagehide', () => {
     if(pipWin !== estaVentana) return;
@@ -2741,9 +2762,10 @@ async function abrirVentanaFlotante(opts){
 }
 
 /* Si la usuaria la cierra ella misma, no se le vuelve a abrir sola en cuanto
-   cambia de vista: eso sería discutirle una decisión que acaba de tomar. La
-   apertura automática se rearma cuando vuelve a la vista de Cronómetros, que
-   es el punto natural donde el ciclo empieza de nuevo. */
+   cambia de vista o de pestaña: eso sería discutirle una decisión que acaba
+   de tomar. La apertura automática se rearma al arrancar el próximo
+   cronómetro (ver el clic de "Iniciar" en wireTrackers), que es el punto
+   natural donde el ciclo empieza de nuevo. */
 let pipCerradaAMano = false;
 
 function cerrarVentanaFlotante(opts){
@@ -2765,39 +2787,40 @@ function cerrarVentanaFlotante(opts){
    acepta como permiso para abrirla. */
 function abrirVentanaSiCorresponde(){
   if(!state.settings.autoVentanaFlotante) return;
-  if(pipCerradaAMano) return; // la cerró ella; no insistir hasta reiniciar el ciclo
+  if(pipCerradaAMano) return; // la cerró ella; no insistir hasta que arranque otro cronómetro
   if(!pipDisponible() || pipActivo() || abriendoPip) return;
   if(!state.activeTrackers.length) return;
-  // Estando en la vista de Cronómetros no hace falta: la lista ya está a la
-  // vista. La ventana se abre justo al salir de esa vista.
-  if(ui.view === 'trackers' && document.visibilityState === 'visible') return;
+  /* Ya no se salta la apertura por estar en la vista de Cronómetros: ese
+     salto era justo el hueco que dejaba la ventana sin abrir cuando la
+     usuaria arrancaba el cronómetro ahí mismo y se iba derecho a otra
+     pestaña, sin ningún otro clic del que colgarse. Nace colapsada a una
+     pastilla en ese caso (ver enVistaDeCronometros/pintarPip). */
   abrirVentanaFlotante({ silencioso:true });
 }
 
-/* La regla que pidió la usuaria: estando en la vista de Cronómetros, con la
-   página delante, no debe haber nada flotando encima — la lista ya está ahí.
-   En cuanto se va a otra vista, a otra pestaña o fuera del navegador, sí. */
+/* Decide si la ventana aparte debe verse como una pastilla chiquita (solo el
+   tiempo total) o como la lista completa. Mirando la lista de Cronómetros no
+   hace falta repetirla flotando encima — pero, a diferencia de antes, la
+   ventana ya no se cierra ahí: se queda abierta y lista, solo que reducida,
+   para no depender de ningún clic adicional cuando la usuaria se vaya. */
 function enVistaDeCronometros(){
   return ui.view === 'trackers' && document.visibilityState === 'visible';
 }
 
 function ajustarVentanaSegunVista(){
   if(!state.settings.autoVentanaFlotante) return;
-  if(enVistaDeCronometros()){
-    // Volver a la vista de Cronómetros reinicia el ciclo: si la había cerrado
-    // a mano, a partir de la próxima salida vuelve a ofrecérsela.
-    pipCerradaAMano = false;
-    if(pipActivo()) cerrarVentanaFlotante();
-  }else{
-    abrirVentanaSiCorresponde();
-  }
+  if(pipActivo()){ pintarPip(); return; } // solo hace falta repintar (pastilla ↔ lista)
+  abrirVentanaSiCorresponde();
 }
 
-/* Al volver a la pestaña estando en Cronómetros, la ventana sobra y se cierra.
-   Al revés no se puede: irse de la pestaña no es un gesto que el navegador
-   acepte para ABRIRLA, por eso se abre antes, al navegar dentro de la app. */
+/* Se llama en los dos sentidos (pestaña que se oculta y que vuelve): repintar
+   una ventana ya abierta no necesita gesto, solo abrirla lo necesita. Por eso
+   `ajustarVentanaSegunVista` no distingue dirección — si ya está abierta,
+   repinta; si no, intenta abrirla (y si la pestaña está oculta, esa apertura
+   fallará silenciosa, sin gesto real detrás; no pasa nada, es solo un intento
+   de más). */
 document.addEventListener('visibilitychange', () => {
-  if(document.visibilityState === 'visible') ajustarVentanaSegunVista();
+  ajustarVentanaSegunVista();
 });
 
 /* Caso aparte: recargar la página con un cronómetro ya corriendo. Ahí no hay
@@ -2839,28 +2862,73 @@ function fpListaHtml(nowMs){
 }
 
 /* Contenido de la ventana aparte. No lleva asa de arrastre ni botón de
-   minimizar: de mover y redimensionar se encarga la ventana del sistema. */
+   minimizar: de mover y redimensionar se encarga la ventana del sistema.
+   Se llama tanto al abrirla como cada vez que cambia la vista o la
+   visibilidad de la pestaña, para alternar entre pastilla y lista completa
+   sin tener que cerrar y volver a abrir la ventana (que sí exigiría un
+   gesto nuevo cada vez). */
 function pintarPip(){
   if(!pipActivo()) return;
   const nowMs = Date.now();
   const n = state.activeTrackers.length;
   const total = state.activeTrackers.reduce((a, t) => a + trackerElapsed(t, nowMs), 0);
-  let html = '<div id="float-panel" class="pip" role="complementary" aria-label="Cronómetros en curso">'
-    + '<div class="fp-head">'
-    + '<span class="fp-grip" style="cursor:default">'
-    + '<span class="fp-title">' + n + (n === 1 ? ' cronómetro' : ' cronómetros') + '</span>'
-    + '<span class="fp-total" data-fp-total>' + fmtClock(total) + '</span></span>'
-    + '</div>';
-  html += n ? fpListaHtml(nowMs)
-            : '<div class="fp-body"><div class="fp-item"><div class="fp-sec">Nada corriendo ahora mismo</div></div></div>';
-  html += '<div class="fp-foot"><button data-fp="cerrar-pip">Devolver a la página</button></div></div>';
+  const colapsado = n > 0 && enVistaDeCronometros();
+
+  /* Se reconstruye TODO el body en cada llamada, y ya no solo al cambiar de
+     vista: la ventana ahora se queda abierta indefinidamente, así que quien
+     esté enfocando un botón con el teclado dentro de ella (p. ej. el "×" de
+     la pastilla) puede perder el foco en silencio en cualquier `render()` de
+     la página principal. Se guarda qué estaba enfocado por sus atributos
+     `data-*` (los nodos se destruyen, no sirve guardar la referencia) y se
+     intenta reenfocar el equivalente tras reconstruir. */
+  const activoAntes = pipWin.document.activeElement;
+  const foco = (activoAntes && activoAntes !== pipWin.document.body)
+    ? { fp: activoAntes.dataset.fp, act: activoAntes.dataset.act, id: activoAntes.dataset.id }
+    : null;
+
+  let html;
+  if(colapsado){
+    // Mirando la lista de Cronómetros: solo una pastillita con el total, para
+    // no repetir encima la misma lista que ya está en la página.
+    html = '<div id="float-panel" class="pip pip-mini" role="complementary" aria-label="' + esc(n === 1 ? 'Cronómetro en curso' : n + ' cronómetros en curso') + '">'
+      + '<div class="fp-pill">'
+      + '<span class="dot" aria-hidden="true"></span>'
+      + '<span class="fp-total" data-fp-total>' + fmtClock(total) + '</span>'
+      + '<button class="fp-mini-close" data-fp="cerrar-pip" aria-label="Cerrar la ventana aparte">×</button>'
+      + '</div></div>';
+  }else{
+    html = '<div id="float-panel" class="pip" role="complementary" aria-label="Cronómetros en curso">'
+      + '<div class="fp-head">'
+      + '<span class="fp-grip" style="cursor:default">'
+      + '<span class="fp-title">' + n + (n === 1 ? ' cronómetro' : ' cronómetros') + '</span>'
+      + '<span class="fp-total" data-fp-total>' + fmtClock(total) + '</span></span>'
+      + '</div>';
+    html += n ? fpListaHtml(nowMs)
+              : '<div class="fp-body"><div class="fp-item"><div class="fp-sec">Nada corriendo ahora mismo</div></div></div>';
+    html += '<div class="fp-foot"><button data-fp="cerrar-pip">Devolver a la página</button></div></div>';
+  }
   pipWin.document.body.innerHTML = html;
 
   const panel = pipWin.document.getElementById('float-panel');
   panel.querySelectorAll('[data-act]').forEach(b => {
     b.addEventListener('click', () => trackerAction(b.dataset.act, b.dataset.id));
   });
-  panel.querySelector('[data-fp="cerrar-pip"]').addEventListener('click', () => cerrarVentanaFlotante({ manual:true }));
+  const cerrarBtn = panel.querySelector('[data-fp="cerrar-pip"]');
+  if(cerrarBtn) cerrarBtn.addEventListener('click', () => cerrarVentanaFlotante({ manual:true }));
+
+  if(foco){
+    let el = null;
+    if(foco.fp) el = panel.querySelector('[data-fp="' + foco.fp + '"]');
+    else if(foco.act) el = panel.querySelector('[data-act="' + foco.act + '"][data-id="' + CSS.escape(foco.id || '') + '"]');
+    if(el) el.focus();
+  }
+
+  // El alto se ajusta al pasar de pastilla a lista y viceversa; sin esto se
+  // quedaba con el tamaño con el que nació la ventana.
+  if(typeof pipWin.resizeTo === 'function'){
+    try{ pipWin.resizeTo(300, colapsado ? 64 : Math.min(460, 130 + n * 108)); }
+    catch(e){ /* algún navegador puede negarlo; no es crítico */ }
+  }
 }
 
 function renderFloatPanel(){
@@ -2876,12 +2944,16 @@ function renderFloatPanel(){
     if(!w.closed) w.close();
   }
 
-  /* En la vista de Cronómetros el panel no se dibuja: sería repetir encima la
-     misma lista que ya ocupa la pantalla. El título de la pestaña sí sigue
-     llevando el tiempo. */
-  if(n && ui.view === 'trackers' && !pipActivo()){
+  /* En la vista de Cronómetros el panel de la PÁGINA no se dibuja: sería
+     repetir encima la misma lista que ya ocupa la pantalla. El título de la
+     pestaña sí sigue llevando el tiempo. Si la ventana aparte ya está
+     abierta, se queda abierta pero colapsada a una pastilla (pintarPip) en
+     vez de cerrarse — así sigue lista sin que haga falta ningún clic más
+     cuando la usuaria se vaya de esta vista o de la pestaña. */
+  if(n && enVistaDeCronometros()){
     host.innerHTML = '';
     document.title = '⏳ ' + fmtClock(state.activeTrackers.reduce((a, t) => a + trackerElapsed(t, Date.now()), 0)) + ' · Hourglass';
+    if(pipActivo()) pintarPip();
     return;
   }
 
