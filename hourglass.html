@@ -2737,23 +2737,32 @@ async function abrirVentanaFlotante(opts){
   pipWin.document.documentElement.lang = 'es';
   pipWin.document.body.className = 'pip-body';
 
-  /* Si la usuaria la cierra con la X de la ventana, el panel vuelve a la
-     página y se respeta esa decisión: no se le vuelve a ofrecer sola hasta
-     que arranque otro cronómetro (ahí se reinicia el ciclo, ver el clic de
-     "Iniciar" en wireTrackers).
+  /* `pagehide` se dispara con CUALQUIER cierre nativo de la ventana: la X del
+     marco, y también el ícono de "volver a la pestaña" que dibuja el propio
+     navegador junto a la X (confirmado en vivo: la usuaria lo usó para
+     asomarse a la pestaña, no para decir "ya no quiero esto"). No hay forma
+     de distinguir cuál de los dos se usó — ninguno de los dos es un botón
+     nuestro, son parte del marco que dibuja el sistema operativo/navegador,
+     no de `pipWin.document`. Por eso NO se marca como cierre a mano aquí:
+     eso queda reservado para el "×"/"Devolver a la página" de dentro de la
+     propia app (`cerrarVentanaFlotante({manual:true})`), que sí son una
+     decisión inequívoca. Un cierre nativo solo se rearma para el próximo
+     gesto — igual que al recargar con un cronómetro ya corriendo — así que
+     basta con que la usuaria toque cualquier cosa en la página para que
+     vuelva a aparecer sola, sin tener que arrancar un cronómetro nuevo.
 
      El `if` de abajo distingue quién cerró. `pagehide` también se dispara
      cuando la cierra el propio código (al detenerse el último cronómetro),
-     y sin esa comprobación esos cierres automáticos se contaban como
-     decisión de ella: la app dejaba de ofrecerle la ventana para el resto de
-     la sesión. Quien cierra por código pone `pipWin` en null antes, así que
-     si al llegar aquí ya no apunta a esta ventana, no fue ella. */
+     y sin esa comprobación esos cierres automáticos activarían el rearme de
+     abajo sin necesidad. Quien cierra por código pone `pipWin` en null
+     antes, así que si al llegar aquí ya no apunta a esta ventana, no fue un
+     cierre nativo. */
   const estaVentana = pipWin;
   pipWin.addEventListener('pagehide', () => {
     if(pipWin !== estaVentana) return;
     pipWin = null;
-    pipCerradaAMano = true;
     render();
+    armarAperturaEnPrimerGesto();
     say('El cronómetro volvió a la página');
   });
 
@@ -2823,15 +2832,22 @@ document.addEventListener('visibilitychange', () => {
   ajustarVentanaSegunVista();
 });
 
-/* Caso aparte: recargar la página con un cronómetro ya corriendo. Ahí no hay
-   ningún gesto del que colgarse, así que se espera al primero que llegue —
-   cualquier clic o tecla— y se abre entonces. Es de una sola vez: si la
-   usuaria la cierra a mano, no vuelve a insistir. */
+/* Se usa en dos momentos: al cargar la página con un cronómetro ya corriendo
+   (ahí no hay ningún gesto del que colgarse), y tras un cierre nativo de la
+   ventana aparte (X o el ícono de "volver a la pestaña" del propio
+   navegador, ver el `pagehide` de `abrirVentanaFlotante`) — en ambos casos
+   se espera al primer clic o tecla que llegue, en cualquier parte de la
+   página, y se abre entonces. `gestoArmado` evita apilar dos escuchas si se
+   llama dos veces seguidas sin que ninguna haya disparado todavía. */
+let gestoArmado = false;
 function armarAperturaEnPrimerGesto(){
   if(!state.settings.autoVentanaFlotante) return;
   if(!pipDisponible() || pipActivo()) return;
   if(!state.activeTrackers.length) return;
+  if(gestoArmado) return;
+  gestoArmado = true;
   const alGesto = () => {
+    gestoArmado = false;
     document.removeEventListener('pointerdown', alGesto, true);
     document.removeEventListener('keydown', alGesto, true);
     abrirVentanaSiCorresponde();

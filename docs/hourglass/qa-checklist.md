@@ -483,3 +483,78 @@ que retome esta app en una sesión donde pueda haber otro agente trabajando en p
 **Veredicto: APROBADO.** Ver el detalle completo del razonamiento en el caso borde 43 de
 `docs/hourglass/requerimientos.md`.
 
+## 2026-08-04 — revisión de la rama `hourglass-pip-icono-nativo-no-bloquea` (caso 45: el ícono nativo "volver a la pestaña" ya no marca cierre a mano)
+
+Servidor propio del worktree (`.claude/static-server.ps1`, puerto **8792** — distinto al 8791 usado en
+revisiones anteriores, para no chocar con otra sesión concurrente; en efecto había otras pestañas
+abiertas de otra(s) sesión(es) en `http://localhost:8791` al empezar, confirmado con `tabs_context` y
+fijando `tabId:"tab-6"` en todas las llamadas de esta sesión desde el inicio). Candado quitado
+ocultando el overlay (`display:none`) y quitando `inert` de los hermanos del `<body>`, sin tocar
+`Element.prototype.setAttribute`. Proyecto y cronómetro creados inyectando directo en `state`
+(`state.projects.push(...)`, `state.activeTrackers.push(...)`), como en revisiones anteriores.
+`window.documentPictureInPicture.requestWindow` mockeado con un `iframe` anidado en `<main>` (no hijo
+directo de `<body>`, para no reactivar el `MutationObserver` del candado), con demora configurable
+(`window.__delayMs`) para forzar carreras reales, y contador de llamadas (`window.__pipRequests`).
+`pagehide` disparado directo sobre la ventana simulada con `dispatchEvent(new Event('pagehide'))`,
+**sin pasar por `cerrarVentanaFlotante()`**, igual que haría el ícono nativo real (mismo método que usó
+el tech lead, reconfirmado independientemente en vez de solo repetido).
+
+Verificado y funcionando (ejecución real, valores de `pipRequests`/`pipCerradaAMano`/`gestoArmado`/
+`pipActivo()` leídos en cada paso, no inferidos):
+
+- [x] Abrir la ventana + `pagehide` nativo simulado directo: `pipCerradaAMano` se queda en `false`
+      (antes del fix pasaba a `true`) — confirma el fix central del caso 45.
+- [x] Tras ese cierre nativo, `gestoArmado` pasa a `true` (armado, esperando el próximo gesto).
+- [x] El siguiente gesto real cualquiera (`pointerdown` de prueba, sin relación con arrancar un
+      cronómetro) reabre la ventana sola: `pipRequests` sube en 1, `pipActivo()` pasa a `true`,
+      `gestoArmado` vuelve a `false`.
+- [x] Cierre manual (`cerrarVentanaFlotante({manual:true})`, equivalente real a `.fp-mini-close`/
+      "Devolver a la página"): `pipCerradaAMano=true`, `gestoArmado` **NO** se arma, un gesto
+      posterior y un cambio de vista (`ajustarVentanaSegunVista()`) no reabren nada — sin regresión
+      frente al comportamiento anterior a este diff.
+- [x] Guard de doble apertura simultánea (casos 34/35): dos llamadas a `abrirVentanaSiCorresponde()`
+      seguidas sin esperar entre sí producen exactamente **1** `requestWindow()` real, no 2.
+- [x] 0 errores de consola durante toda la sesión (incluida una comprobación a 375×812px — el diff no
+      agrega ni modifica HTML/CSS, así que no hay ningún elemento nuevo que verificar visualmente ahí;
+      la comprobación fue solo de regresión, no de una pantalla nueva).
+
+**Las dos "costuras" que pidió el tech lead investigar explícitamente — ambas confirmadas con
+ejecución real, ninguna bloqueante (ver caso borde 47 de `requerimientos.md` para el detalle
+línea por línea):**
+
+- **(a) `gestoArmado` SÍ queda huérfano (armado, con 2 listeners colgando de `document`) si el último
+  cronómetro se detiene mientras sigue `true`, sin que medie ningún gesto.** Secuencia real: cierre
+  nativo (`gestoArmado=true`) → `trackerAction('stop', id)` sobre el único cronómetro activo →
+  `gestoArmado` se queda en `true` con `activeTrackers.length===0`. Se autolimpia con el próximo
+  gesto cualquiera (`pipRequests` no sube, porque `abrirVentanaSiCorresponde()` corta por falta de
+  cronómetros), y arrancar un cronómetro nuevo justo después funciona sin fricción (el `pointerdown`
+  del propio clic dispara primero el listener huérfano, sin efecto porque `activeTrackers` aún es 0
+  en ese instante; el manejador de clic abre la ventana por su cuenta después). No bloqueante.
+- **(b) Interferencia real (no solo teórica) entre el `pagehide` nativo y una apertura automática ya
+  en vuelo (`abriendoPip=true`), disparada por `visibilitychange` en el hueco entre que el navegador
+  marca `.closed=true` de forma síncrona y el evento `pagehide` llega como tarea aparte.** Reproducido
+  dos veces (llamando `abrirVentanaSiCorresponde()` directo durante la carrera, y disparando un
+  `visibilitychange` real con `document.visibilityState` sustituido por `Object.defineProperty`):
+  el manejador de `pagehide` de la ventana vieja SÍ entra a su cuerpo (`pipWin` todavía la referenciaba,
+  la apertura nueva no había completado) y rearma `armarAperturaEnPrimerGesto()` de más — pero el
+  resultado final siempre queda correcto (una sola ventana activa tras resolver, sin duplicados, 0
+  errores de consola en 3 repeticiones), con el mismo tipo de listener huérfano que en (a), que se
+  autolimpia en el siguiente gesto sin efecto. **Esto matiza el veredicto de `security-reviewer` sobre
+  este mismo diff** (caso 46 de `requerimientos.md`, "no hay interferencia" con las carreras 34/35,
+  concluido solo por lectura de código): el resultado final es correcto, confirmado, pero SÍ hay un
+  camino intermedio con estado transitorio real que la lectura de código no capturó.
+- **(c)** La simulación con `dispatchEvent(new Event('pagehide'))` es equivalente a un cierre nativo
+  real para efectos de este código específico: el manejador no lee ninguna propiedad del evento
+  (`() => {...}`, sin parámetro), así que un `Event` plano dispara el mismo camino que un
+  `PageTransitionEvent` real. El matiz que sí importa es el orden con `visibilitychange`, cubierto en
+  (b).
+- **(d)** Casos borde 34-44 sobre esta misma ventana: ninguno se reabrió con este diff.
+
+**Veredicto: APROBADO.** Cumple lo pedido (el ícono nativo ya no bloquea la reapertura automática) y
+no reabre ninguno de los casos 34-44 ya cerrados. Los dos hallazgos nuevos (listeners huérfanos
+autolimpiables) son reales pero no bloqueantes ni visibles para la usuaria — documentados para que
+quien retome esta ventana sepa que "el resultado es correcto" y "no hay estado transitorio raro" no
+son lo mismo. Ninguna app compartida (`auth-gate.js`/`supabase-client*.js`) fue tocada por este diff
+(`git diff origin/master --stat` confirma solo `hourglass.html` con cambios de código) — no aplica
+reverificación cruzada de login en otras apps del hub.
+
