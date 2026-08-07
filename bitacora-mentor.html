@@ -383,7 +383,23 @@
   .checklist-box{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin:10px 0;}
   .checklist-box-title{font-size:11.5px;text-transform:uppercase;letter-spacing:0.04em;color:var(--muted);margin:0 0 8px;}
   .checklist-row{display:flex;align-items:flex-start;gap:8px;font-size:13px;color:var(--muted);margin:6px 0;}
-  .checklist-row input[type="checkbox"]{margin-top:2px;cursor:pointer;}
+  /* La casilla vive dentro de un `.field`, y esa regla le daba `width:100%`,
+     borde y relleno: se estiraba de lado a lado como si fuera un campo de
+     texto, y empujaba su propia etiqueta contra el borde, que se partía en
+     varias líneas sin necesidad. Aquí se le devuelve su tamaño natural.
+     El `!important` es a propósito: `.field input` tiene la misma
+     especificidad y aparece antes, así que sin esto ganaría por orden. */
+  .checklist-row input[type="checkbox"]{
+    width:auto !important;
+    flex:0 0 auto;
+    padding:0 !important;
+    border:none !important;
+    background:none !important;
+    margin-top:2px;
+    cursor:pointer;
+  }
+  /* Y el texto se queda con todo el ancho que sobra. */
+  .checklist-row span{flex:1;min-width:0;}
   .checklist-row.done{text-decoration:line-through;color:var(--muted);}
   .checklist-q label{display:block;font-size:12.5px;color:var(--ink);margin-bottom:4px;font-weight:500;}
   .checklist-q input{width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:6px;font-size:13px;font-family:'Inter',sans-serif;background:var(--surface);color:var(--ink);}
@@ -934,6 +950,7 @@ function renderMentoriaView(body){
         ${mentee.email ? `<div><p class="profile-field-label">Correo</p><p class="profile-field-value">${esc(mentee.email)}</p></div>` : ''}
         ${mentee.country ? `<div><p class="profile-field-label">País</p><p class="profile-field-value">${esc(mentee.country)}</p></div>` : ''}
         ${status==='cerrado' && mentee.outcome ? `<div><p class="profile-field-label">Resultado</p><p class="profile-field-value">${RESULTADOS[mentee.outcome] || '—'}</p></div>` : ''}
+        ${mentee.about ? expandableField('Sobre el mentee', mentee.about, 'about') : ''}
         ${expandableField('Objetivo', mentee.goal, 'goal')}
         ${mentee.progress ? expandableField('Progresión', mentee.progress, 'progress') : ''}
       </div>
@@ -1819,6 +1836,7 @@ function renderModal(){
             <option value="Mixto">Mixto</option>
           </select>
         </div>
+        <div class="field"><label>Sobre el mentee <span style="color:var(--muted);">(opcional)</span></label><textarea id="f-about" placeholder="Quién es, de dónde viene, qué estudia o en qué trabaja, contexto que ayude a acompañarle mejor">${v('about')}</textarea></div>
         <div class="field"><label>Objetivo principal</label><textarea id="f-goal" placeholder="¿Qué quiere lograr esta persona?">${v('goal')}</textarea></div>
         <div class="field"><label>Teléfono <span style="color:var(--muted);">(opcional)</span></label><input id="f-phone" type="tel" placeholder="Ej: 809-555-0123" value="${v('phone')}"></div>
         <div class="field"><label>Correo <span style="color:var(--muted);">(opcional)</span></label><input id="f-email" type="email" placeholder="nombre@correo.com" value="${v('email')}"></div>
@@ -1858,6 +1876,7 @@ function renderModal(){
         status: newStatus,
         outcome: document.getElementById('f-outcome').value,
         learningStyle: document.getElementById('f-style').value,
+        about: document.getElementById('f-about').value.trim(),
         goal: document.getElementById('f-goal').value.trim() || 'Sin especificar',
         phone: document.getElementById('f-phone').value.trim(),
         email: document.getElementById('f-email').value.trim(),
@@ -2242,7 +2261,7 @@ function buildExportRows(){
       Nombre: m.name, Area: m.area, Nivel: m.level,
       'Tipo de mentoria': m.type==='puntual' ? 'Consulta puntual' : 'Seguimiento continuo',
       Estado: ESTADOS[m.status||'activo'], Resultado: m.outcome ? (RESULTADOS[m.outcome]||'') : '',
-      'Estilo de aprendizaje': m.learningStyle, Objetivo: m.goal,
+      'Estilo de aprendizaje': m.learningStyle, 'Sobre el mentee': m.about || '', Objetivo: m.goal,
       Telefono: m.phone || '', Correo: m.email || '', Pais: m.country || '', Progresion: m.progress || '',
       Integrantes: ''
     };
