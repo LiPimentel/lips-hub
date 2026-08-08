@@ -364,6 +364,26 @@
   .field label{display:block;font-size:12px;color:var(--muted);margin-bottom:5px;}
   .field input,.field select,.field textarea{width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:7px;font-size:13.5px;font-family:'Inter',sans-serif;background:var(--bg);color:var(--ink);}
   .field textarea{resize:vertical;min-height:60px;}
+  /* La regla de arriba da ancho completo, borde y relleno a todo campo del
+     formulario. Para texto está bien, pero también alcanzaba a las CASILLAS:
+     salían estiradas de lado a lado, como un campo vacío con su borde, y
+     empujaban su propia etiqueta contra el borde hasta partirla en varias
+     líneas sin necesidad. Pasaba en el checklist de plantillas y también en la
+     lista de integrantes de un grupo, así que se arregla aquí, en la raíz, en
+     vez de parchear cada pantalla.
+     El `!important` es a propósito: la regla de arriba tiene la misma
+     especificidad y aparece antes, así que sin esto ganaría por orden. */
+  .field input[type="checkbox"]{
+    width:auto !important;
+    flex:0 0 auto;
+    padding:0 !important;
+    border:none !important;
+    background:none !important;
+    cursor:pointer;
+  }
+  /* Una casilla que no se puede tocar no debe invitar a tocarla (las del
+     historial de sesiones van deshabilitadas, son de solo lectura). */
+  input[type="checkbox"]:disabled{cursor:default;}
   .field input:focus,.field select:focus,.field textarea:focus{outline:2px solid var(--sage);outline-offset:0;}
   .modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:6px;flex-wrap:wrap;}
   .btn-ghost{background:none;border:1px solid var(--line);padding:9px 16px;border-radius:8px;font-size:13px;cursor:pointer;font-family:'Inter',sans-serif;}
@@ -383,22 +403,8 @@
   .checklist-box{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin:10px 0;}
   .checklist-box-title{font-size:11.5px;text-transform:uppercase;letter-spacing:0.04em;color:var(--muted);margin:0 0 8px;}
   .checklist-row{display:flex;align-items:flex-start;gap:8px;font-size:13px;color:var(--muted);margin:6px 0;}
-  /* La casilla vive dentro de un `.field`, y esa regla le daba `width:100%`,
-     borde y relleno: se estiraba de lado a lado como si fuera un campo de
-     texto, y empujaba su propia etiqueta contra el borde, que se partía en
-     varias líneas sin necesidad. Aquí se le devuelve su tamaño natural.
-     El `!important` es a propósito: `.field input` tiene la misma
-     especificidad y aparece antes, así que sin esto ganaría por orden. */
-  .checklist-row input[type="checkbox"]{
-    width:auto !important;
-    flex:0 0 auto;
-    padding:0 !important;
-    border:none !important;
-    background:none !important;
-    margin-top:2px;
-    cursor:pointer;
-  }
-  /* Y el texto se queda con todo el ancho que sobra. */
+  .checklist-row input[type="checkbox"]{margin-top:2px;}
+  /* El texto se queda con todo el ancho que sobra. */
   .checklist-row span{flex:1;min-width:0;}
   .checklist-row.done{text-decoration:line-through;color:var(--muted);}
   .checklist-q label{display:block;font-size:12.5px;color:var(--ink);margin-bottom:4px;font-weight:500;}
@@ -432,6 +438,7 @@
   .member-checklist{max-height:190px;overflow-y:auto;border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--bg);}
   .member-check-row{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:13px;}
   .member-check-row input{cursor:pointer;}
+  .member-check-row span{flex:1;min-width:0;}
   .member-empty{font-size:12.5px;color:var(--muted);padding:6px 2px;}
   .mini-status{font-size:10.5px;font-weight:500;padding:2px 8px;border-radius:20px;}
   .mini-status.activo{background:var(--status-activo-light);color:var(--status-activo);}
@@ -2287,7 +2294,10 @@ function buildExportRows(){
       TipoRegistro: 'Grupal',
       Nombre: g.name, Area: '', Nivel: '',
       'Tipo de mentoria': '', Estado: '', Resultado: '',
-      'Estilo de aprendizaje': '', Objetivo: g.description || '',
+      // En blanco a propósito, como el resto de campos que solo tienen sentido
+      // en un mentee individual: mantiene las dos clases de fila con las mismas
+      // columnas y en el mismo orden.
+      'Estilo de aprendizaje': '', 'Sobre el mentee': '', Objetivo: g.description || '',
       Telefono: '', Correo: '', Pais: '', Progresion: '',
       Integrantes: members
     };
