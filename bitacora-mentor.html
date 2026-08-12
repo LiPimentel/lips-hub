@@ -528,6 +528,12 @@ let searchQuery = '';
 // varios mentees seguidos, la casilla sigue marcada la próxima vez que abras
 // el formulario.
 let crearOtroMentee = false;
+/* Cerrojo del botón de guardar mentee. Guardar es asíncrono (espera a la
+   nube), así que dos clics rápidos entraban los dos y creaban el mentee por
+   duplicado. Ya pasaba antes, pero "seguir agregando" lo vuelve mucho más
+   fácil de pisar sin querer: el formulario se queda abierto justo para
+   guardar rápido y seguido. */
+let guardandoMentee = false;
 let dbFilters = { name:'', area:'', country:'', nivel:'', tipo:'', estado:'' };
 let dbSort = { col:'name', dir:'asc' };
 let dbPage = 1;
@@ -1953,8 +1959,13 @@ function renderModal(){
     }
     document.getElementById('btn-cancel').onclick = ()=>{ modal=null; editingMenteeId=null; renderModal(); };
     document.getElementById('btn-save').onclick = async ()=>{
+      if(guardandoMentee) return;   // ya hay un guardado en marcha
       const name = document.getElementById('f-name').value.trim();
       if(!name){ showToast('Ponle un nombre al mentee.'); return; }
+      guardandoMentee = true;
+      const btnGuardar = document.getElementById('btn-save');
+      if(btnGuardar) btnGuardar.disabled = true;
+      try{
       const newStatus = document.getElementById('f-status').value;
       const menteeData = {
         id: existingMentee ? existingMentee.id : uid(),
@@ -2003,6 +2014,14 @@ function renderModal(){
       render();
       renderModal();
       showToast(existingMentee ? 'Datos actualizados.' : 'Mentee agregado.');
+      }finally{
+        /* Se suelta pase lo que pase, incluido el `return` de "seguir
+           agregando" y un fallo al guardar: si no, el botón quedaría
+           bloqueado para siempre y no se podría guardar nada más. */
+        guardandoMentee = false;
+        const b = document.getElementById('btn-save');
+        if(b) b.disabled = false;
+      }
     };
   }
 
