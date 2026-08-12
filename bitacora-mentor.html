@@ -1229,7 +1229,11 @@ function renderGroupsView(body){
             ${groupPendCount ? `<span class="pending-badge">${groupPendCount} actividad${groupPendCount===1?'':'es'} pendiente${groupPendCount===1?'':'s'}</span>` : ''}
           </div>
           ${group.description ? `<p class="profile-area">${esc(group.description)}</p>` : ''}
-          ${groupCerrado && group.closedAt ? `<p class="profile-area">Cerrado el ${esc(fmtDate(group.closedAt.slice(0,10)))}</p>` : ''}
+          ${/* `closedAt` viene del JSON de la nube o de "Importar copia", que no
+                valida nada: si llegara sin ser texto (un número, un objeto),
+                `.slice()` reventaba y se caía la vista entera de grupos. Se
+                coacciona antes de cortar. */''}
+          ${groupCerrado && group.closedAt ? `<p class="profile-area">Cerrado el ${esc(fmtDate(String(group.closedAt).slice(0,10)))}</p>` : ''}
         </div>
         <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;">
           <button class="icon-btn" id="btn-toggle-group-status">${groupCerrado ? 'reabrir grupo' : 'marcar como cerrado'}</button>
