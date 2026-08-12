@@ -436,6 +436,16 @@
   .member-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;}
   .member-chip{font-size:12px;background:var(--sage-light);color:var(--violet-deep);padding:4px 10px;border-radius:20px;}
   .member-checklist{max-height:190px;overflow-y:auto;border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--bg);}
+  /* "Seguir agregando" del formulario de mentee */
+  .keep-open-row{display:flex;align-items:flex-start;gap:8px;font-size:13px;margin:2px 0 4px;cursor:pointer;}
+  .keep-open-hint{color:var(--muted);font-size:12px;}
+  /* Grupos cerrados: apartado propio en la lista y distintivo en la ficha */
+  .group-past-head{list-style:none;font-size:10.5px;text-transform:uppercase;letter-spacing:0.04em;color:var(--muted);margin:14px 0 4px;padding:0 2px;}
+  .pill-cerrado{background:var(--line);color:var(--ink);font-size:10.5px;padding:2px 7px;border-radius:6px;font-weight:500;white-space:nowrap;}
+  .mentee-item.cerrado .avatar{opacity:0.55;}
+  .mentee-item.cerrado .mentee-name{color:var(--muted);}
+  .hint-inline{display:block;font-size:12px;color:var(--muted);margin-top:4px;}
+
   .member-check-row{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:13px;}
   .member-check-row input{cursor:pointer;}
   .member-check-row span{flex:1;min-width:0;}
@@ -514,6 +524,10 @@ let editingMenteeId = null;
 let confirmContext = null;
 let currentTab = 'mentoria';
 let searchQuery = '';
+// Se recuerda mientras dure la sesión, como hace Jira: si estabas metiendo
+// varios mentees seguidos, la casilla sigue marcada la próxima vez que abras
+// el formulario.
+let crearOtroMentee = false;
 let dbFilters = { name:'', area:'', country:'', nivel:'', tipo:'', estado:'' };
 let dbSort = { col:'name', dir:'asc' };
 let dbPage = 1;
@@ -843,7 +857,12 @@ function daysSinceLastGroupActivity(group){
   return Math.floor((now - last) / (1000*60*60*24));
 }
 
+function groupStatus(group){ return group && group.status === 'cerrado' ? 'cerrado' : 'activo'; }
+
 function isGroupInactive(group){
+  // Un grupo cerrado no lleva sesiones a propósito: avisar de que "no hay
+  // actividad" sería regañar por algo que ya se dio por terminado.
+  if(groupStatus(group) === 'cerrado') return false;
   return daysSinceLastGroupActivity(group) > INACTIVITY_DAYS;
 }
 
@@ -885,7 +904,7 @@ function renderMentoriaView(body){
   body.innerHTML = `
     <div class="app">
       <div class="sidebar">
-        <div class="search-wrap"><input id="search-input" type="text" placeholder="Buscar por nombre..." value="${esc(searchQuery)}"></div>
+        <div class="search-wrap"><input id="search-input" type="search" placeholder="Buscar por nombre, área, objetivo..." value="${esc(searchQuery)}"></div>
         <p class="brandsub">${state.mentees.length} mentee${state.mentees.length===1?'':'s'} registrados</p>
         <button class="btn-add-mentee" id="btn-new-mentee">+ nuevo mentee</button>
         <div class="export-block">
@@ -1066,6 +1085,15 @@ function renderMentoriaView(body){
   if(modal) renderModal();
 }
 
+/* El buscador miraba solo el nombre, así que escribir "diseño" o el correo de
+   alguien no encontraba nada aunque estuviera en su ficha. Ahora busca por
+   todo lo que identifica a una persona. */
+function menteeCoincide(m, q){
+  if(!q) return true;
+  return [m.name, m.area, m.goal, m.about, m.email, m.country, m.progress]
+    .some(campo => String(campo || '').toLowerCase().includes(q));
+}
+
 function renderGroupedList(){
   const groupedContainer = document.getElementById('grouped-list');
   if(!groupedContainer) return;
@@ -1075,7 +1103,7 @@ function renderGroupedList(){
   NIVELES.forEach(nivel=>{
     const group = state.mentees
       .filter(m=>m.level===nivel)
-      .filter(m=> !q || m.name.toLowerCase().includes(q))
+      .filter(m=> menteeCoincide(m, q))
       .sort((a,b)=>a.name.localeCompare(b.name));
     if(!group.length) return;
     anyResults = true;
@@ -1113,27 +1141,43 @@ function renderGroupList(){
   list.innerHTML = '';
   const q = groupSearchQuery.trim().toLowerCase();
   const filtered = state.groups
-    .filter(g => !q || g.name.toLowerCase().includes(q))
+    .filter(g => !q || g.name.toLowerCase().includes(q) || String(g.description||'').toLowerCase().includes(q))
     .sort((a,b)=>a.name.localeCompare(b.name));
   if(!filtered.length){
     list.innerHTML = `<p class="no-results">Sin resultados para "${esc(groupSearchQuery)}".</p>`;
     return;
   }
-  filtered.forEach(g=>{
+
+  /* Los grupos terminados bajan a su propio apartado, para que la lista de
+     arriba sea solo lo que está en marcha, pero sin perderlos de vista. */
+  const pinta = (g)=>{
     const inactive = isGroupInactive(g);
+    const cerrado = groupStatus(g) === 'cerrado';
     const li = document.createElement('li');
-    li.className = 'mentee-item' + (g.id===selectedGroupId ? ' active':'');
+    li.className = 'mentee-item' + (g.id===selectedGroupId ? ' active':'') + (cerrado ? ' cerrado':'');
     li.innerHTML = `<div class="avatar">${esc(initials(g.name))}</div>
       <div class="mentee-meta">
         <div class="mentee-name-row">
           <p class="mentee-name">${esc(g.name)}</p>
+          ${cerrado ? '<span class="pill-cerrado">cerrado</span>' : ''}
           ${inactive ? '<span class="pill-warn">inactivo</span>' : ''}
         </div>
         <p class="mentee-area">${(g.memberIds||[]).length} integrante${(g.memberIds||[]).length===1?'':'s'}</p>
       </div>`;
     li.onclick = ()=>{ selectedGroupId = g.id; renderGroupsView(document.getElementById('app-body')); };
     list.appendChild(li);
-  });
+  };
+
+  const activos = filtered.filter(g=> groupStatus(g) === 'activo');
+  const cerrados = filtered.filter(g=> groupStatus(g) === 'cerrado');
+  activos.forEach(pinta);
+  if(cerrados.length){
+    const cab = document.createElement('li');
+    cab.className = 'group-past-head';
+    cab.textContent = `Grupos pasados (${cerrados.length})`;
+    list.appendChild(cab);
+    cerrados.forEach(pinta);
+  }
 }
 
 function renderGroupsView(body){
@@ -1166,6 +1210,7 @@ function renderGroupsView(body){
   const members = state.mentees.filter(m => (group.memberIds||[]).includes(m.id));
   const groupPendCount = pendingGroupCommitments(group.id);
   const groupInactive = isGroupInactive(group);
+  const groupCerrado = groupStatus(group) === 'cerrado';
 
   main.innerHTML = `
     ${groupInactive ? `<div class="alert-banner">⚠ No tienes una sesión registrada con el grupo "${esc(group.name)}" hace ${daysSinceLastGroupActivity(group)} días.</div>` : ''}
@@ -1174,11 +1219,14 @@ function renderGroupsView(body){
         <div>
           <div class="profile-name-row">
             <p class="profile-name">${esc(group.name)}</p>
+            ${groupCerrado ? '<span class="pill-cerrado">cerrado</span>' : ''}
             ${groupPendCount ? `<span class="pending-badge">${groupPendCount} actividad${groupPendCount===1?'':'es'} pendiente${groupPendCount===1?'':'s'}</span>` : ''}
           </div>
           ${group.description ? `<p class="profile-area">${esc(group.description)}</p>` : ''}
+          ${groupCerrado && group.closedAt ? `<p class="profile-area">Cerrado el ${esc(fmtDate(group.closedAt.slice(0,10)))}</p>` : ''}
         </div>
         <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;">
+          <button class="icon-btn" id="btn-toggle-group-status">${groupCerrado ? 'reabrir grupo' : 'marcar como cerrado'}</button>
           <button class="icon-btn" id="btn-edit-group">editar grupo</button>
           <button class="icon-btn" id="btn-del-group">eliminar grupo</button>
         </div>
@@ -1195,6 +1243,20 @@ function renderGroupsView(body){
     <div id="group-timeline"></div>
   `;
 
+  document.getElementById('btn-toggle-group-status').onclick = async ()=>{
+    const g = state.groups.find(x=>x.id===group.id);
+    if(!g) return;
+    if(groupStatus(g) === 'cerrado'){
+      g.status = 'activo'; g.closedAt = '';
+      await saveData(); render();
+      showToast(`"${g.name}" vuelve a estar activo.`);
+    }else{
+      g.status = 'cerrado';
+      g.closedAt = g.closedAt || new Date().toISOString();
+      await saveData(); render();
+      showToast(`"${g.name}" quedó cerrado. Lo encuentras en "Grupos pasados".`);
+    }
+  };
   document.getElementById('btn-edit-group').onclick = ()=>{ editingGroupId = group.id; modal='group'; render(); renderModal(); };
   document.getElementById('btn-del-group').onclick = ()=> deleteGroup(group.id);
   document.getElementById('btn-new-group-session').onclick = ()=>{ editingGroupSessionId=null; modal='groupSession'; render(); renderModal(); };
@@ -1645,6 +1707,13 @@ function renderModal(){
         <h3>${existingGroup ? 'Editar grupo' : 'Nuevo grupo de mentoría'}</h3>
         <div class="field"><label>Nombre del grupo</label><input id="g-name" placeholder="Ej: Cohorte búsqueda de empleo - julio" value="${existingGroup ? esc(existingGroup.name) : ''}"></div>
         <div class="field"><label>Descripción <span style="color:var(--muted);">(opcional)</span></label><textarea id="g-desc" placeholder="Contexto del grupo">${existingGroup ? esc(existingGroup.description||'') : ''}</textarea></div>
+        <div class="field"><label>Estado</label>
+          <select id="g-status">
+            <option value="activo">Activo</option>
+            <option value="cerrado">Cerrado / completado</option>
+          </select>
+          <span class="hint-inline">Al cerrarlo pasa a "Grupos pasados" y deja de avisarte por falta de sesiones. Su historial se conserva.</span>
+        </div>
         <div class="field"><label>Integrantes</label>
           <div class="member-checklist" id="member-checklist">
             ${sortedMentees.length ? sortedMentees.map(m=>`
@@ -1662,16 +1731,24 @@ function renderModal(){
       </div>
     `;
     document.body.appendChild(overlay);
+    if(existingGroup) overlay.querySelector('#g-status').value = groupStatus(existingGroup);
     document.getElementById('btn-cancel').onclick = ()=>{ modal=null; editingGroupId=null; renderModal(); };
     document.getElementById('btn-save').onclick = async ()=>{
       const name = document.getElementById('g-name').value.trim();
       if(!name){ showToast('Ponle un nombre al grupo.'); return; }
       const checked = Array.from(overlay.querySelectorAll('#member-checklist input:checked')).map(el=>el.value);
+      const nuevoEstado = document.getElementById('g-status').value === 'cerrado' ? 'cerrado' : 'activo';
       const groupData = {
         id: existingGroup ? existingGroup.id : uid(),
         name,
         description: document.getElementById('g-desc').value.trim(),
         memberIds: checked,
+        status: nuevoEstado,
+        // La fecha de cierre se pone la primera vez que se cierra y se
+        // conserva si sigue cerrado; si se reabre, se borra.
+        closedAt: nuevoEstado === 'cerrado'
+          ? ((existingGroup && existingGroup.closedAt) || new Date().toISOString())
+          : '',
         createdAt: existingGroup ? existingGroup.createdAt : new Date().toISOString()
       };
       if(existingGroup){
@@ -1854,8 +1931,13 @@ function renderModal(){
           </select>
         </div>
         <div class="field"><label>Progresión <span style="color:var(--muted);">(opcional)</span></label><textarea id="f-progress" placeholder="Notas sobre cómo ha avanzado hasta ahora">${v('progress')}</textarea></div>
+        ${existingMentee ? '' : `
+        <label class="keep-open-row">
+          <input type="checkbox" id="f-keep-open" ${crearOtroMentee ? 'checked' : ''}>
+          <span>Seguir agregando<br><span class="keep-open-hint">Al guardar, el formulario se vacía y queda listo para el siguiente. La casilla se queda marcada.</span></span>
+        </label>`}
         <div class="modal-actions">
-          <button class="btn-ghost" id="btn-cancel">Cancelar</button>
+          <button class="btn-ghost" id="btn-cancel">${existingMentee ? 'Cancelar' : 'Cerrar'}</button>
           <button class="btn-primary" id="btn-save">${existingMentee ? 'Guardar cambios' : 'Guardar mentee'}</button>
         </div>
       </div>
@@ -1899,6 +1981,23 @@ function renderModal(){
         state.mentees.push(menteeData);
         selectedMenteeId = menteeData.id;
       }
+
+      /* "Seguir agregando": en vez de cerrar, se vuelve a dibujar el modal en
+         blanco y con la casilla todavía marcada, para encadenar varios
+         mentees sin volver a abrirlo cada vez. Solo aplica al crear: editando
+         no tendría sentido. */
+      const seguir = !existingMentee && !!(document.getElementById('f-keep-open') || {}).checked;
+      crearOtroMentee = seguir;
+      if(seguir){
+        await saveData();
+        render();
+        renderModal();                 // editingMenteeId sigue null → formulario vacío
+        const primero = document.getElementById('f-name');
+        if(primero) primero.focus();
+        showToast(`${menteeData.name} agregado. Puedes seguir con el siguiente.`);
+        return;
+      }
+
       modal = null; editingMenteeId = null;
       await saveData();
       render();
@@ -2293,7 +2392,7 @@ function buildExportRows(){
     const baseInfo = {
       TipoRegistro: 'Grupal',
       Nombre: g.name, Area: '', Nivel: '',
-      'Tipo de mentoria': '', Estado: '', Resultado: '',
+      'Tipo de mentoria': '', Estado: groupStatus(g) === 'cerrado' ? 'Cerrado' : 'Activo', Resultado: '',
       // En blanco a propósito, como el resto de campos que solo tienen sentido
       // en un mentee individual: mantiene las dos clases de fila con las mismas
       // columnas y en el mismo orden.
