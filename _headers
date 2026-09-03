@@ -34,3 +34,9 @@
 
 /*.js
   Cache-Control: public, max-age=0, must-revalidate
+
+# El aviso de version nueva se apoya en este archivo: si el navegador lo
+# guarda en cache, la pestana abierta seguiria leyendo el identificador viejo
+# y el banner nunca aparecerria.
+/version.json
+  Cache-Control: no-store
