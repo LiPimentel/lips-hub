@@ -206,6 +206,27 @@
     });
   }
 
+  /* `scroll`/`resize` no bastan: qa-lead reprodujo con clic real que
+     seleccionar un candidato en StaffGate inyecta su panel (con el botón
+     "Exportar ▾" real) sin disparar ninguno de los dos, y el banner se
+     quedaba donde estaba — el clic siguiente caía sobre "×" en vez de abrir
+     el menú. Un `MutationObserver` sobre `<body>` cubre cualquier cambio de
+     contenido de la app, sea cual sea el mecanismo (clic, temporizador,
+     respuesta de red), sin que cada página tenga que avisar nada. */
+  var domObserver = null;
+
+  function watchDom() {
+    if (domObserver || typeof MutationObserver !== "function") return;
+    domObserver = new MutationObserver(syncTopDiferido);
+    domObserver.observe(document.body, { childList: true, subtree: true });
+  }
+
+  function unwatchDom() {
+    if (!domObserver) return;
+    domObserver.disconnect();
+    domObserver = null;
+  }
+
   /* El banner vive en un shadow DOM, igual que el widget de cuenta: las 6
      páginas traen su propio CSS y ninguna puede pisar estos estilos (ni al
      revés). */
@@ -283,12 +304,14 @@
     syncTop();
     window.addEventListener("scroll", syncTopDiferido, { passive: true });
     window.addEventListener("resize", syncTopDiferido, { passive: true });
+    watchDom();
   }
 
   function hideBanner() {
     if (!host) return;
     window.removeEventListener("scroll", syncTopDiferido);
     window.removeEventListener("resize", syncTopDiferido);
+    unwatchDom();
     host.remove();
     host = null;
   }
