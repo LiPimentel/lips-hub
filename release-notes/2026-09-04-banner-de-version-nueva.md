@@ -24,15 +24,20 @@ tu cuenta.
   contra la que hay publicada, y solo avisa si cambió de verdad.
 - **Nunca deja un botón de la app sin poder usarse.** El aviso se acomoda
   solo, revisando qué hay debajo suyo y bajando hasta despejarlo — y se
-  reacomoda cada vez que la app cambia lo que muestra en pantalla, no solo al
-  mover la ventana. En pantallas angostas (teléfono), o en apps con mucho
-  contenido pegado arriba, puede quedar visualmente sobre algún control — no
-  hay dónde más ponerlo sin taparlo — pero el clic siempre llega al botón de
-  la app de todos modos: solo el propio texto "Refresh"/"×" del aviso
-  responde al clic. En Bitácora del Mentor, en el teléfono, esto hace que el
-  aviso quede más abajo de lo ideal (a mitad de pantalla en vez de arriba) —
-  se prefirió eso a arriesgar que tape un botón sin que se pueda usar; queda
-  abierto para revisar el diseño en ese caso puntual si hace falta.
+  reacomoda cada vez que la app cambia lo que muestra en pantalla (una lista
+  que se abre, un menú que se despliega, un panel que aparece), no solo al
+  mover la ventana. Esto se probó a fondo: se encontraron y corrigieron
+  cuatro formas distintas en que el aviso podía terminar tapando un botón
+  real sin que el clic le llegara — cada una verificada con un clic real
+  sobre la app, no solo revisando el código. En pantallas angostas
+  (teléfono), o en apps con mucho contenido pegado arriba, puede quedar
+  visualmente sobre algún control — no hay dónde más ponerlo sin taparlo —
+  pero el clic siempre llega al botón de la app de todos modos: solo el
+  propio texto "Refresh"/"×" del aviso responde al clic. En Bitácora del
+  Mentor, en el teléfono, esto hace que el aviso quede más abajo de lo ideal
+  (a mitad de pantalla en vez de arriba) — se prefirió eso a arriesgar que
+  tape un botón sin que se pueda usar; queda abierto para revisar el diseño
+  en ese caso puntual si hace falta.
 - **El botón "Refresh" recarga sin preguntar.** Si estás a la mitad de llenar un
   formulario, lo que no hayas guardado se pierde — igual que si recargaras con
   F5. Si te pasa, cierra el aviso con la "×" y recarga cuando termines.

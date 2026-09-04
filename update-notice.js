@@ -105,8 +105,15 @@
      último botón de esa misma columna ("Importar copia"). 0.65 la despeja
      completa, con margen, y sigue dentro de lo visible sin desplazarse. */
   var LIMITE_VH = 0.65;
+  /* StaffGate, LPBag y MyTravel usan mucho `<div onclick="...">` como botón
+     (ej. cada candidato de la lista lateral) en vez de un `<button>` real —
+     patrón preexistente del proyecto, no algo que este archivo pueda
+     corregir. `despejarControles()` solo evitaba clics literalmente sobre
+     `button`/`a`/`input`/etc.: un `<div onclick>` pasaba de largo el barrido
+     y podía quedar tapado sin que nada lo detectara. `[onclick]` cierra ese
+     hueco sin importar la etiqueta. */
   var SELECTOR_CONTROLES =
-    'button, a[href], input, select, textarea, ' +
+    'button, a[href], input, select, textarea, [onclick], ' +
     '[role="tab"], [role="button"], [role="link"]';
 
   function estimacionInicial() {
@@ -189,6 +196,7 @@
   }
 
   var syncPendiente = false;
+  var reintentoPendiente = false;
 
   function syncTop() {
     if (!host) return;
@@ -198,12 +206,30 @@
   }
 
   function syncTopDiferido() {
-    if (syncPendiente || !host) return;
-    syncPendiente = true;
-    window.requestAnimationFrame(function () {
-      syncPendiente = false;
-      syncTop();
-    });
+    if (!host) return;
+    if (!syncPendiente) {
+      syncPendiente = true;
+      window.requestAnimationFrame(function () {
+        syncPendiente = false;
+        syncTop();
+      });
+    }
+    /* El recálculo inmediato de arriba no basta cuando lo que se reveló se
+       mueve con una transición CSS (ej. el menú lateral de StaffGate,
+       `transition:transform .25s`): la mutación de clase ocurre al
+       PRINCIPIO de la transición, así que ese primer recálculo mide la
+       posición a medio camino, no la de reposo — y como la transición en sí
+       no dispara ninguna otra mutación, sin este segundo intento el banner
+       se queda mal puesto hasta el próximo scroll/resize/cambio de DOM.
+       350ms cubre transiciones típicas de interfaz (la de StaffGate es de
+       250ms) con margen. */
+    if (!reintentoPendiente) {
+      reintentoPendiente = true;
+      window.setTimeout(function () {
+        reintentoPendiente = false;
+        syncTop();
+      }, 350);
+    }
   }
 
   /* `scroll`/`resize` no bastan: qa-lead reprodujo con clic real que
@@ -212,13 +238,38 @@
      quedaba donde estaba — el clic siguiente caía sobre "×" en vez de abrir
      el menú. Un `MutationObserver` sobre `<body>` cubre cualquier cambio de
      contenido de la app, sea cual sea el mecanismo (clic, temporizador,
-     respuesta de red), sin que cada página tenga que avisar nada. */
+     respuesta de red), sin que cada página tenga que avisar nada.
+
+     `childList` solo no basta tampoco: qa-lead encontró, otra vez con clic
+     real, que un panel que YA está en el DOM y se revela cambiando una clase
+     o un estilo (el menú lateral de StaffGate, `classList.add('open')` sobre
+     un `<aside>` que estaba oculto con `transform`) no inserta ningún nodo,
+     así que `childList` no lo ve — el banner se quedaba sin reposicionar
+     otra vez. `attributes` con ese filtro cubre ese caso.
+
+     Cuidado con el propio banner: `syncTop()` escribe `host.style.paddingTop`
+     en cada reposicionamiento, y `host` es hijo de `<body>` — sin excluirlo,
+     esa misma escritura dispararía el observer, que reprograma otro
+     reposicionamiento, en un bucle sin fin (nunca visible, pero corriendo
+     para siempre). Se descarta cualquier mutación cuyo `target` sea el
+     propio `host`. */
   var domObserver = null;
 
   function watchDom() {
     if (domObserver || typeof MutationObserver !== "function") return;
-    domObserver = new MutationObserver(syncTopDiferido);
-    domObserver.observe(document.body, { childList: true, subtree: true });
+    domObserver = new MutationObserver(function (mutations) {
+      for (var i = 0; i < mutations.length; i++) {
+        if (mutations[i].target === host) continue;
+        syncTopDiferido();
+        return;
+      }
+    });
+    domObserver.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["style", "class", "hidden", "open", "aria-hidden"]
+    });
   }
 
   function unwatchDom() {
