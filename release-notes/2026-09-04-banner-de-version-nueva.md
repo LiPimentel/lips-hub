@@ -22,13 +22,16 @@ tu cuenta.
 - **El aviso solo sale cuando de verdad se publicó algo nuevo.** No sale porque
   sí, ni cada cierto tiempo: la página compara la versión con la que se abrió
   contra la que hay publicada, y solo avisa si cambió de verdad.
-- **Nunca tapa un botón de la app, aunque visualmente pase por encima.** El
-  aviso se acomoda solo, justo debajo de la barra superior de cada aplicación.
-  En pantallas angostas (teléfono) puede quedar visualmente sobre algún control
-  — no hay dónde más ponerlo sin taparlo — pero el clic siempre llega al botón
-  de la app de todos modos: solo el propio texto "Refresh"/"×" del aviso
-  responde al clic, el resto de la franja es transparente al toque. Probado en
-  las 7 páginas a cuatro anchos distintos, incluido teléfono, con clics reales.
+- **Nunca deja un botón de la app sin poder usarse.** El aviso se acomoda
+  solo, revisando en cada aparición qué hay debajo suyo y bajando hasta
+  despejarlo. En pantallas angostas (teléfono) puede quedar visualmente sobre
+  algún control cuando hay muchos apilados arriba — no hay dónde más ponerlo
+  sin taparlo — pero el clic siempre llega al botón de la app de todos modos:
+  solo el propio texto "Refresh"/"×" del aviso responde al clic, el resto de
+  la franja es transparente al toque. Probado en las 7 páginas a cuatro anchos
+  distintos, incluido teléfono, con clics reales sobre el buscador de
+  Bitácora del Mentor y el botón "Exportar" de StaffGate con un candidato
+  abierto — los dos casos donde se encontró y corrigió el problema.
 - **El botón "Refresh" recarga sin preguntar.** Si estás a la mitad de llenar un
   formulario, lo que no hayas guardado se pierde — igual que si recargaras con
   F5. Si te pasa, cierra el aviso con la "×" y recarga cuando termines.

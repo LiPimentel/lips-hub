@@ -73,18 +73,43 @@
      Poner el banner "arriba" a secas lo dejaba encima de la barra de la app:
      medido, en Bitácora del Mentor tapaba por completo la pestaña "Mentoría"
      y un clic en ese punto recargaba la página en vez de cambiar de pestaña.
-     Cada página declara en `window.AIAPPS_TOPBAR` el selector de SU barra
-     superior y aquí se mide en vivo dónde termina, en lugar de fijar píxeles
-     que se romperían con el diseño adaptable de cada app.
 
-     Se mide en cada aparición, y también al hacer scroll y al cambiar el
-     tamaño de la ventana: una barra en flujo normal se va hacia arriba al
-     bajar la página (su `bottom` se vuelve negativo) y entonces el banner
-     sube solo hasta el borde; una barra `sticky`/`fixed` se queda, y el
-     banner se queda debajo de ella. */
+     Se probaron dos capas, y la primera NO basta sola:
+
+     1) `window.AIAPPS_TOPBAR`: cada página puede declarar el selector de SU
+        barra superior, para una primera estimación barata. Pero es una
+        adivinanza por página, y perseguirla resultó ser una carrera sin fin:
+        en Bitácora a 390px la píldora se envuelve a dos líneas y queda más
+        alta de lo previsto, tapando igual el buscador; en StaffGate el mismo
+        nombre de clase (".topbar") se reutiliza para el encabezado interno
+        del panel de candidato, así que no hay un selector fijo que sirva.
+
+     2) `despejarControles()`: la capa que de verdad importa. Después de
+        colocar la píldora, se mide qué controles reales (botón, enlace,
+        campo, pestaña) quedan bajo su rectángulo — sin importar de qué app
+        sea ni qué selector tenga — y se empuja hacia abajo hasta despejarlos,
+        repitiendo unas pocas veces por si al bajar aparece otro debajo.
+        Esto es lo que garantiza que ningún control pierda su clic, no la
+        adivinanza de la capa 1.
+
+     Se recalcula en cada aparición, y también al hacer scroll y al cambiar
+     el tamaño de la ventana. */
   var GAP = 8;
+  /* Tope de seguridad: no hay scroll que recupere un position:fixed empujado
+     fuera de la pantalla. 0.3 (probado primero) resultó demasiado bajo: en
+     Bitácora del Mentor a 390px la barra lateral entera queda visible arriba
+     (buscador, "+ nuevo mentee", exportar CSV/Excel, copia de seguridad,
+     importar copia...) y el tope cortaba la búsqueda de despejarControles()
+     a la mitad de esa columna, dejando controles reales tapados de verdad —
+     peor que no tener tope. 0.55 tampoco alcanzó: cortaba 11px antes del
+     último botón de esa misma columna ("Importar copia"). 0.65 la despeja
+     completa, con margen, y sigue dentro de lo visible sin desplazarse. */
+  var LIMITE_VH = 0.65;
+  var SELECTOR_CONTROLES =
+    'button, a[href], input, select, textarea, ' +
+    '[role="tab"], [role="button"], [role="link"]';
 
-  function topOffset() {
+  function estimacionInicial() {
     var extra = 0;
     var sel = window.AIAPPS_TOPBAR;
     if (sel) {
@@ -94,22 +119,18 @@
       } catch (e) {
         els = [];
       }
-      /* Franja horizontal que ocupa de verdad la píldora. Antes se suponía
-         "el centro ±120px" y se quedaba corto: en Bitácora a 900px el buscador
-         asomaba por el borde izquierdo de la píldora y no se contaba. */
       var barra = host.shadowRoot.querySelector(".bar");
       var rb = barra ? barra.getBoundingClientRect() : null;
       var izq = rb ? rb.left : window.innerWidth / 2;
       var der = rb ? rb.right : window.innerWidth / 2;
-      var limite = window.innerHeight * 0.3;
+      var limite = window.innerHeight * LIMITE_VH;
       Array.prototype.forEach.call(els, function (el) {
         var cs = window.getComputedStyle(el);
         if (cs.display === "none" || cs.visibility === "hidden") return;
         var r = el.getBoundingClientRect();
         if (r.width < 40 || r.height < 8) return;
         /* Más alto que un tercio de la pantalla no es una barra superior: es
-           un contenedor o un panel lateral desplegado. Si se contara, el
-           banner se iría al centro de la pantalla. */
+           un contenedor o un panel lateral desplegado. */
         if (r.height > limite) return;
         /* Una barra lateral (a la izquierda) no queda debajo de la píldora y
            no hay por qué esquivarla. */
@@ -124,18 +145,56 @@
         .getPropertyValue("--aiapps-chrome-top")
     );
     if (manual > 0) extra += manual;
-    /* Acotado: un valor disparatado dejaría el banner fuera de la pantalla,
-       y es position:fixed — no hay scroll que lo recupere. */
-    if (extra > window.innerHeight * 0.3) extra = window.innerHeight * 0.3;
-    if (!(extra > 0)) extra = 0;
-    return Math.round(extra) + GAP;
+    return extra;
+  }
+
+  /* Empuja `offset` hacia abajo hasta que ningún control real de la app
+     quede bajo el rectángulo de la píldora. Converge en pocas vueltas
+     (bajar puede destapar un control nuevo, pero cada vuelta solo baja,
+     nunca sube, así que termina) y nunca pasa de LIMITE_VH. */
+  function despejarControles(offset) {
+    var limite = window.innerHeight * LIMITE_VH;
+    var intentos = 0;
+    while (intentos < 8 && offset < limite) {
+      intentos++;
+      host.style.paddingTop = Math.round(offset) + "px";
+      var barra = host.shadowRoot.querySelector(".bar");
+      if (!barra) break;
+      var rb = barra.getBoundingClientRect();
+      var siguiente = offset;
+      var els = document.querySelectorAll(SELECTOR_CONTROLES);
+      for (var i = 0; i < els.length; i++) {
+        var el = els[i];
+        var cs = window.getComputedStyle(el);
+        if (cs.display === "none" || cs.visibility === "hidden") continue;
+        var r = el.getBoundingClientRect();
+        /* Controles reales: pequeños. Un contenedor gigante disfrazado de
+           <a> no cuenta, para no perseguir un falso positivo sin fin. */
+        if (r.width < 4 || r.height < 4 || r.height > 90) continue;
+        var solapa = !(
+          r.right <= rb.left ||
+          r.left >= rb.right ||
+          r.bottom <= rb.top ||
+          r.top >= rb.bottom
+        );
+        if (!solapa) continue;
+        var candidato = r.bottom + GAP;
+        if (candidato > siguiente) siguiente = candidato;
+      }
+      if (siguiente <= offset + 0.5) break; // ya no hay nada que despejar
+      offset = siguiente;
+    }
+    if (offset > limite) offset = limite;
+    return offset;
   }
 
   var syncPendiente = false;
 
   function syncTop() {
     if (!host) return;
-    host.style.paddingTop = topOffset() + "px";
+    var offset = estimacionInicial() + GAP;
+    offset = despejarControles(offset);
+    host.style.paddingTop = Math.round(offset) + "px";
   }
 
   function syncTopDiferido() {
