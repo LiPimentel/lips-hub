@@ -38,6 +38,14 @@ tu cuenta.
   (a mitad de pantalla en vez de arriba) — se prefirió eso a arriesgar que
   tape un botón sin que se pueda usar; queda abierto para revisar el diseño
   en ese caso puntual si hace falta.
+
+  La quinta y última forma que se encontró y corrigió fue más sutil: al
+  abrir y cerrar un menú varias veces seguidas, el aviso podía quedar
+  "atascado" en una posición vieja por más de un segundo, con la misma
+  consecuencia — un clic en el lugar correcto activaba el aviso en vez de la
+  app. Se corrigió haciendo que el aviso se reacomode en el instante exacto
+  en que termina cualquier animación de la app, no un rato después
+  adivinando cuánto puede durar.
 - **El botón "Refresh" recarga sin preguntar.** Si estás a la mitad de llenar un
   formulario, lo que no hayas guardado se pierde — igual que si recargaras con
   F5. Si te pasa, cierra el aviso con la "×" y recarga cuando termines.

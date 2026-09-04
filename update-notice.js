@@ -195,8 +195,8 @@
     return offset;
   }
 
-  var syncPendiente = false;
-  var reintentoPendiente = false;
+  var rafPendiente = false;
+  var asentarTimer = null;
 
   function syncTop() {
     if (!host) return;
@@ -205,31 +205,39 @@
     host.style.paddingTop = Math.round(offset) + "px";
   }
 
+  /* qa-lead reprodujo, con clic real y cadencia humana normal (abrir el
+     menú lateral, elegir un candidato, repetir), una condición de carrera
+     real en la primera versión de esto: dos guardias independientes de
+     "una sola vez" (una para el recálculo inmediato, otra para el
+     reintento a los 350ms) — cada una se "gastaba" con la PRIMERA mutación
+     de una ráfaga y ninguna garantizaba medir el estado tras la ÚLTIMA. Con
+     varios cambios seguidos (cerrar un panel, abrir otro), la mutación que
+     de verdad importaba podía caer justo cuando ambas guardias ya estaban
+     "en vuelo" — y esa mutación se perdía sin que nada la recalculara.
+
+     `asentarTimer` corrige eso: no es un guardia de una sola vez, es un
+     debounce de cola — CADA mutación reprograma el mismo temporizador
+     (`clearTimeout` + `setTimeout` de nuevo), así que sin importar cuántas
+     lleguen seguidas, el que de verdad corre es siempre el de la ÚLTIMA, y
+     solo dispara cuando la ráfaga se aquieta 350ms seguidos (cubre con
+     margen la transición de 250ms del menú de StaffGate, la más larga de
+     las apps). El `rAF` de abajo sigue aparte, sin tocar: da la sensación
+     de reacción inmediata mientras algo se mueve, aunque a veces mida a
+     medio camino — el debounce es quien manda la última palabra. */
   function syncTopDiferido() {
     if (!host) return;
-    if (!syncPendiente) {
-      syncPendiente = true;
+    if (!rafPendiente) {
+      rafPendiente = true;
       window.requestAnimationFrame(function () {
-        syncPendiente = false;
+        rafPendiente = false;
         syncTop();
       });
     }
-    /* El recálculo inmediato de arriba no basta cuando lo que se reveló se
-       mueve con una transición CSS (ej. el menú lateral de StaffGate,
-       `transition:transform .25s`): la mutación de clase ocurre al
-       PRINCIPIO de la transición, así que ese primer recálculo mide la
-       posición a medio camino, no la de reposo — y como la transición en sí
-       no dispara ninguna otra mutación, sin este segundo intento el banner
-       se queda mal puesto hasta el próximo scroll/resize/cambio de DOM.
-       350ms cubre transiciones típicas de interfaz (la de StaffGate es de
-       250ms) con margen. */
-    if (!reintentoPendiente) {
-      reintentoPendiente = true;
-      window.setTimeout(function () {
-        reintentoPendiente = false;
-        syncTop();
-      }, 350);
-    }
+    if (asentarTimer) window.clearTimeout(asentarTimer);
+    asentarTimer = window.setTimeout(function () {
+      asentarTimer = null;
+      syncTop();
+    }, 350);
   }
 
   /* `scroll`/`resize` no bastan: qa-lead reprodujo con clic real que
@@ -355,6 +363,19 @@
     syncTop();
     window.addEventListener("scroll", syncTopDiferido, { passive: true });
     window.addEventListener("resize", syncTopDiferido, { passive: true });
+    /* Complementa el debounce de 350ms de `syncTopDiferido()`, no lo
+       reemplaza: ese debounce mide "un rato después", adivinando cuánto
+       dura una animación; esto mide "justo cuando terminó", sin adivinar.
+       Hace falta igual: qa-lead reprodujo, con clic real justo después de
+       ver la animación del menú de StaffGate terminar visualmente (a los
+       ~300ms — más que sus 250ms reales, menos que los 350ms del
+       debounce), que el clic caía sobre "Refresh" porque el recálculo
+       "de verdad" del debounce todavía no había corrido a esa hora. Con
+       `transitionend` (fase de captura, para no depender de que nadie deje
+       de hacer `stopPropagation`), el recálculo llega en el mismo instante
+       en que el navegador dice que la transición terminó — antes de lo que
+       una persona pueda alcanzar a hacer clic después de verlo. */
+    document.addEventListener("transitionend", syncTopDiferido, true);
     watchDom();
   }
 
@@ -362,7 +383,12 @@
     if (!host) return;
     window.removeEventListener("scroll", syncTopDiferido);
     window.removeEventListener("resize", syncTopDiferido);
+    document.removeEventListener("transitionend", syncTopDiferido, true);
     unwatchDom();
+    if (asentarTimer) {
+      window.clearTimeout(asentarTimer);
+      asentarTimer = null;
+    }
     host.remove();
     host = null;
   }
