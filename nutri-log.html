@@ -1403,12 +1403,417 @@ function wireNutrition(){
     ui.nutriRecipeId = el.dataset.nlNutriPick; ui.nutriOpen = false; ui.nutriQuery=''; render();
   }));
 }
-function renderAnalytics(){ return '<p>Análisis — pendiente</p>'; }
-function wireAnalytics(){}
-function renderChallenge(){ return '<p>Reto — pendiente</p>'; }
-function wireChallenge(){}
-function renderTemplate(){ return '<p>Plantilla — pendiente</p>'; }
-function wireTemplate(){}
+/* ===== Analisis (RF-18 a RF-21, 9.7) ===== */
+function renderAnalytics(){
+  const L = state.lang, t = T[L].analytics, product = activeProduct();
+  const logs = logsForProduct(product.id);
+  if(!logs.length){
+    return `<h3>${esc(t.title)}</h3><div class="nl-empty">${esc(t.empty)}</div>`;
+  }
+  return `
+    <h3>${esc(t.title)}</h3>
+    ${renderKpis(product.id, L)}
+    <div class="card elev-sm">
+      <span class="card-title">${esc(t.heatmap)}</span>
+      ${renderHeatmap(product.id, L, t)}
+    </div>
+    <div class="nl-grid2">
+      <div class="card elev-sm">
+        <span class="card-title">${esc(t.weekly)}</span>
+        ${renderWeekdayBars(logs, L)}
+      </div>
+      <div class="card elev-sm">
+        <span class="card-title">${esc(t.types)}</span>
+        ${renderTypeDonut(logs, L)}
+      </div>
+    </div>
+    <div class="card elev-sm">
+      <span class="card-title">${esc(t.hours)}</span>
+      ${renderHourBars(logs, L)}
+    </div>
+    <div class="card elev-sm">
+      <span class="card-title">${esc(t.effects)}</span>
+      ${renderMonthEffects(logs, L)}
+      <div class="nl-disclaimer" style="margin-top:8px;"><i data-lucide="info" style="width:14px;height:14px"></i><span>${esc(T[L].disclaimer)}</span></div>
+    </div>
+    <div class="card elev-sm">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <span class="card-title">${esc(t.history)}</span>
+        <button type="button" class="btn btn-ghost" data-nl-export-csv><i data-lucide="download" style="width:14px;height:14px"></i>${esc(t.exportCsv)}</button>
+      </div>
+      <div style="overflow-x:auto;">
+        <table class="table">
+          <thead><tr><th>${esc(t.thDate)}</th><th>${esc(t.thTime)}</th><th>${esc(t.thType)}</th><th>${esc(t.thRecipe)}</th><th></th></tr></thead>
+          <tbody>
+            ${logs.map(l => `<tr>
+              <td>${esc(fmtDate(l.startedAt.slice(0,10), L))}${l.edited?` <span class="tag tag-neutral" style="font-size:9px;">${L==='es'?'editado':'edited'}</span>`:''}</td>
+              <td>${esc(l.startedAt.slice(11,16))}</td>
+              <td>${esc(T[L].log[l.consumptionType] || l.consumptionType)}</td>
+              <td>${l.recipeId ? esc((state.recipes.find(r=>r.id===l.recipeId)||{}).name?.[L] || '—') : '—'}</td>
+              <td><button type="button" class="btn-icon btn-ghost" data-nl-log-delete="${l.id}"><i data-lucide="trash-2" style="width:14px;height:14px"></i></button></td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+function renderKpis(productId, L){
+  const g = state.gamification, week = weekProgress(productId);
+  const monthStart = nlDaysAgo(29);
+  const monthCount = state.logs.filter(l => l.productId===productId && l.startedAt.slice(0,10)>=monthStart).length;
+  const items = [
+    { label: L==='es'?'Racha actual':'Current streak', value: g.streakCurrent },
+    { label: L==='es'?'Registros del mes':'Entries this month', value: monthCount },
+    { label: L==='es'?'Cumplimiento de meta':'Goal compliance', value: week.pct + '%' }
+  ];
+  return `<div class="nl-grid2">${items.map(i => `<div class="card elev-sm"><span class="card-kicker">${esc(i.label)}</span><span class="card-title">${i.value}</span></div>`).join('')}</div>`;
+}
+function renderHeatmap(productId, L, t){
+  const daysWithLog = new Set(state.logs.filter(l=>l.productId===productId).map(l=>l.startedAt.slice(0,10)));
+  const counts = {};
+  state.logs.filter(l=>l.productId===productId).forEach(l => { const d=l.startedAt.slice(0,10); counts[d]=(counts[d]||0)+1; });
+  const cells = [];
+  for(let i=55;i>=0;i--){
+    const day = nlDaysAgo(i);
+    const c = counts[day] || 0;
+    const lvl = c===0?0:c===1?1:c===2?2:3;
+    const colors = ['var(--color-neutral-300)','var(--color-accent-300)','var(--color-accent-500)','var(--color-accent-700)'];
+    cells.push(`<span style="background:${colors[lvl]}" title="${esc(day)} · ${c}"></span>`);
+  }
+  return `<div class="nl-heat">${cells.join('')}</div>
+    <div style="display:flex;align-items:center;gap:6px;font-size:11px;margin-top:6px;color:var(--color-neutral-600)">
+      <span>${esc(t.less)}</span>
+      ${['var(--color-neutral-300)','var(--color-accent-300)','var(--color-accent-500)','var(--color-accent-700)'].map(c=>`<span style="width:12px;height:12px;border-radius:3px;background:${c};display:inline-block"></span>`).join('')}
+      <span>${esc(t.more)}</span>
+    </div>`;
+}
+function renderWeekdayBars(logs, L){
+  const names = L==='es' ? ['D','L','M','X','J','V','S'] : ['S','M','T','W','T','F','S'];
+  const counts = [0,0,0,0,0,0,0];
+  logs.forEach(l => { counts[new Date(l.startedAt.slice(0,10)+'T12:00:00Z').getUTCDay()]++; });
+  const max = Math.max(1, ...counts);
+  return `<div style="display:flex;align-items:flex-end;gap:8px;height:100px;">
+    ${counts.map((c,i) => `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;">
+      <div style="width:100%;height:${Math.round((c/max)*80)}px;min-height:2px;border-radius:4px;background:var(--color-accent);"></div>
+      <span style="font-size:10px;color:var(--color-neutral-600)">${names[i]}</span>
+    </div>`).join('')}
+  </div>`;
+}
+function renderTypeDonut(logs, L){
+  const counts = { hot:0, cold:0, blend:0, other:0 };
+  logs.forEach(l => { counts[l.consumptionType] = (counts[l.consumptionType]||0)+1; });
+  const total = logs.length || 1;
+  const colors = { hot:'var(--color-accent)', cold:'var(--color-accent-2)', blend:'var(--color-neutral-500)', other:'var(--color-neutral-300)' };
+  let acc = 0;
+  const stops = Object.keys(counts).filter(k=>counts[k]>0).map(k => {
+    const from = acc/total*360; acc += counts[k]; const to = acc/total*360;
+    return `${colors[k]} ${from}deg ${to}deg`;
+  }).join(', ');
+  return `<div class="nl-donutwrap">
+    <div class="nl-donut" style="background:conic-gradient(${stops || 'var(--color-neutral-300) 0deg 360deg'})"></div>
+    <div class="nl-legend">
+      ${Object.keys(counts).filter(k=>counts[k]>0).map(k => `<span><span class="sw" style="background:${colors[k]}"></span>${esc(T[L].log[k])} · ${Math.round(counts[k]/total*100)}%</span>`).join('')}
+    </div>
+  </div>`;
+}
+function renderHourBars(logs, L){
+  const buckets = [0,0,0,0,0,0,0,0]; // 3h cada una, 0-24
+  logs.forEach(l => { const h = +l.startedAt.slice(11,13); buckets[Math.floor(h/3)]++; });
+  const max = Math.max(1, ...buckets);
+  const labels = ['12am','3am','6am','9am','12pm','3pm','6pm','9pm'];
+  return `<div style="display:flex;align-items:flex-end;gap:6px;height:90px;">
+    ${buckets.map((c,i) => `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;">
+      <div style="width:100%;height:${Math.round((c/max)*70)}px;min-height:2px;border-radius:4px;background:var(--color-accent-2);"></div>
+      <span style="font-size:9px;color:var(--color-neutral-600)">${labels[i]}</span>
+    </div>`).join('')}
+  </div>`;
+}
+function renderMonthEffects(logs, L){
+  const monthStart = nlDaysAgo(29);
+  const monthLogs = logs.filter(l => l.startedAt.slice(0,10) >= monthStart && l.recipeId);
+  const totals = {};
+  monthLogs.forEach(l => {
+    const recipe = state.recipes.find(r=>r.id===l.recipeId);
+    if(!recipe) return;
+    computeEffectProfile(recipe).forEach(e => { totals[e.key] = (totals[e.key]||0) + e.count; });
+  });
+  const keys = Object.keys(totals).sort((a,b)=>totals[b]-totals[a]).slice(0,6);
+  if(!keys.length) return `<p class="text-muted">${L==='es'?'Sin recetas registradas este mes todavía.':'No recipes logged this month yet.'}</p>`;
+  const max = Math.max(...keys.map(k=>totals[k]));
+  return keys.map(k => `
+    <div class="nl-effect-row">
+      <div style="display:flex;justify-content:space-between;font-size:12.5px;"><span>${esc(EFFECT_LABELS[k][L])}</span><span class="text-muted">${totals[k]}</span></div>
+      <div class="nl-bar-track"><div class="nl-bar-fill" style="width:${Math.round(totals[k]/max*100)}%"></div></div>
+    </div>`).join('');
+}
+function exportLogsCsv(productId, L){
+  const logs = logsForProduct(productId);
+  const header = [T[L].analytics.thDate, T[L].analytics.thTime, T[L].analytics.thType, T[L].analytics.thRecipe];
+  const rows = logs.map(l => [
+    l.startedAt.slice(0,10), l.startedAt.slice(11,16), T[L].log[l.consumptionType] || l.consumptionType,
+    l.recipeId ? ((state.recipes.find(r=>r.id===l.recipeId)||{}).name?.[L] || '') : ''
+  ]);
+  const csv = [header, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], { type:'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'nutri-log-historial.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+function wireAnalytics(){
+  const exportBtn = document.querySelector('[data-nl-export-csv]');
+  if(exportBtn) exportBtn.addEventListener('click', () => exportLogsCsv(activeProduct().id, state.lang));
+  document.querySelectorAll('[data-nl-log-delete]').forEach(el => el.addEventListener('click', () => {
+    const id = el.dataset.nlLogDelete;
+    openConfirmDialog(state.lang==='es' ? '¿Eliminar este registro?' : 'Delete this entry?', () => {
+      update(s => { s.logs = s.logs.filter(l => l.id !== id); });
+    });
+  }));
+}
+
+/* ===== Reto de 14 dias (RF-29 a RF-34, RF-42) ===== */
+function currentChallenge(productId){
+  return state.challenges.find(c => c.productId === productId && c.status === 'active') || null;
+}
+function planForDay(challenge, day){
+  const template = state.challengeTemplates.find(t => t.id === challenge.templateId);
+  if(!template) return null;
+  return template.values[day] || null;
+}
+function renderChallenge(){
+  const L = state.lang, t = T[L].challenge, product = activeProduct();
+  const challenge = currentChallenge(product.id);
+  if(!challenge){
+    const template = state.challengeTemplates.find(tp => tp.productId === product.id);
+    return `
+      <h3>${esc(t.title)}</h3>
+      <div class="nl-empty">
+        <p>${esc(t.none)}</p>
+        <button type="button" class="btn btn-primary" data-nl-challenge-start>${esc(t.start)}</button>
+        ${template ? `<div style="margin-top:10px;"><button type="button" class="btn btn-ghost" data-nl-nav="template">${esc(t.plan)}</button></div>` : ''}
+      </div>`;
+  }
+  const day = challengeDayNumber(challenge);
+  const plan = planForDay(challenge, day);
+  const recipeId = plan && plan.recipe !== 'fav' ? plan.recipe : (state.recipes.find(r=>r.productId===product.id && r.favorite)||{}).id;
+  const recipe = recipeId ? state.recipes.find(r=>r.id===recipeId) : null;
+  const checkin = (challenge.checkins || []).find(c => c.day === day) || { ratings:{focus:0,digestion:0,mood:0,skin:0}, habitDone:false, r1:'', r2:'' };
+  const isLastDay = day >= challenge.durationDays;
+  return `
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <h3>${esc(t.title)} · ${L==='es'?'Día':'Day'} ${day}</h3>
+      <button type="button" class="btn btn-ghost" data-nl-nav="template">${esc(t.plan)}</button>
+    </div>
+    <div style="display:flex;gap:4px;flex-wrap:wrap;">
+      ${Array.from({length:challenge.durationDays},(_,i)=>i+1).map(d => `
+        <span style="width:20px;height:20px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;
+          background:${d<day?'var(--color-accent-2)':d===day?'var(--color-accent)':'var(--color-neutral-300)'};
+          color:${d<=day?'#fff':'var(--color-neutral-600)'};${d===day?'box-shadow:var(--shadow-sm)':''}">${d}</span>`).join('')}
+    </div>
+    ${plan ? `
+      <div class="card elev-sm" style="background:var(--color-accent-2-200);border:1px solid var(--color-accent-2-300);">
+        <span class="card-title">${esc(t.todayPlan)}</span>
+        <div class="text-muted" style="font-size:13px;">${recipe ? esc(recipe.name[L]) : (L==='es'?'Receta favorita':'Favorite recipe')} · ${esc(plan.time[L])}</div>
+        <div style="font-size:13px;">${esc(plan.companion[L])}</div>
+      </div>` : ''}
+    <div class="card elev-sm">
+      <span class="card-title">${esc(t.checkin)}</span>
+      <p class="text-muted" style="font-size:12px;margin:-4px 0 0;">${esc(t.checkinSub)}</p>
+      ${['focus','digestion','mood','skin'].map(cat => `
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <span style="font-size:13px;">${esc(t[cat])}</span>
+          <div style="display:flex;gap:5px;">
+            ${[1,2,3,4,5].map(v => `<button type="button" class="nl-scale-btn ${checkin.ratings[cat]===v?'on':''}" data-nl-ci-rate="${cat}" data-nl-ci-val="${v}">${v}</button>`).join('')}
+          </div>
+        </div>`).join('')}
+    </div>
+    <div class="card elev-sm" style="flex-direction:row;align-items:center;gap:12px;">
+      <button type="button" class="nl-check ${checkin.habitDone?'on':''}" data-nl-ci-habit>${checkin.habitDone?'<i data-lucide="check" style="width:16px;height:16px"></i>':''}</button>
+      <div><div style="font-weight:700;font-size:13.5px;">${esc(t.habit)}</div><div class="text-muted" style="font-size:12px;">${plan ? esc(plan.companion[L]) : ''}</div></div>
+    </div>
+    <div class="field"><label>${esc(t.r1)}</label><textarea class="input" data-nl-ci-r1>${esc(checkin.r1)}</textarea></div>
+    <div class="field"><label>${esc(t.r2)}</label><textarea class="input" data-nl-ci-r2>${esc(checkin.r2)}</textarea></div>
+    <button type="button" class="btn btn-primary btn-block" data-nl-ci-save="${day}">${esc(t.save)} ${L==='es'?'del día':'for day'} ${day}</button>
+    ${isLastDay ? `<button type="button" class="btn btn-secondary btn-block" data-nl-challenge-finish>${esc(t.finish)}</button>` : ''}
+    <div class="nl-disclaimer"><i data-lucide="info" style="width:15px;height:15px"></i><span>${esc(t.disclaimer)}</span></div>
+    ${challenge.status === 'completed' ? renderChallengeSummary(challenge, L, t) : ''}
+  `;
+}
+function renderChallengeSummary(challenge, L, t){
+  const checkins = challenge.checkins || [];
+  const first = checkins.find(c => c.day === 1);
+  const last = checkins.slice().sort((a,b)=>b.day-a.day)[0];
+  if(!first || !last) return '';
+  const rows = ['focus','digestion','mood','skin'].map(cat => {
+    const before = first.ratings[cat] || 0, after = last.ratings[cat] || 0;
+    return `<tr><td>${esc(t[cat])}</td><td>${before || '—'}</td><td>${after || '—'}</td></tr>`;
+  }).join('');
+  return `
+    <div class="card elev-sm">
+      <span class="card-title">${esc(t.summary)}</span>
+      <table class="table"><thead><tr><th></th><th>${esc(t.day1)}</th><th>${esc(t.dayN)}</th></tr></thead><tbody>${rows}</tbody></table>
+      <div class="nl-disclaimer"><i data-lucide="info" style="width:14px;height:14px"></i><span>${esc(t.disclaimer)}</span></div>
+    </div>`;
+}
+function wireChallenge(){
+  const L = state.lang;
+  const startBtn = document.querySelector('[data-nl-challenge-start]');
+  if(startBtn) startBtn.addEventListener('click', () => {
+    const product = activeProduct();
+    const template = state.challengeTemplates.find(tp => tp.productId === product.id);
+    update(s => {
+      s.challenges.push({
+        id: uid('challenge'), productId: product.id, templateId: template ? template.id : null,
+        startDate: nlToday(), durationDays: template ? template.durationDays : 14,
+        companionHabit: '', status: 'active', checkins: []
+      });
+    });
+  });
+  const finishBtn = document.querySelector('[data-nl-challenge-finish]');
+  if(finishBtn) finishBtn.addEventListener('click', () => {
+    update(s => {
+      const c = currentChallenge(activeProduct().id);
+      if(c) c.status = 'completed';
+    });
+  });
+  document.querySelectorAll('[data-nl-ci-rate]').forEach(el => el.addEventListener('click', () => {
+    const day = challengeDayNumber(currentChallenge(activeProduct().id));
+    const cat = el.dataset.nlCiRate, val = +el.dataset.nlCiVal;
+    update(() => {
+      const ci = ensureCheckin(currentChallenge(activeProduct().id), day);
+      if(ci) ci.ratings[cat] = ci.ratings[cat] === val ? 0 : val;
+    });
+  }));
+  const habitBtn = document.querySelector('[data-nl-ci-habit]');
+  if(habitBtn) habitBtn.addEventListener('click', () => {
+    const day = challengeDayNumber(currentChallenge(activeProduct().id));
+    update(() => {
+      const ci = ensureCheckin(currentChallenge(activeProduct().id), day);
+      if(ci) ci.habitDone = !ci.habitDone;
+    });
+  });
+  const saveBtn = document.querySelector('[data-nl-ci-save]');
+  if(saveBtn) saveBtn.addEventListener('click', () => {
+    const day = +saveBtn.dataset.nlCiSave;
+    const r1 = document.querySelector('[data-nl-ci-r1]').value;
+    const r2 = document.querySelector('[data-nl-ci-r2]').value;
+    const challengeBefore = currentChallenge(activeProduct().id);
+    const isLastDay = challengeBefore && day >= challengeBefore.durationDays;
+    update(() => {
+      const challenge = currentChallenge(activeProduct().id);
+      if(!challenge) return;
+      const ci = ensureCheckin(challenge, day);
+      ci.r1 = r1; ci.r2 = r2;
+      if(day >= challenge.durationDays) challenge.status = 'completed';
+    });
+    showToast(isLastDay ? T[L].challenge.badge : (L==='es' ? 'Check-in guardado.' : 'Check-in saved.'), isLastDay ? 'trophy' : 'check');
+  });
+}
+function ensureCheckin(challenge, day){
+  if(!challenge) return null;
+  let ci = challenge.checkins.find(x => x.day === day);
+  if(!ci){ ci = { day, ratings:{focus:0,digestion:0,mood:0,skin:0}, habitDone:false, r1:'', r2:'' }; challenge.checkins.push(ci); }
+  return ci;
+}
+
+/* ===== Plantilla del reto (RF-39 a RF-43) ===== */
+/* La columna "receta" (RF-39/8.4) guarda un id de receta, no texto libre,
+   asi que se muestra el nombre real en el idioma activo en vez del id
+   crudo. Una vez que la persona edita esa celda a mano, el valor pasa a
+   ser texto libre (ver wireTemplate) y se muestra tal cual de ahi en
+   adelante -- coherente con que RF-40 permite reutilizar la plantilla con
+   otro producto renombrando columnas, sin asumir que siempre habra un
+   catalogo de recetas detras. */
+function resolveTemplateCellDisplay(columnId, val, L){
+  if(val && typeof val === 'object') return val[L] ?? '';
+  if(columnId === 'recipe' && typeof val === 'string'){
+    if(val === 'fav') return L==='es' ? 'Receta favorita' : 'Favorite recipe';
+    const recipe = state.recipes.find(r => r.id === val);
+    if(recipe) return recipe.name[L];
+  }
+  return val ?? '';
+}
+function renderTemplate(){
+  const L = state.lang, t = T[L].template, product = activeProduct();
+  const template = state.challengeTemplates.find(tp => tp.productId === product.id) || state.challengeTemplates[0];
+  if(!template) return `<div class="nl-empty">${L==='es'?'No hay plantilla todavía.':'No template yet.'}</div>`;
+  const days = Array.from({length: template.durationDays}, (_,i) => i+1);
+  return `
+    <button type="button" class="btn btn-ghost" data-nl-back-challenge><i data-lucide="arrow-left" style="width:16px;height:16px"></i>${L==='es'?'Volver':'Back'}</button>
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <div><h3>${esc(t.title)}</h3><p class="text-muted" style="margin:-8px 0 0;">${esc(product.name)} · ${template.durationDays} ${esc(t.days)}</p></div>
+      <div style="display:flex;gap:8px;">
+        <button type="button" class="btn btn-secondary" data-nl-tpl-edit>${esc(state.ui.editCols ? t.editOn : t.editOff)}</button>
+        <button type="button" class="btn btn-secondary" data-nl-tpl-duplicate>${esc(t.duplicate)}</button>
+      </div>
+    </div>
+    ${state.ui.editCols ? `<p class="text-muted" style="font-size:12px;">${esc(t.colsHelp)}</p>` : ''}
+    <div style="overflow-x:auto;">
+      <table class="table">
+        <thead><tr>
+          <th>${esc(t.day)}</th>
+          ${template.columns.map(c => `<th>${state.ui.editCols ? `<input type="text" class="input" style="min-height:28px;padding:4px 10px;" data-nl-tpl-colname="${c.id}" value="${esc(c.label[L])}">` : esc(c.label[L])}</th>`).join('')}
+        </tr></thead>
+        <tbody>
+          ${days.map(d => `<tr>
+            <td>${d}</td>
+            ${template.columns.map(c => {
+              const val = (template.values[d] || {})[c.id];
+              const display = resolveTemplateCellDisplay(c.id, val, L);
+              return `<td><input type="text" class="input" style="min-height:28px;padding:4px 10px;" data-nl-tpl-cell="${d}|${c.id}" value="${esc(display)}"></td>`;
+            }).join('')}
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+    <p class="text-muted" style="font-size:11.5px;">${esc(t.note)}</p>
+  `;
+}
+function wireTemplate(){
+  const L = state.lang;
+  const back = document.querySelector('[data-nl-back-challenge]');
+  if(back) back.addEventListener('click', () => { state.screen = 'challenge'; render(); });
+  const editBtn = document.querySelector('[data-nl-tpl-edit]');
+  if(editBtn) editBtn.addEventListener('click', () => { state.ui.editCols = !state.ui.editCols; render(); });
+  document.querySelectorAll('[data-nl-tpl-colname]').forEach(inp => inp.addEventListener('change', () => {
+    const colId = inp.dataset.nlTplColname;
+    update(s => {
+      const product = activeProduct();
+      const template = s.challengeTemplates.find(tp => tp.productId === product.id) || s.challengeTemplates[0];
+      const col = template.columns.find(c => c.id === colId);
+      if(col) col.label[L] = inp.value;
+    });
+  }));
+  document.querySelectorAll('[data-nl-tpl-cell]').forEach(inp => inp.addEventListener('change', () => {
+    const [day, colId] = inp.dataset.nlTplCell.split('|');
+    update(s => {
+      const product = activeProduct();
+      const template = s.challengeTemplates.find(tp => tp.productId === product.id) || s.challengeTemplates[0];
+      if(!template.values[day]) template.values[day] = {};
+      const current = template.values[day][colId];
+      // Si el valor original era bilingue ({es,en}), se preserva el idioma
+      // contrario y solo se actualiza el del idioma activo (RF-40/41: renombrar
+      // sin perder la estructura). Si era un id simple (ej. receta), se
+      // reemplaza tal cual por el texto libre editado.
+      if(current && typeof current === 'object') current[L] = inp.value;
+      else template.values[day][colId] = inp.value;
+    });
+  }));
+  const dup = document.querySelector('[data-nl-tpl-duplicate]');
+  if(dup) dup.addEventListener('click', () => {
+    update(s => {
+      const product = activeProduct();
+      const template = s.challengeTemplates.find(tp => tp.productId === product.id) || s.challengeTemplates[0];
+      const copy = JSON.parse(JSON.stringify(template));
+      copy.id = uid('template');
+      copy.name = { es: template.name.es + ' (copia)', en: template.name.en + ' (copy)' };
+      s.challengeTemplates.push(copy);
+    });
+    showToast(L==='es' ? 'Plantilla duplicada.' : 'Template duplicated.', 'check');
+  });
+}
 function renderProfile(){ return '<p>Perfil — pendiente</p>'; }
 function wireProfile(){}
 function renderProduct(){ return '<p>Producto — pendiente</p>'; }
