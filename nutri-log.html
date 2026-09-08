@@ -37,6 +37,16 @@
   --color-accent-2-400:#aebf92; --color-accent-2-500:#8fa073; --color-accent-2-600:#728157;
   --color-accent-2-700:#56633f; --color-accent-2-800:#3d472b; --color-accent-2-900:#272e1b;
 
+  /* Token propio (no viene del paquete de mockups): accessibility-reviewer
+     midió que el texto blanco normal sobre --color-accent/--color-accent-2
+     sólidos falla AA de forma sistemática (3.6:1-3.7:1, se necesita 4.5:1) en
+     toda la app -- pills activas, item de nav activo, botón "hecho", dots de
+     racha. El número grande de la racha (56px) sí pasa por caer en el umbral
+     de texto grande, así que se queda blanco; todo lo demás a tamaño normal
+     usa esta tinta oscura en su lugar. Calculado para pasar 4.5:1 contra
+     AMBOS acentos a la vez (4.88:1 y 4.71:1 respectivamente). */
+  --color-ink-on-accent:#281408;
+
   --font-heading:"Caprasimo", system-ui, sans-serif;
   --font-body:"Figtree", system-ui, sans-serif;
 
@@ -60,7 +70,11 @@ a{ color:var(--color-accent); text-underline-offset:3px; }
 img{ display:block; max-width:100%; }
 .text-muted{ color:color-mix(in srgb, var(--color-text) 55%, transparent); }
 :focus{ outline:none; }
-:focus-visible{ outline:2px solid var(--color-accent); outline-offset:2px; }
+/* --color-accent pasa (3.03:1) contra --color-bg pero NO contra --color-surface
+   (2.69:1, bajo el 3:1 de WCAG 1.4.11) -- y la mayoria de los controles de esta
+   app viven dentro de tarjetas con fondo --color-surface. --color-accent-700
+   pasa contra los dos (5.72:1 y 5.09:1). */
+:focus-visible{ outline:2px solid var(--color-accent-700); outline-offset:2px; }
 .washed{ filter:saturate(.6) contrast(.85) brightness(1.1) opacity(.94); }
 
 .hr{ height:1px; border:0; margin:var(--space-4) 0; background:var(--color-divider); }
@@ -126,7 +140,7 @@ textarea.input{ min-height:80px; border-radius:var(--radius-md); resize:vertical
 .nl-navitem{ display:flex; align-items:center; gap:11px; padding:11px 12px; border-radius:var(--radius-md);
   font-size:14px; font-weight:600; color:var(--color-text); cursor:pointer; background:transparent; border:none; text-align:left; width:100%; font-family:inherit; }
 .nl-navitem:hover{ background:color-mix(in srgb, var(--color-text) 6%, transparent); }
-.nl-navitem[aria-current="page"]{ background:var(--color-accent); color:#fff; }
+.nl-navitem[aria-current="page"]{ background:var(--color-accent); color:var(--color-ink-on-accent); }
 .nl-navitem svg{ flex:none; }
 .nl-lang{ margin-top:auto; display:flex; gap:6px; padding:0 var(--space-2); }
 .nl-lang button{ flex:1; }
@@ -150,25 +164,33 @@ textarea.input{ min-height:80px; border-radius:var(--radius-md); resize:vertical
 .nl-dow{ display:flex; gap:6px; position:relative; margin-top:10px; }
 .nl-dow span{ width:30px; height:30px; border-radius:999px; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; }
 .nl-dow span.done{ background:#fff; color:var(--color-accent-700); }
-.nl-dow span.pending{ background:rgba(255,255,255,.24); color:#fff; }
+.nl-dow span.pending{ background:rgba(255,255,255,.24); color:var(--color-ink-on-accent); }
 
 .nl-quickbtn{ padding:15px; border-radius:999px; font-size:15px; font-weight:700; width:100%; transition:all .16s ease; border:none; cursor:pointer; font-family:var(--font-heading); }
 .nl-quickbtn.pending{ background:var(--color-accent); color:#fff; }
-.nl-quickbtn.done{ background:var(--color-accent-2); color:#fff; }
+.nl-quickbtn.done{ background:var(--color-accent-2); color:var(--color-ink-on-accent); }
 
 .nl-bar-track{ height:12px; border-radius:999px; background:var(--color-neutral-300); overflow:hidden; }
 .nl-bar-fill{ height:100%; background:var(--color-accent-2); border-radius:999px; transition:width .4s ease; }
 
 .nl-pill{ display:inline-flex; align-items:center; justify-content:center; gap:7px; padding:10px 16px; border-radius:999px;
   font-size:13.5px; font-weight:700; transition:all .16s ease; cursor:pointer; border:none; font-family:inherit; }
-.nl-pill.active{ background:var(--color-accent); color:#fff; box-shadow:var(--shadow-sm); }
+.nl-pill.active{ background:var(--color-accent); color:var(--color-ink-on-accent); box-shadow:var(--shadow-sm); }
 .nl-pill.inactive{ background:var(--color-neutral-200); color:var(--color-neutral-700); }
-.nl-pill.active-2{ background:var(--color-accent-2); color:#fff; box-shadow:var(--shadow-sm); }
+.nl-pill.active-2{ background:var(--color-accent-2); color:var(--color-ink-on-accent); box-shadow:var(--shadow-sm); }
 
 .nl-toast{ position:fixed; left:50%; bottom:104px; transform:translateX(-50%); z-index:1000; background:var(--color-accent-2-800); color:#fff;
   padding:11px 20px; border-radius:999px; font-size:13.5px; font-weight:600; display:flex; align-items:center; gap:8px; box-shadow:var(--shadow-lg);
   animation:nl-toastin .28s ease; }
 @keyframes nl-toastin{ from{ transform:translate(-50%,14px); opacity:0; } to{ transform:translate(-50%,0); opacity:1; } }
+/* accessibility-reviewer confirmo con reducedMotion:'reduce' real que estas
+   dos animaciones (las unicas propias de esta app) seguian corriendo igual.
+   Ninguna carga informacion solo mediante el movimiento -- el valor final
+   (numero de racha, texto del toast) ya esta en el DOM sin la animacion -- asi
+   que desactivarla no pierde nada, solo el efecto visual. */
+@media (prefers-reduced-motion: reduce){
+  .nl-streak-num.pop, .nl-toast{ animation:none; }
+}
 
 .nl-thumb{ width:100%; height:118px; border-radius:var(--radius-md); background-image:repeating-linear-gradient(135deg, var(--color-neutral-300) 0 12px, var(--color-neutral-200) 12px 24px); }
 .nl-thumb-lg{ width:100%; height:170px; border-radius:var(--radius-lg); background-image:repeating-linear-gradient(135deg, var(--color-neutral-300) 0 12px, var(--color-neutral-200) 12px 24px); }
@@ -185,7 +207,10 @@ textarea.input{ min-height:80px; border-radius:var(--radius-md); resize:vertical
 .nl-switch .knob{ position:absolute; top:3px; left:3px; width:21px; height:21px; border-radius:999px; background:#fff; transition:transform .16s ease; box-shadow:var(--shadow-sm); }
 .nl-switch input:checked + .track{ background:var(--color-accent); }
 .nl-switch input:checked + .track .knob{ transform:translateX(19px); }
-.nl-switch input:focus-visible + .track{ outline:2px solid var(--color-accent); outline-offset:2px; }
+/* --color-accent daba 2.69:1 contra --color-surface (bajo el 3:1 de WCAG
+   1.4.11 para indicadores no textuales, medido por accessibility-reviewer);
+   --color-accent-700, mas oscuro, da 5.09:1. */
+.nl-switch input:focus-visible + .track{ outline:2px solid var(--color-accent-700); outline-offset:2px; }
 
 .nl-heart{ background:none; border:none; cursor:pointer; color:var(--color-neutral-500); display:flex; padding:2px; }
 .nl-heart.on{ color:var(--color-accent); }
@@ -955,6 +980,20 @@ function applyOnboardingChoices(){
   // (ver docs/nutrilog/requerimientos.md); aqui solo se guarda la preferencia.
   state.reminderPref = picks[2] === 'on' ? { enabled:true, time:'08:00', days:[0,1,2,3,4,5,6] } : { enabled:false };
 }
+/* qa-lead encontro que elegir "Agregar mi propio producto" (paso 1) no hacia
+   nada distinto de elegir Urth -- picks[0] nunca se leia. En vez de crear un
+   producto vacio en silencio (que dejaria "metricas"/"meta" del paso 2
+   aplicadas a un producto que la usuaria todavia no definio), se la lleva
+   directo al dialogo de "agregar producto" al terminar, para que la eleccion
+   tenga un efecto real y visible. */
+function finishOnboarding(){
+  const wantsOwnProduct = state.onbPicks[0] === 'own';
+  applyOnboardingChoices();
+  state.onboardingDone = true;
+  if(wantsOwnProduct) state.screen = 'product';
+  saveData(); render();
+  if(wantsOwnProduct) openProductEditor();
+}
 function wireOnboarding(){
   document.querySelectorAll('[data-nl-onb-pick]').forEach(el => {
     el.addEventListener('change', () => {
@@ -963,17 +1002,11 @@ function wireOnboarding(){
     });
   });
   const skip = document.querySelector('[data-nl-onb-skip]');
-  if(skip) skip.addEventListener('click', () => {
-    applyOnboardingChoices();
-    state.onboardingDone = true;
-    saveData(); render();
-  });
+  if(skip) skip.addEventListener('click', finishOnboarding);
   const next = document.querySelector('[data-nl-onb-next]');
   if(next) next.addEventListener('click', () => {
     if(state.onbStep < ONB_STEPS.length - 1){ state.onbStep++; render(); return; }
-    applyOnboardingChoices();
-    state.onboardingDone = true;
-    saveData(); render();
+    finishOnboarding();
   });
 }
 
@@ -1000,9 +1033,9 @@ function renderHome(){
   }).join('');
   return `
     <div class="card nl-streak-card elev-md">
-      <span style="font-size:12px;opacity:.85;">${esc(t.streakLabel)}</span>
+      <span style="font-size:12px;color:var(--color-ink-on-accent);">${esc(t.streakLabel)}</span>
       <div class="nl-streak-num ${streak>0?'pop':''}">${streak}</div>
-      <span style="font-size:13px;">${esc(t.days)}</span>
+      <span style="font-size:13px;color:var(--color-ink-on-accent);">${esc(t.days)}</span>
       <div class="nl-dow">${dots}</div>
     </div>
     <div class="card elev-sm" style="flex-direction:row;align-items:center;gap:10px;">
@@ -1079,10 +1112,10 @@ function renderLog(){
       </div>
     </div>
     <div class="field">
-      <label>${esc(t.time)}</label>
+      <label id="nl-log-time-label">${esc(t.time)}</label>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         ${times.map(tm => `<button type="button" class="nl-pill ${ui.logTime===tm?'active':'inactive'}" data-nl-logtime="${tm}">${tm}</button>`).join('')}
-        <input type="time" class="input" style="width:120px;" value="${esc(ui.logTime.length<=5 && ui.logTime.includes(':') && ui.logTime.length===5 ? ui.logTime : '08:00')}" data-nl-logtime-custom>
+        <input type="time" class="input" style="width:120px;" aria-labelledby="nl-log-time-label" value="${esc(ui.logTime.length<=5 && ui.logTime.includes(':') && ui.logTime.length===5 ? ui.logTime : '08:00')}" data-nl-logtime-custom>
       </div>
     </div>
     <div class="field">
@@ -1106,8 +1139,8 @@ function renderLog(){
         </div>` : ''}
     </div>
     <div class="field">
-      <label>${esc(t.note)}</label>
-      <input type="text" class="input" placeholder="${esc(t.notePh)}" value="${esc(ui.logNote)}" data-nl-lognote>
+      <label for="nl-log-note">${esc(t.note)}</label>
+      <input type="text" class="input" id="nl-log-note" placeholder="${esc(t.notePh)}" value="${esc(ui.logNote)}" data-nl-lognote>
     </div>
     <button type="button" class="btn btn-primary btn-block" data-nl-logsave>${esc(t.save)}</button>
   `;
@@ -1177,7 +1210,7 @@ function renderRecipeCard(r, L){
       <div class="nl-thumb"></div>
       <div style="display:flex;justify-content:space-between;align-items:flex-start;">
         <span class="card-title">${esc(r.name[L])}</span>
-        <button type="button" class="nl-heart ${r.favorite?'on':''}" data-nl-recipe-fav="${r.id}" aria-label="${esc(T[L].detail.fav)}">
+        <button type="button" class="nl-heart ${r.favorite?'on':''}" data-nl-recipe-fav="${r.id}" aria-label="${esc(r.favorite ? T[L].detail.fav : T[L].detail.notFav)}" aria-pressed="${r.favorite}">
           <i data-lucide="heart" style="width:18px;height:18px;${r.favorite?'fill:currentColor':''}"></i>
         </button>
       </div>
@@ -1189,9 +1222,11 @@ function renderRecipeCard(r, L){
     </div>`;
 }
 function renderStars(rating, editable, recipeId){
+  const L = state.lang;
   let out = '';
   for(let i=1;i<=5;i++){
-    out += `<button type="button" class="nl-star ${i<=rating?'on':''}" ${editable?`data-nl-rate="${recipeId}" data-nl-rate-val="${i}"`:'tabindex="-1" style="cursor:default"'}><i data-lucide="star" style="width:16px;height:16px;${i<=rating?'fill:currentColor':''}"></i></button>`;
+    const label = L==='es' ? `Calificar con ${i} estrella${i>1?'s':''}` : `Rate ${i} star${i>1?'s':''}`;
+    out += `<button type="button" class="nl-star ${i<=rating?'on':''}" aria-label="${esc(label)}" aria-pressed="${i<=rating}" ${editable?`data-nl-rate="${recipeId}" data-nl-rate-val="${i}"`:'tabindex="-1" style="cursor:default"'}><i data-lucide="star" style="width:16px;height:16px;${i<=rating?'fill:currentColor':''}"></i></button>`;
   }
   return out;
 }
@@ -1229,7 +1264,7 @@ function renderRecipeDetail(){
         <span class="card-kicker">${esc(t.kicker)}</span>
         <h3>${esc(recipe.name[L])}</h3>
       </div>
-      <button type="button" class="nl-heart ${recipe.favorite?'on':''}" data-nl-recipe-fav="${recipe.id}" title="${esc(recipe.favorite?t.fav:t.notFav)}">
+      <button type="button" class="nl-heart ${recipe.favorite?'on':''}" data-nl-recipe-fav="${recipe.id}" aria-label="${esc(recipe.favorite?t.fav:t.notFav)}" aria-pressed="${recipe.favorite}">
         <i data-lucide="heart" style="width:22px;height:22px;${recipe.favorite?'fill:currentColor':''}"></i>
       </button>
     </div>
@@ -1318,16 +1353,16 @@ function openRecipeEditor(recipeId){
     <div class="dialog-backdrop" data-nl-modal-close>
       <div class="dialog" data-nl-modal-stop>
         <span class="dialog-title">${L==='es' ? (existing?'Editar receta':'Nueva receta') : (existing?'Edit recipe':'New recipe')}</span>
-        <div class="field"><label>${L==='es'?'Nombre':'Name'}</label><input type="text" class="input" id="nl-re-name" value="${esc(existing ? existing.name[L] : '')}"></div>
-        <div class="field"><label>${T[L].log.type}</label>
+        <div class="field"><label for="nl-re-name">${L==='es'?'Nombre':'Name'}</label><input type="text" class="input" id="nl-re-name" value="${esc(existing ? existing.name[L] : '')}"></div>
+        <div class="field"><label for="nl-re-type">${T[L].log.type}</label>
           <select class="input" id="nl-re-type">
             ${CONSUMPTION_TYPES.map(ty => `<option value="${ty}" ${existing && existing.consumptionType===ty?'selected':''}>${esc(T[L].log[ty])}</option>`).join('')}
           </select>
         </div>
-        <div class="field"><label>${T[L].detail.ingredients} (${L==='es'?'uno por línea':'one per line'})</label>
+        <div class="field"><label for="nl-re-ingredients">${T[L].detail.ingredients} (${L==='es'?'uno por línea':'one per line'})</label>
           <textarea class="input" id="nl-re-ingredients" rows="4">${esc((existing ? existing.extraIngredients.map(i=>i[L]) : []).join('\n'))}</textarea>
         </div>
-        <div class="field"><label>${T[L].detail.steps} (${L==='es'?'uno por línea':'one per line'})</label>
+        <div class="field"><label for="nl-re-steps">${T[L].detail.steps} (${L==='es'?'uno por línea':'one per line'})</label>
           <textarea class="input" id="nl-re-steps" rows="4">${esc((existing ? existing.steps[L] : []).join('\n'))}</textarea>
         </div>
         <div class="dialog-actions">
@@ -1414,9 +1449,9 @@ function renderNutrition(){
         </div>` : ''}
     </div>
     <div class="card nl-streak-card elev-md">
-      <span style="font-size:12px;opacity:.85;">${esc(t.perServing)}</span>
-      <div style="font-family:var(--font-heading);font-size:52px;line-height:1;">${total.kcal}<span style="font-size:16px;"> ${esc(t.kcal)}</span></div>
-      <span style="font-size:12.5px;">${esc(recipe.name[L])} · ${esc(T[L].log[recipe.consumptionType])} · ~${caffeine}mg ${esc(T[L].nutri.caffeine || T[L].log.caffeine)}</span>
+      <span style="font-size:12px;color:var(--color-ink-on-accent);">${esc(t.perServing)}</span>
+      <div style="font-family:var(--font-heading);font-size:52px;line-height:1;">${total.kcal}<span style="font-size:16px;color:var(--color-ink-on-accent);"> ${esc(t.kcal)}</span></div>
+      <span style="font-size:12.5px;color:var(--color-ink-on-accent);">${esc(recipe.name[L])} · ${esc(T[L].log[recipe.consumptionType])} · ~${caffeine}mg ${esc(T[L].nutri.caffeine || T[L].log.caffeine)}</span>
     </div>
     <div class="card elev-sm nl-col" style="gap:10px;">
       ${[['p',t.protein,total.p,'var(--color-accent)'],['c',t.carbs,total.c,'var(--color-accent-2)'],['f',t.fat,total.f,'var(--color-neutral-500)']].map(([k,label,val]) => `
@@ -1688,16 +1723,16 @@ function renderChallenge(){
         <div style="display:flex;justify-content:space-between;align-items:center;">
           <span style="font-size:13px;">${esc(t[cat])}</span>
           <div style="display:flex;gap:5px;">
-            ${[1,2,3,4,5].map(v => `<button type="button" class="nl-scale-btn ${checkin.ratings[cat]===v?'on':''}" data-nl-ci-rate="${cat}" data-nl-ci-val="${v}">${v}</button>`).join('')}
+            ${[1,2,3,4,5].map(v => `<button type="button" class="nl-scale-btn ${checkin.ratings[cat]===v?'on':''}" aria-label="${esc(t[cat])}: ${v} ${L==='es'?'de 5':'of 5'}" aria-pressed="${checkin.ratings[cat]===v}" data-nl-ci-rate="${cat}" data-nl-ci-val="${v}">${v}</button>`).join('')}
           </div>
         </div>`).join('')}
     </div>
     <div class="card elev-sm" style="flex-direction:row;align-items:center;gap:12px;">
-      <button type="button" class="nl-check ${checkin.habitDone?'on':''}" data-nl-ci-habit>${checkin.habitDone?'<i data-lucide="check" style="width:16px;height:16px"></i>':''}</button>
+      <button type="button" class="nl-check ${checkin.habitDone?'on':''}" aria-label="${esc(t.habit)}${plan?': '+esc(plan.companion[L]):''} — ${checkin.habitDone?(L==='es'?'cumplido':'done'):(L==='es'?'sin marcar':'not done')}" aria-pressed="${checkin.habitDone}" data-nl-ci-habit>${checkin.habitDone?'<i data-lucide="check" style="width:16px;height:16px"></i>':''}</button>
       <div><div style="font-weight:700;font-size:13.5px;">${esc(t.habit)}</div><div class="text-muted" style="font-size:12px;">${plan ? esc(plan.companion[L]) : ''}</div></div>
     </div>
-    <div class="field"><label>${esc(t.r1)}</label><textarea class="input" data-nl-ci-r1>${esc(checkin.r1)}</textarea></div>
-    <div class="field"><label>${esc(t.r2)}</label><textarea class="input" data-nl-ci-r2>${esc(checkin.r2)}</textarea></div>
+    <div class="field"><label for="nl-ci-r1">${esc(t.r1)}</label><textarea class="input" id="nl-ci-r1" data-nl-ci-r1>${esc(checkin.r1)}</textarea></div>
+    <div class="field"><label for="nl-ci-r2">${esc(t.r2)}</label><textarea class="input" id="nl-ci-r2" data-nl-ci-r2>${esc(checkin.r2)}</textarea></div>
     <button type="button" class="btn btn-primary btn-block" data-nl-ci-save="${day}">${esc(t.save)} ${L==='es'?'del día':'for day'} ${day}</button>
     ${isLastDay ? `<button type="button" class="btn btn-secondary btn-block" data-nl-challenge-finish>${esc(t.finish)}</button>` : ''}
     <div class="nl-disclaimer"><i data-lucide="info" style="width:15px;height:15px"></i><span>${esc(t.disclaimer)}</span></div>
@@ -1815,17 +1850,18 @@ function renderTemplate(){
     ${state.ui.editCols ? `<p class="text-muted" style="font-size:12px;">${esc(t.colsHelp)}</p>` : ''}
     <div style="overflow-x:auto;">
       <table class="table">
+        <caption class="text-muted" style="text-align:left;font-size:12px;padding-bottom:6px;">${esc(t.title)} · ${esc(product.name)} · ${template.durationDays} ${esc(t.days)}</caption>
         <thead><tr>
-          <th>${esc(t.day)}</th>
-          ${template.columns.map(c => `<th>${state.ui.editCols ? `<input type="text" class="input" style="min-height:28px;padding:4px 10px;" data-nl-tpl-colname="${c.id}" value="${esc(c.label[L])}">` : esc(c.label[L])}</th>`).join('')}
+          <th scope="col">${esc(t.day)}</th>
+          ${template.columns.map(c => `<th scope="col">${state.ui.editCols ? `<input type="text" class="input" style="min-height:28px;padding:4px 10px;" aria-label="${L==='es'?'Nombre de columna':'Column name'}: ${esc(c.label[L])}" data-nl-tpl-colname="${c.id}" value="${esc(c.label[L])}">` : esc(c.label[L])}</th>`).join('')}
         </tr></thead>
         <tbody>
           ${days.map(d => `<tr>
-            <td>${d}</td>
+            <th scope="row" style="font-weight:400;">${d}</th>
             ${template.columns.map(c => {
               const val = (template.values[d] || {})[c.id];
               const display = resolveTemplateCellDisplay(c.id, val, L);
-              return `<td><input type="text" class="input" style="min-height:28px;padding:4px 10px;" data-nl-tpl-cell="${d}|${c.id}" value="${esc(display)}"></td>`;
+              return `<td><input type="text" class="input" style="min-height:28px;padding:4px 10px;" aria-label="${esc(t.day)} ${d}, ${esc(c.label[L])}" data-nl-tpl-cell="${d}|${c.id}" value="${esc(display)}"></td>`;
             }).join('')}
           </tr>`).join('')}
         </tbody>
@@ -1910,12 +1946,17 @@ function renderProfile(){
     <div class="nl-badge-grid">
       ${BADGE_DEFS.map(b => {
         const on = unlocked.has(b.id);
-        return `<div class="card ${on?'elev-sm':''}" style="${on?'':'border:1.5px dashed var(--color-neutral-400);opacity:.75;'}">
-          <div style="width:48px;height:48px;border-radius:999px;display:flex;align-items:center;justify-content:center;background:${on?'var(--color-accent)':'var(--color-neutral-300)'};color:${on?'#fff':'var(--color-neutral-600)'};">
+        /* Antes esto se atenuaba con opacity:.75 en toda la caja -- accessibility-reviewer
+           midio que asi, el texto secundario quedaba en 4.04:1 (bajo el 4.5:1 de AA),
+           porque la opacidad diluye texto y fondo por igual. Se reemplaza por
+           background transparente real + colores explicitos que sí cumplen contra
+           el fondo de la pagina, en vez de un truco visual que no garantiza nada. */
+        return `<div class="card ${on?'elev-sm':''}" style="${on?'':'border:1.5px dashed var(--color-neutral-400);background:transparent;'}">
+          <div style="width:48px;height:48px;border-radius:999px;display:flex;align-items:center;justify-content:center;background:${on?'var(--color-accent)':'var(--color-neutral-300)'};color:${on?'var(--color-ink-on-accent)':'var(--color-neutral-700)'};">
             <i data-lucide="${b.icon}" style="width:22px;height:22px"></i>
           </div>
-          <span class="card-title" style="font-size:14px;">${esc(b.name[L])}</span>
-          <span class="card-body">${on ? esc(b.desc[L]) : esc(t.locked)}</span>
+          <span class="card-title" style="font-size:14px;${on?'':'color:var(--color-neutral-800);'}">${esc(b.name[L])}</span>
+          <span class="card-body" style="${on?'':'color:var(--color-neutral-700);opacity:1;'}">${on ? esc(b.desc[L]) : esc(t.locked)}</span>
         </div>`;
       }).join('')}
     </div>
@@ -1994,9 +2035,9 @@ function renderProduct(){
   `;
 }
 function renderGoalField(metric, goal, t, L){
-  if(metric === 'streak') return `<div class="field" style="margin-top:8px;"><label>${esc(t.goalStreak)}</label><input type="number" min="1" class="input" value="${goal.streakTarget||14}" data-nl-goal="streakTarget"></div>`;
-  if(metric === 'frequency') return `<div class="field" style="margin-top:8px;"><label>${esc(t.goalFrequency)}</label><input type="number" min="1" class="input" value="${goal.frequencyTarget||5}" data-nl-goal="frequencyTarget"></div>`;
-  return `<div class="field" style="margin-top:8px;"><label>${L==='es'?'Antes de':'Before'}</label><input type="time" class="input" value="${goal.timeTarget||'09:00'}" data-nl-goal="timeTarget"></div>`;
+  if(metric === 'streak') return `<div class="field" style="margin-top:8px;"><label for="nl-goal-streak">${esc(t.goalStreak)}</label><input type="number" min="1" class="input" id="nl-goal-streak" value="${goal.streakTarget||14}" data-nl-goal="streakTarget"></div>`;
+  if(metric === 'frequency') return `<div class="field" style="margin-top:8px;"><label for="nl-goal-freq">${esc(t.goalFrequency)}</label><input type="number" min="1" class="input" id="nl-goal-freq" value="${goal.frequencyTarget||5}" data-nl-goal="frequencyTarget"></div>`;
+  return `<div class="field" style="margin-top:8px;"><label for="nl-goal-time">${L==='es'?'Antes de':'Before'}</label><input type="time" class="input" id="nl-goal-time" value="${goal.timeTarget||'09:00'}" data-nl-goal="timeTarget"></div>`;
 }
 function wireProduct(){
   document.querySelectorAll('[data-nl-product-tab]').forEach(b => b.addEventListener('click', () => { state.ui.editingProductId = b.dataset.nlProductTab; render(); }));
@@ -2045,8 +2086,8 @@ function openProductEditor(){
     <div class="dialog-backdrop" data-nl-modal-close>
       <div class="dialog" data-nl-modal-stop>
         <span class="dialog-title">${esc(T[L].product.add)}</span>
-        <div class="field"><label>${L==='es'?'Nombre':'Name'}</label><input type="text" class="input" id="nl-np-name"></div>
-        <div class="field"><label>${L==='es'?'Marca':'Brand'}</label><input type="text" class="input" id="nl-np-brand"></div>
+        <div class="field"><label for="nl-np-name">${L==='es'?'Nombre':'Name'}</label><input type="text" class="input" id="nl-np-name"></div>
+        <div class="field"><label for="nl-np-brand">${L==='es'?'Marca':'Brand'}</label><input type="text" class="input" id="nl-np-brand"></div>
         <div class="dialog-actions">
           <button type="button" class="btn btn-secondary" data-nl-modal-close>${L==='es'?'Cancelar':'Cancel'}</button>
           <button type="button" class="btn btn-primary" id="nl-np-save">${L==='es'?'Agregar':'Add'}</button>
