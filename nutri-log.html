@@ -1,0 +1,2116 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nutri Log</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3E%3Crect width='30' height='30' rx='8' fill='%23C67139'/%3E%3Ctext x='15' y='22' font-size='16' text-anchor='middle'%3E%F0%9F%8C%BF%3C/text%3E%3C/svg%3E">
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<script>window.AIAPPS_APP_ID = 'nutrilog'; window.AIAPPS_TOPBAR = '.nl-sidebar, .nl-topbar'; window.AIAPPS_SHOW_ACCOUNT_WIDGET = true; window.AIAPPS_APP_NAME = 'Nutri Log'; window.AIAPPS_APP_EMOJI = '🌿'; window.AIAPPS_APP_TAGLINE = 'tu ritual de hoy'; window.AIAPPS_APP_ACCENT = '#C67139'; window.AIAPPS_APP_BG = '#f5ead8'; window.AIAPPS_APP_GLOW = 'rgba(198,113,57,0.22)'; window.AIAPPS_LOGIN_SCENE = 'nutrilog-leaf'; window.AIAPPS_LOGIN_LAYOUT = 'right';</script>
+<script src="./supabase-client-app.js"></script>
+<script src="./auth-gate.js"></script>
+<script src="./update-notice.js"></script>
+<script src="https://unpkg.com/lucide@0.454.0/dist/umd/lucide.min.js"></script>
+<style>
+/* ===== Nutri Log — sistema de diseño "Organic" =====
+   Tokens y clases de componente tomados literalmente de
+   design-system/styles.css del paquete de mockups (fuente de verdad visual),
+   más el layout propio de la app (sidebar web / navegación por pestañas).
+   La adaptación a móvil (392px, tab bar inferior) es el último paso — hasta
+   entonces el layout asume escritorio/web. */
+@import url('https://fonts.googleapis.com/css2?family=Caprasimo:wght@400&family=Figtree:wght@400;600;700&display=swap');
+
+:root{
+  --color-bg:#f5ead8; --color-surface:#ebddc5; --color-text:#201e1d;
+  --color-accent:#c67139; --color-accent-2:#7a8a5e;
+  --color-divider: color-mix(in srgb, #201e1d 16%, transparent);
+
+  --color-neutral-100:#f9f4ed; --color-neutral-200:#eee7db; --color-neutral-300:#dcd3c4;
+  --color-neutral-400:#c0b6a5; --color-neutral-500:#a19786; --color-neutral-600:#82796a;
+  --color-neutral-700:#645c50; --color-neutral-800:#474238; --color-neutral-900:#2e2b25;
+
+  --color-accent-100:#fff2eb; --color-accent-200:#ffe1d0; --color-accent-300:#ffc6a5;
+  --color-accent-400:#f6a06b; --color-accent-500:#d67f48; --color-accent-600:#b2622d;
+  --color-accent-700:#8c491a; --color-accent-800:#643312; --color-accent-900:#402310;
+
+  --color-accent-2-100:#f0fae1; --color-accent-2-200:#e1eecc; --color-accent-2-300:#ccdbb2;
+  --color-accent-2-400:#aebf92; --color-accent-2-500:#8fa073; --color-accent-2-600:#728157;
+  --color-accent-2-700:#56633f; --color-accent-2-800:#3d472b; --color-accent-2-900:#272e1b;
+
+  /* Token propio (no viene del paquete de mockups): accessibility-reviewer
+     midió que el texto blanco normal sobre --color-accent/--color-accent-2
+     sólidos falla AA de forma sistemática (3.6:1-3.7:1, se necesita 4.5:1) en
+     toda la app -- pills activas, item de nav activo, botón "hecho", dots de
+     racha. El número grande de la racha (56px) sí pasa por caer en el umbral
+     de texto grande, así que se queda blanco; todo lo demás a tamaño normal
+     usa esta tinta oscura en su lugar. Calculado para pasar 4.5:1 contra
+     AMBOS acentos a la vez (4.88:1 y 4.71:1 respectivamente). */
+  --color-ink-on-accent:#281408;
+
+  --font-heading:"Caprasimo", system-ui, sans-serif;
+  --font-body:"Figtree", system-ui, sans-serif;
+
+  --space-1:4.4px; --space-2:8.8px; --space-3:13.2px; --space-4:17.6px; --space-6:26.4px; --space-8:35.2px;
+  --radius-sm:8px; --radius-md:16px; --radius-lg:28px;
+
+  --shadow-sm:0 1px 2px color-mix(in srgb, #2e2b25 14%, transparent);
+  --shadow-md:0 3px 10px color-mix(in srgb, #2e2b25 16%, transparent);
+  --shadow-lg:0 12px 32px color-mix(in srgb, #2e2b25 22%, transparent);
+
+  /* Escape para el aviso de version nueva: alto real de la barra propia. */
+  --aiapps-chrome-top: 0px;
+}
+
+*,*::before,*::after{ box-sizing:border-box; }
+body{ margin:0; background:var(--color-bg); color:var(--color-text); font-family:var(--font-body); font-size:15px; line-height:1.55; font-weight:400; }
+h1,h2,h3,h4,h5,h6{ font-family:var(--font-heading); font-weight:400; line-height:1.12; letter-spacing:-.015em; margin:0 0 var(--space-2); }
+h1{ font-size:42px; } h2{ font-size:32px; } h3{ font-size:25px; } h4{ font-size:20px; } h5{ font-size:16px; }
+p{ margin:0 0 var(--space-3); }
+a{ color:var(--color-accent); text-underline-offset:3px; }
+img{ display:block; max-width:100%; }
+.text-muted{ color:color-mix(in srgb, var(--color-text) 55%, transparent); }
+:focus{ outline:none; }
+/* --color-accent pasa (3.03:1) contra --color-bg pero NO contra --color-surface
+   (2.69:1, bajo el 3:1 de WCAG 1.4.11) -- y la mayoria de los controles de esta
+   app viven dentro de tarjetas con fondo --color-surface. --color-accent-700
+   pasa contra los dos (5.72:1 y 5.09:1). */
+:focus-visible{ outline:2px solid var(--color-accent-700); outline-offset:2px; }
+.washed{ filter:saturate(.6) contrast(.85) brightness(1.1) opacity(.94); }
+
+.hr{ height:1px; border:0; margin:var(--space-4) 0; background:var(--color-divider); }
+
+.btn{ display:inline-flex; align-items:center; justify-content:center; gap:6px; cursor:pointer; text-decoration:none;
+  font-family:var(--font-heading); font-weight:400; font-size:14px; line-height:1.2; color:var(--color-text);
+  background:transparent; border:1px solid transparent; padding:var(--space-2) calc(var(--space-3) * 1.2); border-radius:999px; }
+.btn svg{ display:block; }
+.btn:disabled{ opacity:.45; cursor:not-allowed; }
+.btn-primary{ background:var(--color-accent); color:#fff; }
+.btn-primary:hover{ background:var(--color-accent-600); }
+.btn-primary:active{ background:var(--color-accent-700); }
+.btn-secondary{ border-color:var(--color-divider); }
+.btn-secondary:hover{ background:color-mix(in srgb, var(--color-text) 7%, transparent); }
+.btn-ghost{ color:var(--color-accent); padding-inline:var(--space-1); }
+.btn-ghost:hover{ background:color-mix(in srgb, var(--color-accent) 10%, transparent); }
+.btn-icon{ width:36px; height:36px; padding:0; }
+.btn-block{ width:100%; margin-top:var(--space-2); }
+
+.field > label{ display:block; font-size:12px; margin-bottom:5px; color:color-mix(in srgb, var(--color-text) 70%, transparent); }
+.input{ width:100%; min-height:36px; padding:6px 14px; font:inherit; font-size:14px; color:var(--color-text); caret-color:var(--color-accent);
+  background:var(--color-surface); border:1px solid var(--color-divider); border-radius:999px; }
+.input:hover{ border-color:color-mix(in srgb, var(--color-text) 45%, transparent); }
+.input:focus-visible{ border-color:var(--color-accent); outline-offset:0; }
+textarea.input{ min-height:80px; border-radius:var(--radius-md); resize:vertical; }
+
+.card{ display:flex; flex-direction:column; gap:var(--space-2); padding:var(--space-3); border-radius:calc(var(--radius-lg) * 1.15); background:var(--color-surface); }
+.card-kicker{ font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--color-accent); }
+.card-title{ font-family:var(--font-heading); font-size:17px; line-height:1.2; }
+.card-body{ margin:0; font-size:13px; opacity:.8; flex:1; }
+.card-meta{ display:flex; align-items:center; gap:6px; font-size:11px; color:color-mix(in srgb, var(--color-text) 50%, transparent); }
+.elev-sm{ box-shadow:var(--shadow-sm); } .elev-md{ box-shadow:var(--shadow-md); } .elev-lg{ box-shadow:var(--shadow-lg); }
+
+.tag{ display:inline-flex; align-items:center; font-size:11px; letter-spacing:.02em; padding:3px 10px; border-radius:calc(var(--radius-md) * .75); }
+.tag-accent{ background:var(--color-accent-100); color:var(--color-accent-800); }
+.tag-accent-2{ background:var(--color-accent-2-100); color:var(--color-accent-2-800); }
+.tag-neutral{ background:var(--color-neutral-100); color:var(--color-neutral-800); }
+.tag-outline{ border:1px solid var(--color-accent); color:var(--color-accent); }
+
+.table{ width:100%; border-collapse:collapse; font-size:14px; }
+.table th{ text-align:left; font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:color-mix(in srgb, var(--color-text) 60%, transparent);
+  padding:var(--space-2); border-bottom:1px solid var(--color-divider); }
+.table td{ padding:var(--space-2); border-bottom:1px solid color-mix(in srgb, var(--color-text) 8%, transparent); }
+.table tbody tr:hover{ background:color-mix(in srgb, var(--color-text) 4%, transparent); }
+
+.dialog-backdrop{ position:fixed; inset:0; z-index:900; display:grid; place-items:center; padding:var(--space-4);
+  background:color-mix(in srgb, var(--color-neutral-900) 50%, transparent); }
+.dialog{ width:min(460px, 100%); max-height:88vh; overflow-y:auto; display:flex; flex-direction:column; gap:var(--space-3);
+  padding:var(--space-4); border-radius:calc(var(--radius-lg) * 1.15); background:var(--color-surface); box-shadow:var(--shadow-lg); }
+.dialog-title{ font-family:var(--font-heading); font-size:20px; }
+.dialog-actions{ display:flex; justify-content:flex-end; gap:var(--space-2); margin-top:var(--space-2); }
+
+/* ===== Layout de la app ===== */
+.nl-shell{ display:flex; min-height:100vh; }
+.nl-sidebar{ width:248px; flex:0 0 248px; background:var(--color-surface); border-right:1px solid var(--color-divider);
+  display:flex; flex-direction:column; padding:var(--space-4) var(--space-3); gap:var(--space-4); }
+.nl-brand{ display:flex; align-items:center; gap:10px; padding:0 var(--space-2); }
+.nl-brand-mark{ width:38px; height:38px; border-radius:999px; background:var(--color-accent); color:#fff;
+  display:flex; align-items:center; justify-content:center; flex:none; }
+.nl-brand-name{ font-family:var(--font-heading); font-size:19px; line-height:1.1; }
+.nl-brand-tag{ font-size:11px; color:var(--color-accent-700); }
+.nl-navlist{ display:flex; flex-direction:column; gap:2px; }
+.nl-navitem{ display:flex; align-items:center; gap:11px; padding:11px 12px; border-radius:var(--radius-md);
+  font-size:14px; font-weight:600; color:var(--color-text); cursor:pointer; background:transparent; border:none; text-align:left; width:100%; font-family:inherit; }
+.nl-navitem:hover{ background:color-mix(in srgb, var(--color-text) 6%, transparent); }
+.nl-navitem[aria-current="page"]{ background:var(--color-accent); color:var(--color-ink-on-accent); }
+.nl-navitem svg{ flex:none; }
+.nl-lang{ margin-top:auto; display:flex; gap:6px; padding:0 var(--space-2); }
+.nl-lang button{ flex:1; }
+
+.nl-main{ flex:1; min-width:0; }
+.nl-topbar{ display:flex; align-items:center; gap:10px; padding:var(--space-4) var(--space-6) 0; }
+.nl-topbar h6{ margin:0; font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--color-accent-700); }
+.nl-content{ max-width:940px; padding:var(--space-4) 40px 80px; margin:0 auto; }
+.nl-col{ display:flex; flex-direction:column; gap:16px; }
+.nl-grid2{ display:grid; grid-template-columns:repeat(auto-fill, minmax(270px,1fr)); gap:16px; }
+
+.nl-disclaimer{ background:var(--color-neutral-200); border-radius:var(--radius-md); padding:12px 14px; font-size:12.5px;
+  color:var(--color-neutral-800); display:flex; gap:8px; align-items:flex-start; }
+.nl-disclaimer svg{ flex:none; margin-top:1px; color:var(--color-accent-700); }
+
+.nl-streak-card{ position:relative; overflow:hidden; background:var(--color-accent); color:#fff; padding:22px; }
+.nl-streak-card::after{ content:""; position:absolute; top:-38px; right:-38px; width:150px; height:150px; border-radius:999px; background:rgba(255,255,255,.12); }
+.nl-streak-num{ font-family:var(--font-heading); font-size:56px; line-height:1; position:relative; }
+.nl-streak-num.pop{ animation:nl-pop .4s ease; }
+@keyframes nl-pop{ 0%{ transform:scale(.7); opacity:0; } 60%{ transform:scale(1.08); } 100%{ transform:scale(1); opacity:1; } }
+.nl-dow{ display:flex; gap:6px; position:relative; margin-top:10px; }
+.nl-dow span{ width:30px; height:30px; border-radius:999px; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; }
+.nl-dow span.done{ background:#fff; color:var(--color-accent-700); }
+.nl-dow span.pending{ background:rgba(255,255,255,.24); color:var(--color-ink-on-accent); }
+
+.nl-quickbtn{ padding:15px; border-radius:999px; font-size:15px; font-weight:700; width:100%; transition:all .16s ease; border:none; cursor:pointer; font-family:var(--font-heading); }
+.nl-quickbtn.pending{ background:var(--color-accent); color:#fff; }
+.nl-quickbtn.done{ background:var(--color-accent-2); color:var(--color-ink-on-accent); }
+
+.nl-bar-track{ height:12px; border-radius:999px; background:var(--color-neutral-300); overflow:hidden; }
+.nl-bar-fill{ height:100%; background:var(--color-accent-2); border-radius:999px; transition:width .4s ease; }
+
+.nl-pill{ display:inline-flex; align-items:center; justify-content:center; gap:7px; padding:10px 16px; border-radius:999px;
+  font-size:13.5px; font-weight:700; transition:all .16s ease; cursor:pointer; border:none; font-family:inherit; }
+.nl-pill.active{ background:var(--color-accent); color:var(--color-ink-on-accent); box-shadow:var(--shadow-sm); }
+.nl-pill.inactive{ background:var(--color-neutral-200); color:var(--color-neutral-700); }
+.nl-pill.active-2{ background:var(--color-accent-2); color:var(--color-ink-on-accent); box-shadow:var(--shadow-sm); }
+
+.nl-toast{ position:fixed; left:50%; bottom:104px; transform:translateX(-50%); z-index:1000; background:var(--color-accent-2-800); color:#fff;
+  padding:11px 20px; border-radius:999px; font-size:13.5px; font-weight:600; display:flex; align-items:center; gap:8px; box-shadow:var(--shadow-lg);
+  animation:nl-toastin .28s ease; }
+@keyframes nl-toastin{ from{ transform:translate(-50%,14px); opacity:0; } to{ transform:translate(-50%,0); opacity:1; } }
+/* accessibility-reviewer confirmo con reducedMotion:'reduce' real que estas
+   dos animaciones (las unicas propias de esta app) seguian corriendo igual.
+   Ninguna carga informacion solo mediante el movimiento -- el valor final
+   (numero de racha, texto del toast) ya esta en el DOM sin la animacion -- asi
+   que desactivarla no pierde nada, solo el efecto visual. */
+@media (prefers-reduced-motion: reduce){
+  .nl-streak-num.pop, .nl-toast{ animation:none; }
+}
+
+.nl-thumb{ width:100%; height:118px; border-radius:var(--radius-md); background-image:repeating-linear-gradient(135deg, var(--color-neutral-300) 0 12px, var(--color-neutral-200) 12px 24px); }
+.nl-thumb-lg{ width:100%; height:170px; border-radius:var(--radius-lg); background-image:repeating-linear-gradient(135deg, var(--color-neutral-300) 0 12px, var(--color-neutral-200) 12px 24px); }
+.nl-logo-slot{ width:42px; height:42px; border-radius:var(--radius-sm); flex:none; background-image:repeating-linear-gradient(135deg, var(--color-neutral-300) 0 8px, var(--color-neutral-200) 8px 16px); }
+
+.nl-effect-row{ display:flex; flex-direction:column; gap:4px; }
+.nl-effect-row .nl-bar-track{ height:8px; }
+.nl-effect-lvl3 .nl-bar-fill{ background:var(--color-accent); }
+.nl-effect-lvl2 .nl-bar-fill, .nl-effect-lvl1 .nl-bar-fill{ background:var(--color-accent-2); }
+
+.nl-switch{ position:relative; display:inline-block; width:46px; height:27px; flex:none; }
+.nl-switch input{ position:absolute; opacity:0; width:0; height:0; }
+.nl-switch .track{ position:absolute; inset:0; background:var(--color-neutral-400); border-radius:999px; transition:background .16s ease; cursor:pointer; }
+.nl-switch .knob{ position:absolute; top:3px; left:3px; width:21px; height:21px; border-radius:999px; background:#fff; transition:transform .16s ease; box-shadow:var(--shadow-sm); }
+.nl-switch input:checked + .track{ background:var(--color-accent); }
+.nl-switch input:checked + .track .knob{ transform:translateX(19px); }
+/* --color-accent daba 2.69:1 contra --color-surface (bajo el 3:1 de WCAG
+   1.4.11 para indicadores no textuales, medido por accessibility-reviewer);
+   --color-accent-700, mas oscuro, da 5.09:1. */
+.nl-switch input:focus-visible + .track{ outline:2px solid var(--color-accent-700); outline-offset:2px; }
+
+.nl-heart{ background:none; border:none; cursor:pointer; color:var(--color-neutral-500); display:flex; padding:2px; }
+.nl-heart.on{ color:var(--color-accent); }
+.nl-star{ background:none; border:none; cursor:pointer; color:var(--color-neutral-400); padding:1px; }
+.nl-star.on{ color:var(--color-accent); }
+
+.nl-scale-btn{ width:38px; height:38px; border-radius:999px; border:1.5px solid var(--color-divider); background:var(--color-surface);
+  font-family:var(--font-heading); font-size:15px; cursor:pointer; }
+.nl-scale-btn.on{ background:var(--color-accent); color:#fff; border-color:var(--color-accent); }
+
+.nl-check{ width:28px; height:28px; border-radius:10px; border:1.5px solid var(--color-divider); background:var(--color-surface);
+  display:flex; align-items:center; justify-content:center; cursor:pointer; flex:none; }
+.nl-check.on{ background:var(--color-accent-2); border-color:var(--color-accent-2); color:#fff; }
+
+.nl-heat{ display:grid; grid-auto-flow:column; grid-template-rows:repeat(7,22px); gap:4px; overflow-x:auto; padding-bottom:4px; }
+.nl-heat span{ width:22px; height:22px; border-radius:5px; display:block; }
+.nl-badge-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(210px,1fr)); gap:14px; }
+
+.nl-empty{ text-align:center; padding:40px 16px; color:var(--color-neutral-600); }
+
+.nl-donutwrap{ display:flex; align-items:center; gap:20px; }
+.nl-donut{ width:120px; height:120px; border-radius:999px; flex:none; }
+.nl-legend{ display:flex; flex-direction:column; gap:6px; font-size:13px; }
+.nl-legend .sw{ width:10px; height:10px; border-radius:3px; display:inline-block; margin-right:6px; }
+
+.nl-onb-dot{ width:8px; height:8px; border-radius:999px; background:var(--color-neutral-400); transition:all .2s ease; }
+.nl-onb-dot.active{ width:26px; border-radius:999px; background:var(--color-accent); }
+.nl-onb-radio{ display:flex; align-items:center; gap:12px; padding:14px 16px; border-radius:var(--radius-md); border:1.5px solid var(--color-divider); cursor:pointer; }
+.nl-onb-radio.on{ border-color:var(--color-accent); background:var(--color-accent-100); }
+.nl-onb-radio .dot{ width:22px; height:22px; border-radius:999px; border:1.5px solid var(--color-divider); flex:none; }
+.nl-onb-radio.on .dot{ border-color:var(--color-accent); background:var(--color-accent); box-shadow:inset 0 0 0 4px var(--color-accent-100); }
+
+.nl-searchpanel{ position:absolute; z-index:40; margin-top:6px; width:min(360px,90vw); background:var(--color-neutral-100); border-radius:var(--radius-lg);
+  box-shadow:var(--shadow-lg); padding:12px; display:flex; flex-direction:column; gap:8px; }
+.nl-searchlist{ max-height:236px; overflow-y:auto; display:flex; flex-direction:column; gap:2px; }
+.nl-searchrow{ display:flex; align-items:center; justify-content:space-between; gap:8px; padding:9px 10px; border-radius:var(--radius-sm); cursor:pointer; font-size:13.5px; }
+.nl-searchrow:hover{ background:var(--color-neutral-200); }
+
+@media (max-width: 760px){
+  .nl-donutwrap{ flex-direction:column; align-items:flex-start; }
+}
+
+/* ===== Móvil (392×812, tab bar inferior) =====
+   Último paso: la navegación pasa de sidebar fija a barra inferior de 5
+   pestañas (Inicio, Recetas, Reto, Análisis, Perfil — mismas 5 del
+   handoff), más una barra superior compacta con el acceso a "Producto y
+   metas", que no entra en la barra inferior. Los dos bloques de
+   navegación existen siempre en el DOM; el media query decide cuál se ve,
+   así un cambio de tamaño de ventana no depende de JS para reajustarse. */
+.nl-mobile-top{ display:none; }
+.nl-tabbar{ display:none; }
+@media (max-width: 768px){
+  :root{ --aiapps-chrome-bottom: 62px; }
+  .nl-shell{ flex-direction:column; min-height:auto; }
+  .nl-sidebar{ display:none; }
+  .nl-mobile-top{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    padding:14px 16px; background:var(--color-surface); border-bottom:1px solid var(--color-divider);
+    position:sticky; top:0; z-index:20;
+  }
+  .nl-mobile-top .brand{ display:flex; align-items:center; gap:9px; }
+  .nl-mobile-top .mark{ width:30px; height:30px; border-radius:999px; background:var(--color-accent); color:#fff; display:flex; align-items:center; justify-content:center; }
+  .nl-mobile-top .name{ font-family:var(--font-heading); font-size:16px; }
+  .nl-mobile-top .lang{ display:flex; gap:5px; }
+  .nl-mobile-top .lang button{ padding:5px 10px; font-size:11.5px; }
+  .nl-content{ max-width:100%; padding:16px 16px calc(78px + env(safe-area-inset-bottom, 0px)); margin:0; }
+  .nl-grid2{ grid-template-columns:1fr; }
+  .nl-badge-grid{ grid-template-columns:repeat(2, 1fr); }
+  .nl-tabbar{
+    display:flex; position:fixed; left:0; right:0; bottom:0; z-index:30;
+    background:var(--color-surface); border-top:1px solid var(--color-divider);
+    padding:6px 4px calc(6px + env(safe-area-inset-bottom, 0px));
+  }
+  .nl-tabitem{
+    flex:1; display:flex; flex-direction:column; align-items:center; gap:2px;
+    padding:6px 2px; border:none; background:none; font-family:inherit; font-size:10px; font-weight:600;
+    color:var(--color-neutral-600); cursor:pointer;
+  }
+  .nl-tabitem[aria-current="page"]{ color:var(--color-accent); }
+}
+</style>
+</head>
+<body>
+
+<div id="nl-app" class="nl-shell"></div>
+<div id="nl-modal-host"></div>
+
+<script>
+"use strict";
+/* ===== Nutri Log — app de seguimiento de consumo de productos alimenticios =====
+   PRD v1.2 (12/08/2026), RF-01 a RF-43. Recreación en vanilla JS del handoff
+   "design_handoff_nutri_log" (Nutri Log.dc.html + design system Organic),
+   siguiendo el mismo patrón de archivo único que el resto de LIPS-HUB
+   (bitacora-mentor.html, StaffGate.html, etc.): sin build step, sin
+   framework, persistencia vía Supabase (tabla app_data) + localStorage.
+
+   Construcción por bloques (ver commits): andamiaje → motor de cálculo →
+   pantallas → integración al hub → pase responsive móvil AL FINAL. */
+
+const SUPA_APP_ID = 'nutri-log';
+
+/* ===== Persistencia (mismo patrón que bitacora-mentor.html) ===== */
+async function getSupabaseSession(){
+  if(!window.supabaseClient) return null;
+  const { data } = await window.supabaseClient.auth.getSession();
+  return data && data.session ? data.session : null;
+}
+function scopedKey(key, userId){ return userId ? `${key}::${userId}` : key; }
+function migrateLegacyCache(baseKey, scoped){
+  if(scoped === baseKey) return;
+  if(localStorage.getItem(scoped) !== null) return;
+  const legacy = localStorage.getItem(baseKey);
+  if(legacy !== null) localStorage.setItem(scoped, legacy);
+}
+let cloudSyncReady = false;
+const STORAGE_KEY = 'nutrilog-data';
+const storageAdapter = {
+  async get(key){
+    const session = await getSupabaseSession();
+    if(session){
+      const localKey = scopedKey(key, session.user.id);
+      migrateLegacyCache(key, localKey);
+      try{
+        const { data, error } = await window.supabaseClient
+          .from('app_data').select('data')
+          .eq('app_id', SUPA_APP_ID).eq('user_id', session.user.id)
+          .maybeSingle();
+        if(error) throw error;
+        if(data && data.data){
+          const value = JSON.stringify(data.data);
+          localStorage.setItem(localKey, value);
+          return { key, value };
+        }
+        const raw = localStorage.getItem(localKey);
+        return raw ? { key, value: raw } : null;
+      }catch(e){
+        console.warn('[Nutri Log] No se pudo leer de la nube, usando caché local:', e);
+        const raw = localStorage.getItem(localKey);
+        return raw ? { key, value: raw } : null;
+      }
+    }
+    return null;
+  },
+  async set(key, value){
+    const session = await getSupabaseSession();
+    if(!session) return { key, value };
+    localStorage.setItem(scopedKey(key, session.user.id), value);
+    if(!cloudSyncReady) return { key, value };
+    try{
+      const { error } = await window.supabaseClient
+        .from('app_data').upsert(
+          { user_id: session.user.id, app_id: SUPA_APP_ID, data: JSON.parse(value), updated_at: new Date().toISOString() },
+          { onConflict: 'user_id,app_id' }
+        );
+      if(error) throw error;
+    }catch(e){
+      console.warn('[Nutri Log] Guardado local OK, pero falló la sincronización con la nube:', e);
+    }
+    return { key, value };
+  }
+};
+
+/* ===== Helpers ===== */
+function esc(s){
+  const d = document.createElement('div');
+  d.textContent = s == null ? '' : String(s);
+  return d.innerHTML.replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+function uid(p){ return (p||'id') + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+/* Zona horaria fija America/Santo_Domingo para el corte de dia (9.10 del PRD),
+   mismo criterio que Hourglass: la racha y el check-in del reto no deben
+   depender de en que zona horaria este el navegador de quien use la app. */
+const NL_TZ = 'America/Santo_Domingo';
+function nlToday(){
+  // en-CA da YYYY-MM-DD directo, formato ISO de fecha sin hora.
+  return new Intl.DateTimeFormat('en-CA', { timeZone: NL_TZ, year:'numeric', month:'2-digit', day:'2-digit' }).format(new Date());
+}
+function nlDaysAgo(n){
+  const d = new Date(nlToday() + 'T12:00:00Z');
+  d.setUTCDate(d.getUTCDate() - n);
+  return d.toISOString().slice(0,10);
+}
+function fmtDate(iso, lang){
+  const d = new Date(iso + 'T00:00:00');
+  return d.toLocaleDateString(lang === 'en' ? 'en-US' : 'es-ES', { day:'2-digit', month:'short', year:'numeric' });
+}
+function fmtTime(hhmm){ return hhmm; }
+let toastTimer = null;
+function showToast(msg, icon){
+  const host = document.getElementById('nl-toast-host') || (() => {
+    const h = document.createElement('div'); h.id = 'nl-toast-host'; document.body.appendChild(h); return h;
+  })();
+  clearTimeout(toastTimer);
+  host.innerHTML = `<div class="nl-toast">${icon ? `<i data-lucide="${icon}" style="width:16px;height:16px"></i>` : ''}<span>${esc(msg)}</span></div>`;
+  icons();
+  toastTimer = setTimeout(() => { host.innerHTML = ''; }, 2600);
+}
+function icons(){
+  if(window.lucide){ try{ window.lucide.createIcons({ attrs: { 'stroke-width': 2.75 } }); }catch(e){} }
+}
+
+/* ===== i18n (textos tomados del handoff, T = { es:{...}, en:{...} }) ===== */
+const T = {
+  es: {
+    nav: { home:"Inicio", recipes:"Recetas", challenge:"Reto", analytics:"Análisis", profile:"Perfil", product:"Producto y metas" },
+    disclaimer: "Estos efectos son referenciales, se basan en la información de la marca y no constituyen consejo médico.",
+    home: { hi:"Buenos días", title:"¿Cómo va tu día?", streakLabel:"Racha actual", days:"días seguidos",
+      nextLabel:"Próximo horario sugerido", weekTitle:"Semana en curso",
+      fullForm:"Registrar con detalle", loggedYes:"Ya registraste tu consumo de hoy", loggedNo:"Aún no registras consumo hoy",
+      quickYes:"Registrado · ver detalle", quickNo:"Ya lo tomé", noProduct: "Agrega un producto para empezar." },
+    log: { title:"Registrar consumo", product:"Producto", time:"Hora de inicio", type:"Tipo de consumo",
+      recipe:"Receta usada (opcional)", note:"Nota", notePh:"Ej. lo tomé antes de entrenar", save:"Guardar registro",
+      caffeine:"cafeína", hot:"Caliente", cold:"Frío / helado", blend:"Licuado", other:"Otro", none:"Ninguna", edit:"Editar registro", delete:"Eliminar" },
+    recipes: { title:"Recetas", new:"Nueva", search:"Buscar receta o ingrediente", all:"Todas", fav:"Favoritas" },
+    detail: { kicker:"Receta", effects:"Perfil de efectos calculado", ingredients:"Ingredientes adicionales", steps:"Preparación",
+      rate:"¿Qué tal quedó?", logThis:"Registrar consumo con esta receta", fav:"Favorita", notFav:"Marcar favorita", edit:"Editar", delete:"Eliminar receta" },
+    nutri: { title:"Nutrición", sub:"Calculado a partir del producto base más los ingredientes de la receta.", perServing:"Por porción preparada",
+      kcal:"kcal", protein:"Proteína", carbs:"Carbohidratos", fat:"Grasas", breakdown:"Desglose por ingrediente", total:"Total",
+      today:"Hoy", week:"Promedio semanal", month:"Acumulado del mes",
+      note:"Valores estimados a partir de la ficha del producto y de tablas nutricionales estándar de los ingredientes; pueden variar según marca y medida real.",
+      empty:"Ninguna receta coincide con tu búsqueda." },
+    analytics: { title:"Análisis", heatmap:"Días activos · últimas 8 semanas", weekly:"Frecuencia por día de la semana",
+      types:"Tipo de consumo", hours:"Horario de consumo", effects:"Efectos acumulados del mes", history:"Historial de consumo",
+      less:"menos", more:"más", thDate:"Fecha", thTime:"Hora", thType:"Tipo", thRecipe:"Receta", exportCsv:"Exportar CSV", empty:"Todavía no hay registros." },
+    challenge: { title:"Reto de 14 días", plan:"Ver plan", todayPlan:"Plan de hoy", checkin:"¿Cómo te sentiste hoy?",
+      checkinSub:"Escala de 1 a 5. Opcional y editable después.", habit:"Hábito complementario", reflection:"Reflexión del día",
+      save:"Guardar check-in", disclaimer:"La comparación antes/después del reto se basa en tu autopercepción, no en una medición clínica.",
+      start:"Iniciar reto de 14 días", none:"No tienes un reto activo.", finish:"Finalizar y ver resumen",
+      summary:"Resumen del reto", day1:"Día 1", dayN:"Día 14", focus:"Enfoque", digestion:"Digestión", mood:"Ánimo", skin:"Piel",
+      r1:"¿Cómo te sentiste antes y después de tu consumo hoy?", r2:"¿Cuál fue un pequeño logro de hoy?", badge:"¡Insignia de reto completado desbloqueada!" },
+    template: { title:"Plantilla del reto", days:"días", duplicate:"Duplicar plantilla", day:"Día",
+      colsHelp:"Renombra las columnas para reutilizar esta plantilla con otro producto. Las filas se mantienen.",
+      note:"Secuencia ilustrativa editable: rota las 3 recetas y los 2 momentos sugeridos por la marca. No es una prescripción oficial.",
+      editOn:"Listo", editOff:"Editar columnas" },
+    profile: { since:"Registrando desde", freeze:"Días libres disponibles", freezeSub:"congela tu racha sin perderla",
+      badges:"Insignias", locked:"Bloqueada", best:"Mejor racha" },
+    onb: { skip:"Omitir", start:"Empezar" },
+    product: { title:"Productos y metas", photo:"imagen o logo del producto", compounds:"Compuestos y efectos",
+      metrics:"¿Qué quieres medir?", metricsSub:"Puedes combinar más de una métrica para el mismo producto.",
+      goal:"Meta", reminders:"Recordatorios", add:"Agregar producto", edit:"Editar producto", archive:"Archivar",
+      metricStreak:"Racha de días", metricFrequency:"Frecuencia", metricTime:"Horario de consumo",
+      goalStreak:"Racha objetivo (días)", goalFrequency:"Veces por semana" }
+  },
+  en: {
+    nav: { home:"Home", recipes:"Recipes", challenge:"Challenge", analytics:"Analytics", profile:"Profile", product:"Product & goals" },
+    disclaimer: "These effects are informational, based on the brand's own material, and are not medical advice.",
+    home: { hi:"Good morning", title:"How's your day going?", streakLabel:"Current streak", days:"days in a row",
+      nextLabel:"Next suggested time", weekTitle:"This week",
+      fullForm:"Log with details", loggedYes:"Today's intake is logged", loggedNo:"No intake logged today",
+      quickYes:"Logged · see details", quickNo:"I had it", noProduct: "Add a product to get started." },
+    log: { title:"Log intake", product:"Product", time:"Start time", type:"How you had it",
+      recipe:"Recipe used (optional)", note:"Note", notePh:"e.g. had it before training", save:"Save entry",
+      caffeine:"caffeine", hot:"Hot", cold:"Iced", blend:"Blended", other:"Other", none:"None", edit:"Edit entry", delete:"Delete" },
+    recipes: { title:"Recipes", new:"New", search:"Search recipe or ingredient", all:"All", fav:"Favorites" },
+    detail: { kicker:"Recipe", effects:"Calculated effect profile", ingredients:"Extra ingredients", steps:"Preparation",
+      rate:"How was it?", logThis:"Log intake with this recipe", fav:"Favorite", notFav:"Add to favorites", edit:"Edit", delete:"Delete recipe" },
+    nutri: { title:"Nutrition", sub:"Calculated from the base product plus the recipe's own ingredients.", perServing:"Per prepared serving",
+      kcal:"kcal", protein:"Protein", carbs:"Carbs", fat:"Fat", breakdown:"Ingredient breakdown", total:"Total",
+      today:"Today", week:"Weekly average", month:"Month to date",
+      note:"Estimated from the product sheet and standard nutrition tables for each ingredient; actual values vary by brand and measure.",
+      empty:"No recipe matches your search." },
+    analytics: { title:"Analytics", heatmap:"Active days · last 8 weeks", weekly:"Frequency by weekday",
+      types:"Intake type", hours:"Time of day", effects:"Accumulated effects this month", history:"Intake history",
+      less:"less", more:"more", thDate:"Date", thTime:"Time", thType:"Type", thRecipe:"Recipe", exportCsv:"Export CSV", empty:"No entries yet." },
+    challenge: { title:"14-day challenge", plan:"View plan", todayPlan:"Today's plan", checkin:"How did you feel today?",
+      checkinSub:"Scale of 1 to 5. Optional and editable later.", habit:"Companion habit", reflection:"Today's reflection",
+      save:"Save check-in", disclaimer:"The before/after comparison is based on your own self-report, not a clinical measurement.",
+      start:"Start 14-day challenge", none:"You don't have an active challenge.", finish:"Finish and see summary",
+      summary:"Challenge summary", day1:"Day 1", dayN:"Day 14", focus:"Focus", digestion:"Digestion", mood:"Mood", skin:"Skin",
+      r1:"How did you feel before and after your intake today?", r2:"What was one small win today?", badge:"Challenge-completed badge unlocked!" },
+    template: { title:"Challenge template", days:"days", duplicate:"Duplicate template", day:"Day",
+      colsHelp:"Rename the columns to reuse this template with another product. Rows stay as they are.",
+      note:"Editable illustrative sequence: rotates the 3 recipes and the 2 times of day the brand suggests. Not an official prescription.",
+      editOn:"Done", editOff:"Edit columns" },
+    profile: { since:"Tracking since", freeze:"Streak freezes available", freezeSub:"pause a day without losing your streak",
+      badges:"Badges", locked:"Locked", best:"Best streak" },
+    onb: { skip:"Skip", start:"Get started" },
+    product: { title:"Products & goals", photo:"product image or logo", compounds:"Compounds & effects",
+      metrics:"What do you want to track?", metricsSub:"You can combine more than one metric for the same product.",
+      goal:"Goal", reminders:"Reminders", add:"Add product", edit:"Edit product", archive:"Archive",
+      metricStreak:"Day streak", metricFrequency:"Frequency", metricTime:"Time of day",
+      goalStreak:"Target streak (days)", goalFrequency:"Times per week" }
+  }
+};
+const EFFECT_LABELS = {
+  energy: { es:'Energía', en:'Energy' }, focus: { es:'Enfoque', en:'Focus' },
+  digestive: { es:'Salud digestiva', en:'Digestive health' }, immune: { es:'Inmunidad', en:'Immune support' },
+  stress: { es:'Resistencia al estrés', en:'Stress resilience' }, skin: { es:'Piel / articulaciones', en:'Skin / joints' },
+  mood: { es:'Ánimo', en:'Mood' }
+};
+const CONSUMPTION_TYPES = ['hot','cold','blend','other'];
+
+/* ===== Datos semilla (RF-03, RF-12, 7, 7.1, 8, 8.4) =====
+   Modelo por entidades del PRD §10: Compound (biblioteca reutilizable),
+   Product + ProductCompound, Recipe (+ ingredientes propios con su propio
+   aporte nutricional/cafeína), ChallengeTemplate + columnas + valores. */
+const SEED_COMPOUNDS = [
+  { id:'ashwagandha', name:{es:"Ashwagandha (KSM-66)",en:"Ashwagandha (KSM-66)"}, effects:['stress'], caffeineMg:0 },
+  { id:'lionsmane', name:{es:"Lion's Mane",en:"Lion's Mane"}, effects:['focus'], caffeineMg:0 },
+  { id:'cordyceps', name:{es:"Cordyceps",en:"Cordyceps"}, effects:['energy'], caffeineMg:0 },
+  { id:'turkeytail', name:{es:"Turkey Tail",en:"Turkey Tail"}, effects:['digestive','immune'], caffeineMg:0 },
+  { id:'collagen', name:{es:"Colágeno hidrolizado",en:"Hydrolyzed collagen"}, effects:['skin'], caffeineMg:0 },
+  { id:'coffee', name:{es:"Extracto de café",en:"Coffee extract"}, effects:['energy'], caffeineMg:45 },
+  { id:'cocoa', name:{es:"Cacao en polvo",en:"Cocoa powder"}, effects:['mood'], caffeineMg:3 },
+  { id:'cinnamon', name:{es:"Canela",en:"Cinnamon"}, effects:['digestive'], caffeineMg:0 },
+  { id:'almondbutter', name:{es:"Mantequilla de almendra",en:"Almond butter"}, effects:['energy'], caffeineMg:0 },
+  { id:'banana', name:{es:"Plátano",en:"Banana"}, effects:['mood'], caffeineMg:0 }
+];
+const SEED_PRODUCTS = [
+  { id:'urth', name:"Urth Superfood Brew", brand:"Urth Labs", category:{es:"Bebida funcional / superfood en polvo",en:"Functional drink / superfood powder"},
+    servingDefault:{es:"1 porción (1 cucharada)",en:"1 serving (1 scoop)"}, archived:false,
+    compounds:[ {compoundId:'ashwagandha',amount:{es:'',en:''}}, {compoundId:'lionsmane',amount:{es:'',en:''}}, {compoundId:'cordyceps',amount:{es:'',en:''}},
+      {compoundId:'turkeytail',amount:{es:'',en:''}}, {compoundId:'collagen',amount:{es:'',en:''}},
+      {compoundId:'coffee',amount:{es:'45mg cafeína',en:'45mg caffeine'}} ] }
+];
+const SEED_RECIPES = [
+  { id:'mocha', productId:'urth', name:{es:"Collagen Iced Mocha",en:"Collagen Iced Mocha"}, consumptionType:'cold', origin:'preloaded',
+    extraCompounds:[ {compoundId:'cocoa',amount:'1 cdta'} ],
+    extraIngredients:[
+      {es:"60 ml agua caliente",en:"60 ml hot water", nutri:{kcal:0,p:0,c:0,f:0}},
+      {es:"180 ml leche de avena",en:"180 ml oat milk", nutri:{kcal:110,p:2,c:17,f:4}},
+      {es:"1 cdta cacao en polvo",en:"1 tsp cocoa powder", nutri:{kcal:12,p:1,c:3,f:.5}},
+      {es:"1 cdta jarabe de arce",en:"1 tsp maple syrup", nutri:{kcal:17,p:0,c:4,f:0}},
+      {es:"Hielo",en:"Ice", nutri:{kcal:0,p:0,c:0,f:0}}
+    ],
+    steps:{ es:["Disuelve la porción en el agua caliente.","Agrega el cacao y el jarabe de arce; mezcla.","Llena el vaso con hielo y la leche de avena.","Vierte la base y revuelve."],
+      en:["Dissolve the serving in the hot water.","Add cocoa and maple syrup; stir.","Fill a glass with ice and oat milk.","Pour the base over and stir."] } },
+  { id:'latte', productId:'urth', name:{es:"Adaptogen Latte",en:"Adaptogen Latte"}, consumptionType:'hot', origin:'preloaded',
+    extraCompounds:[ {compoundId:'cinnamon',amount:'1 pizca'} ],
+    extraIngredients:[
+      {es:"200 ml leche de almendra vaporizada",en:"200 ml steamed almond milk", nutri:{kcal:30,p:1,c:1,f:2.5}},
+      {es:"1 pizca de canela",en:"A pinch of cinnamon", nutri:{kcal:2,p:0,c:.6,f:0}},
+      {es:"1/2 cdta extracto de vainilla",en:"1/2 tsp vanilla extract", nutri:{kcal:6,p:0,c:.5,f:0}}
+    ],
+    steps:{ es:["Disuelve la porción en un poco de agua caliente.","Vaporiza o bate la leche de almendra.","Une ambas, agrega canela y vainilla."],
+      en:["Dissolve the serving in a little hot water.","Steam or froth the almond milk.","Combine, then add cinnamon and vanilla."] } },
+  { id:'smoothie', productId:'urth', name:{es:"Mood-Boost Smoothie",en:"Mood-Boost Smoothie"}, consumptionType:'blend', origin:'preloaded',
+    extraCompounds:[ {compoundId:'banana',amount:'1 unidad'}, {compoundId:'almondbutter',amount:'1 cda'} ],
+    extraIngredients:[
+      {es:"1 plátano congelado",en:"1 frozen banana", nutri:{kcal:105,p:1.3,c:27,f:.4}},
+      {es:"200 ml leche de almendra",en:"200 ml almond milk", nutri:{kcal:30,p:1,c:1,f:2.5}},
+      {es:"1 cda mantequilla de almendra",en:"1 tbsp almond butter", nutri:{kcal:98,p:3.4,c:3,f:9}},
+      {es:"Hielo",en:"Ice", nutri:{kcal:0,p:0,c:0,f:0}}
+    ],
+    steps:{ es:["Coloca todo en la licuadora.","Licúa 45 segundos hasta que quede cremoso.","Sirve de inmediato."],
+      en:["Add everything to the blender.","Blend 45 seconds until creamy.","Serve immediately."] } }
+];
+const NUTRI_BASE = { es:"1 porción del producto", en:"1 serving of the product", kcal:45, p:10, c:1, f:.5 };
+/* Plan de 14 dias de Urth (8.4): [recetaId, momento]. 'fav' = receta favorita
+   de la usuaria (dia 14, a eleccion), resuelto en tiempo de ejecucion. */
+const SEED_PLAN14 = [
+  ['latte','am'], ['mocha','pm'], ['smoothie','am'], ['latte','pm'], ['mocha','am'],
+  ['smoothie','pm'], ['latte','am'], ['mocha','pm'], ['smoothie','am'], ['latte','pm'],
+  ['mocha','am'], ['smoothie','pm'], ['latte','am'], ['fav','free']
+];
+const SEED_TEMPLATE_COLUMNS = [
+  { id:'recipe', label:{es:"Receta",en:"Recipe"} },
+  { id:'time', label:{es:"Hora sugerida",en:"Suggested time"} },
+  { id:'companion', label:{es:"Complemento",en:"Companion habit"} }
+];
+const MOMENT_LABEL = { am:{es:"Mañana",en:"Morning"}, pm:{es:"Tarde",en:"Afternoon"}, free:{es:"A elección",en:"Your choice"} };
+const COMPANION_HABITS = {
+  es:["Caminata 10 min + desayuno proteico","Journaling + respiración 5 min","Caminata 10 min + desayuno proteico","Journaling + respiración 5 min",
+    "Caminata 10 min + desayuno proteico","Journaling + respiración 5 min","Caminata 10 min + desayuno proteico","Journaling + respiración 5 min",
+    "Caminata 10 min + desayuno proteico","Journaling + respiración 5 min","Caminata 10 min + desayuno proteico","Journaling + respiración 5 min",
+    "Caminata 10 min + desayuno proteico","Foto comparativa Día 1 vs. Día 14 + reflexión final"],
+  en:["10-min walk + protein breakfast","Journaling + 5-min breathing","10-min walk + protein breakfast","Journaling + 5-min breathing",
+    "10-min walk + protein breakfast","Journaling + 5-min breathing","10-min walk + protein breakfast","Journaling + 5-min breathing",
+    "10-min walk + protein breakfast","Journaling + 5-min breathing","10-min walk + protein breakfast","Journaling + 5-min breathing",
+    "10-min walk + protein breakfast","Day 1 vs Day 14 comparison photo + final reflection"]
+};
+function buildSeedTemplateValues(){
+  const values = {};
+  SEED_PLAN14.forEach((row, i) => {
+    const day = i + 1;
+    values[day] = {
+      recipe: row[0],
+      time: { es: MOMENT_LABEL[row[1]].es, en: MOMENT_LABEL[row[1]].en },
+      companion: { es: COMPANION_HABITS.es[i], en: COMPANION_HABITS.en[i] }
+    };
+  });
+  return values;
+}
+const SEED_TEMPLATE = {
+  id:'urth-14', productId:'urth', name:{es:"Reto de 14 días · Urth",en:"14-day challenge · Urth"}, durationDays:14,
+  columns: SEED_TEMPLATE_COLUMNS.map(c => ({...c})), values: buildSeedTemplateValues()
+};
+const BADGE_DEFS = [
+  { id:'first', icon:'footprints', name:{es:"Primer registro",en:"First entry"}, desc:{es:"Tu primer consumo registrado",en:"Your first logged serving"} },
+  { id:'streak7', icon:'flame', name:{es:"7 días de racha",en:"7-day streak"}, desc:{es:"Una semana sin fallar",en:"A full week, no misses"} },
+  { id:'recipes3', icon:'utensils', name:{es:"3 recetas distintas",en:"3 different recipes"}, desc:{es:"Probaste todo el recetario",en:"You tried the whole book"} },
+  { id:'early', icon:'sunrise', name:{es:"Madrugadora",en:"Early riser"}, desc:{es:"10 consumos antes de las 9 AM",en:"10 servings before 9 AM"} },
+  { id:'challenge', icon:'trophy', name:{es:"Reto de 14 días",en:"14-day challenge"}, desc:{es:"Completa el reto guiado",en:"Finish the guided challenge"} },
+  { id:'streak30', icon:'gem', name:{es:"30 días de racha",en:"30-day streak"}, desc:{es:"Un mes completo",en:"A whole month"} },
+  { id:'ownrecipe', icon:'notebook-pen', name:{es:"Receta propia",en:"Own recipe"}, desc:{es:"Creaste tu primera receta",en:"You created your first recipe"} },
+  { id:'double', icon:'moon', name:{es:"Doble dosis",en:"Double serving"}, desc:{es:"Mañana y tarde el mismo día",en:"Morning and afternoon in one day"} },
+  { id:'perfectweek', icon:'calendar-check', name:{es:"Semana perfecta",en:"Perfect week"}, desc:{es:"Cumpliste tu meta 7 de 7 días",en:"Goal met 7 of 7 days"} },
+  { id:'favorite', icon:'heart', name:{es:"Tu favorita",en:"Your favorite"}, desc:{es:"Marcaste una receta como favorita",en:"You favorited a recipe"} },
+  { id:'nofreeze', icon:'snowflake', name:{es:"Sin congelar",en:"No freeze"}, desc:{es:"20 días sin usar un día libre",en:"20 days without a streak freeze"} },
+  { id:'fivestars', icon:'sparkles', name:{es:"Cinco estrellas",en:"Five stars"}, desc:{es:"Valoraste 5 recetas preparadas",en:"You rated 5 prepared recipes"} },
+  { id:'secondproduct', icon:'package-open', name:{es:"Segundo producto",en:"Second product"}, desc:{es:"Agregaste otro producto al sistema",en:"You added another product"} },
+  { id:'afternoon', icon:'sunset', name:{es:"Ritual de tarde",en:"Afternoon ritual"}, desc:{es:"10 consumos después de las 4 PM",en:"10 servings after 4 PM"} }
+];
+
+/* ===== Estado ===== */
+let state = null;
+function defaultState(){
+  return {
+    lang: 'es',
+    screen: 'home',
+    createdAt: nlToday(),
+    onboardingDone: false, onbStep: 0, onbPicks: {},
+    activeProductId: 'urth',
+    compounds: SEED_COMPOUNDS.map(c => ({...c})),
+    products: SEED_PRODUCTS.map(p => ({...p, compounds: p.compounds.map(c => ({...c}))})),
+    recipes: SEED_RECIPES.map(r => ({
+      ...r, favorite:false, rating:null,
+      extraCompounds: r.extraCompounds.map(c => ({...c})),
+      extraIngredients: r.extraIngredients.map(i => ({...i}))
+    })),
+    trackingConfigs: [ { id:uid('tc'), productId:'urth', metrics:{streak:true,frequency:true,time:false},
+      goal:{streakTarget:14, frequencyTarget:5} } ],
+    logs: [],
+    gamification: { streakCurrent:0, streakMax:0, freezesAvailable:2, freezesTotal:2, badgeIds:[] },
+    challengeTemplates: [ { ...SEED_TEMPLATE, columns:SEED_TEMPLATE.columns.map(c=>({...c})), values: JSON.parse(JSON.stringify(SEED_TEMPLATE.values)) } ],
+    challenges: [],
+    reminderPref: { enabled:false },
+    ui: { logRecipeId:null, logRecipePanelOpen:false, logTime:'08:00', logType:'hot', logNote:'', recipeFilter:'all', recipeQuery:'',
+      openRecipeId:null, nutriRecipeId:null, nutriOpen:false, nutriQuery:'', editingProductId:null, editCols:false }
+  };
+}
+
+/* ===== Motor de calculo de efectos (RF-15, RF-16, RF-17) =====
+   Se implementa como funcion pura reutilizable (11. arquitectura sugerida):
+   recibe una lista de compuestos con sus tags y devuelve el perfil agregado.
+   Regla de intensidad (documentada en 8.3 del PRD): mas ingredientes activos
+   en una categoria = mayor intensidad. 1 aporte = baja, 2 = media, 3+ = alta. */
+function computeEffectProfile(recipe){
+  const product = state.products.find(p => p.id === recipe.productId);
+  const allCompoundRefs = (product ? product.compounds : []).concat(recipe.extraCompounds || []);
+  const byEffect = {};
+  allCompoundRefs.forEach(ref => {
+    const compound = state.compounds.find(c => c.id === ref.compoundId);
+    if(!compound) return;
+    (compound.effects || []).forEach(effectKey => {
+      byEffect[effectKey] = (byEffect[effectKey] || 0) + 1;
+    });
+  });
+  const rows = Object.keys(byEffect).map(key => {
+    const count = byEffect[key];
+    const lvl = count >= 3 ? 3 : count === 2 ? 2 : 1;
+    // pct solo para el ancho de la barra visual, no es un valor clinico.
+    const pct = Math.min(100, 40 + count * 22);
+    return { key, label: EFFECT_LABELS[key] || {es:key,en:key}, count, lvl, pct };
+  }).sort((a,b) => b.count - a.count);
+  return rows;
+}
+function computeCaffeine(recipe){
+  const product = state.products.find(p => p.id === recipe.productId);
+  const allCompoundRefs = (product ? product.compounds : []).concat(recipe.extraCompounds || []);
+  let mg = 0;
+  allCompoundRefs.forEach(ref => {
+    const compound = state.compounds.find(c => c.id === ref.compoundId);
+    if(compound) mg += compound.caffeineMg || 0;
+  });
+  return mg;
+}
+function computeNutrition(recipeId){
+  const rows = [ { ...NUTRI_BASE } ];
+  const recipe = state.recipes.find(r => r.id === recipeId);
+  if(recipe){
+    (recipe.extraIngredients || []).forEach(ing => rows.push({ es:ing.es, en:ing.en, ...ing.nutri }));
+  }
+  const total = rows.reduce((a,r) => ({ kcal:a.kcal+r.kcal, p:a.p+r.p, c:a.c+r.c, f:a.f+r.f }), { kcal:0,p:0,c:0,f:0 });
+  return { rows, total };
+}
+
+/* ===== Motor de racha y metas (RF-21, RF-24, RF-26, RF-27, RF-28, 9.2) ===== */
+function logsForProduct(productId){
+  return state.logs.filter(l => l.productId === productId).sort((a,b) => a.startedAt < b.startedAt ? 1 : -1);
+}
+function loggedToday(productId){
+  const today = nlToday();
+  return state.logs.some(l => l.productId === productId && l.startedAt.slice(0,10) === today);
+}
+/* Racha real: cuenta dias consecutivos con registro terminando hoy o ayer
+   (si hoy aun no se registro, la racha "sigue viva" hasta el corte de dia).
+   Un dia sin registro NI dia libre usado corta la racha (RF-21). Los dias
+   libres (9.2) cubren un hueco sin romperla, y se descuentan de
+   freezesAvailable la primera vez que se calculan sobre ese hueco. */
+function recomputeStreak(productId){
+  const daysWithLog = new Set(state.logs.filter(l => l.productId === productId).map(l => l.startedAt.slice(0,10)));
+  if(!daysWithLog.size) return { current:0, longestFound:0 };
+  let current = 0;
+  let cursor = loggedToday(productId) ? 0 : 1; // si hoy no hay registro, se evalua desde ayer
+  const usedFreezeDays = new Set(state.gamification.freezeDaysUsed || []);
+  while(true){
+    const day = nlDaysAgo(cursor);
+    if(daysWithLog.has(day)){ current++; cursor++; continue; }
+    if(usedFreezeDays.has(day)){ current++; cursor++; continue; }
+    break;
+  }
+  // Racha mas larga historica: barrido simple sobre los dias con registro.
+  const sortedDays = [...daysWithLog].sort();
+  let longest = 0, run = 0, prev = null;
+  sortedDays.forEach(day => {
+    if(prev){
+      const diff = (new Date(day) - new Date(prev)) / 86400000;
+      run = diff === 1 ? run + 1 : 1;
+    } else run = 1;
+    longest = Math.max(longest, run);
+    prev = day;
+  });
+  return { current, longestFound: longest };
+}
+function refreshGamification(){
+  const { current, longestFound } = recomputeStreak(state.activeProductId);
+  state.gamification.streakCurrent = current;
+  state.gamification.streakMax = Math.max(state.gamification.streakMax || 0, longestFound, current);
+  refreshBadges();
+}
+function weekProgress(productId){
+  const cfg = state.trackingConfigs.find(t => t.productId === productId);
+  const target = cfg && cfg.goal ? (cfg.goal.frequencyTarget || 5) : 5;
+  const start = nlDaysAgo(6);
+  const count = state.logs.filter(l => l.productId === productId && l.startedAt.slice(0,10) >= start).length;
+  return { count, target, pct: Math.min(100, Math.round((count/target)*100)) };
+}
+function refreshBadges(){
+  const g = state.gamification;
+  const have = new Set(g.badgeIds || []);
+  const logs = state.logs;
+  const check = (id, cond) => { if(cond && !have.has(id)) have.add(id); };
+  check('first', logs.length >= 1);
+  check('streak7', g.streakCurrent >= 7 || g.streakMax >= 7);
+  check('streak30', g.streakCurrent >= 30 || g.streakMax >= 30);
+  check('recipes3', new Set(logs.filter(l=>l.recipeId).map(l=>l.recipeId)).size >= 3);
+  check('early', logs.filter(l => +l.startedAt.slice(11,13) < 9).length >= 10);
+  check('afternoon', logs.filter(l => +l.startedAt.slice(11,13) >= 16).length >= 10);
+  check('ownrecipe', state.recipes.some(r => r.origin === 'user'));
+  check('favorite', state.recipes.some(r => r.favorite));
+  check('fivestars', state.recipes.filter(r => r.rating >= 1).length >= 5);
+  check('secondproduct', state.products.filter(p => !p.archived).length >= 2);
+  const byDay = {};
+  logs.forEach(l => { const d = l.startedAt.slice(0,10); (byDay[d] = byDay[d]||[]).push(l); });
+  check('double', Object.values(byDay).some(dayLogs => dayLogs.length >= 2));
+  check('challenge', state.challenges.some(c => c.status === 'completed'));
+  g.badgeIds = [...have];
+}
+
+/* ===== Carga / guardado ===== */
+async function loadData(){
+  try{
+    const res = await storageAdapter.get(STORAGE_KEY);
+    if(res && res.value){
+      const loaded = JSON.parse(res.value);
+      state = Object.assign(defaultState(), loaded);
+      // Merge profundo minimo de las listas para no perder campos nuevos si el
+      // esquema crecio despues de que la persona ya tenia datos guardados.
+      ['compounds','products','recipes','trackingConfigs','logs','challengeTemplates','challenges'].forEach(k => {
+        if(!Array.isArray(state[k])) state[k] = defaultState()[k];
+      });
+      state.gamification = Object.assign(defaultState().gamification, loaded.gamification || {});
+      state.ui = Object.assign(defaultState().ui, loaded.ui || {});
+      state.reminderPref = Object.assign(defaultState().reminderPref, loaded.reminderPref || {});
+      if(!loaded.onbPicks) state.onbPicks = {};
+    } else {
+      state = defaultState();
+    }
+  }catch(e){
+    console.warn('[Nutri Log] No se pudo interpretar el estado guardado, se usa el estado semilla:', e);
+    state = defaultState();
+  }
+  refreshGamification();
+  cloudSyncReady = true;
+  render();
+}
+let saveTimer = null;
+function saveData(){
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(async () => {
+    try{ await storageAdapter.set(STORAGE_KEY, JSON.stringify(state)); }
+    catch(e){ console.warn('[Nutri Log] Fallo al guardar:', e); }
+  }, 250);
+}
+function update(mutator){
+  mutator(state);
+  refreshGamification();
+  saveData();
+  render();
+}
+
+/* ===== Navegacion / render raiz ===== */
+const NAV_ITEMS = [
+  { id:'home', icon:'house' }, { id:'recipes', icon:'book-open' }, { id:'challenge', icon:'trophy' },
+  { id:'analytics', icon:'chart-column' }, { id:'profile', icon:'award' }, { id:'product', icon:'settings' }
+];
+function go(screen){ return () => { state.screen = screen; render(); }; }
+window.nlGo = go;
+
+function render(){
+  if(!state) return;
+  const app = document.getElementById('nl-app');
+  const L = state.lang, t = T[L];
+  if(!state.onboardingDone){
+    app.innerHTML = renderOnboarding();
+    icons(); wireOnboarding();
+    return;
+  }
+  const mobileTabs = NAV_ITEMS.filter(item => item.id !== 'product');
+  app.innerHTML = `
+    <nav class="nl-sidebar">
+      <div class="nl-brand">
+        <div class="nl-brand-mark"><i data-lucide="leaf" style="width:20px;height:20px"></i></div>
+        <div>
+          <div class="nl-brand-name">Nutri Log</div>
+          <div class="nl-brand-tag">${L==='es' ? 'tu ritual de hoy' : 'your ritual today'}</div>
+        </div>
+      </div>
+      <div class="nl-navlist">
+        ${NAV_ITEMS.map(item => `
+          <button type="button" class="nl-navitem" data-nl-nav="${item.id}" ${state.screen===item.id ? 'aria-current="page"' : ''}>
+            <i data-lucide="${item.icon}" style="width:18px;height:18px"></i>${esc(t.nav[item.id])}
+          </button>`).join('')}
+      </div>
+      <div class="nl-lang">
+        <button type="button" class="btn btn-secondary" data-nl-lang="es" ${L==='es'?'style="background:var(--color-accent);color:#fff"':''}>ES</button>
+        <button type="button" class="btn btn-secondary" data-nl-lang="en" ${L==='en'?'style="background:var(--color-accent);color:#fff"':''}>EN</button>
+      </div>
+    </nav>
+    <header class="nl-mobile-top">
+      <div class="brand">
+        <div class="mark"><i data-lucide="leaf" style="width:16px;height:16px"></i></div>
+        <span class="name">Nutri Log</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div class="lang">
+          <button type="button" class="btn btn-secondary" data-nl-lang="es" ${L==='es'?'style="background:var(--color-accent);color:#fff"':''}>ES</button>
+          <button type="button" class="btn btn-secondary" data-nl-lang="en" ${L==='en'?'style="background:var(--color-accent);color:#fff"':''}>EN</button>
+        </div>
+        <button type="button" class="btn-icon btn-secondary" data-nl-nav="product" aria-label="${esc(t.nav.product)}" title="${esc(t.nav.product)}">
+          <i data-lucide="settings" style="width:16px;height:16px"></i>
+        </button>
+      </div>
+    </header>
+    <main class="nl-main">
+      <div class="nl-content nl-col">
+        ${renderScreen()}
+      </div>
+    </main>
+    <nav class="nl-tabbar">
+      ${mobileTabs.map(item => `
+        <button type="button" class="nl-tabitem" data-nl-nav="${item.id}" ${state.screen===item.id ? 'aria-current="page"' : ''}>
+          <i data-lucide="${item.icon}" style="width:19px;height:19px"></i>${esc(t.nav[item.id])}
+        </button>`).join('')}
+    </nav>
+  `;
+  icons();
+  wireGlobalNav();
+  wireScreen();
+}
+function wireGlobalNav(){
+  document.querySelectorAll('[data-nl-nav]').forEach(btn => {
+    btn.addEventListener('click', () => { state.screen = btn.dataset.nlNav; render(); });
+  });
+  document.querySelectorAll('[data-nl-lang]').forEach(btn => {
+    btn.addEventListener('click', () => { state.lang = btn.dataset.nlLang; saveData(); render(); });
+  });
+}
+function renderScreen(){
+  switch(state.screen){
+    case 'home': return renderHome();
+    case 'log': return renderLog();
+    case 'recipes': return renderRecipes();
+    case 'recipeDetail': return renderRecipeDetail();
+    case 'nutrition': return renderNutrition();
+    case 'analytics': return renderAnalytics();
+    case 'challenge': return renderChallenge();
+    case 'template': return renderTemplate();
+    case 'profile': return renderProfile();
+    case 'product': return renderProduct();
+    default: return renderHome();
+  }
+}
+function wireScreen(){
+  switch(state.screen){
+    case 'home': return wireHome();
+    case 'log': return wireLog();
+    case 'recipes': return wireRecipes();
+    case 'recipeDetail': return wireRecipeDetail();
+    case 'nutrition': return wireNutrition();
+    case 'analytics': return wireAnalytics();
+    case 'challenge': return wireChallenge();
+    case 'template': return wireTemplate();
+    case 'profile': return wireProfile();
+    case 'product': return wireProduct();
+  }
+}
+
+/* ===== Onboarding (RF-37, RF-38) =====
+   3 pasos, "Omitir" siempre visible, dots de progreso. Aplica las
+   elecciones a datos reales al finalizar (o al omitir, con valores por
+   defecto razonables) — el flujo nunca bloquea el uso basico de la app. */
+const ONB_STEPS = [
+  { icon:'package-open',
+    es:{title:"Tu producto ya está listo", body:"Urth Superfood Brew viene precargado con sus compuestos, efectos y 3 recetas de la guía. Puedes agregar otros productos cuando quieras.", cta:"Continuar"},
+    en:{title:"Your product is ready", body:"Urth Superfood Brew comes preloaded with its compounds, effects and 3 recipes from the guide. You can add other products anytime.", cta:"Continue"},
+    options:[
+      { id:'urth', es:["Usar Urth Superfood Brew","Precargado con 3 recetas"], en:["Use Urth Superfood Brew","Preloaded with 3 recipes"] },
+      { id:'own', es:["Agregar mi propio producto","Defines compuestos y efectos"], en:["Add my own product","You define compounds and effects"] }
+    ] },
+  { icon:'target',
+    es:{title:"¿Qué quieres medir?", body:"Elige la métrica principal y su meta. Puedes activar más de una después, desde Producto y metas.", cta:"Continuar"},
+    en:{title:"What do you want to track?", body:"Pick the main metric and its goal. You can turn on more later from Product & goals.", cta:"Continue"},
+    options:[
+      { id:'streak', es:["Racha de días","Meta: 14 días seguidos"], en:["Day streak","Goal: 14 days in a row"] },
+      { id:'freq', es:["Frecuencia","Meta: 5 veces por semana"], en:["Frequency","Goal: 5 times per week"] },
+      { id:'time', es:["Horario","Meta: antes de las 9 AM"], en:["Time of day","Goal: before 9 AM"] }
+    ] },
+  { icon:'bell',
+    es:{title:"¿Te recordamos?", body:"Un aviso a la hora de tu impulso matutino ayuda a sostener la racha. Puedes silenciarlo sin perder progreso.", cta:"Empezar"},
+    en:{title:"Want a reminder?", body:"A nudge at your morning boost time helps keep the streak alive. You can mute it without losing progress.", cta:"Get started"},
+    options:[
+      { id:'on', es:["Sí, a las 8:00 AM","Lunes a domingo"], en:["Yes, at 8:00 AM","Monday to Sunday"] },
+      { id:'off', es:["Por ahora no","Se activa luego en ajustes"], en:["Not now","Turn it on later in settings"] }
+    ] }
+];
+function renderOnboarding(){
+  const L = state.lang, step = ONB_STEPS[state.onbStep], picked = state.onbPicks[state.onbStep];
+  const isLast = state.onbStep === ONB_STEPS.length - 1;
+  return `
+    <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;">
+      <div class="nl-col" style="max-width:420px;width:100%;">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <div style="display:flex;gap:6px;">
+            ${[0,1,2].map(i => `<span class="nl-onb-dot ${i===state.onbStep?'active':''}"></span>`).join('')}
+          </div>
+          <button type="button" class="btn btn-ghost" data-nl-onb-skip>${esc(T[L].onb.skip)}</button>
+        </div>
+        <div style="width:96px;height:96px;border-radius:999px;background:var(--color-accent-200);display:flex;align-items:center;justify-content:center;margin:8px auto 0;">
+          <i data-lucide="${step.icon}" style="width:40px;height:40px;color:var(--color-accent-800)"></i>
+        </div>
+        <h3 style="text-align:center;font-size:30px;">${esc(step[L].title)}</h3>
+        <p class="text-muted" style="text-align:center;">${esc(step[L].body)}</p>
+        <div class="nl-col" style="gap:10px;">
+          ${step.options.map(o => `
+            <label class="nl-onb-radio ${picked===o.id?'on':''}">
+              <input type="radio" name="nl-onb-opt" style="position:absolute;opacity:0" data-nl-onb-pick="${o.id}" ${picked===o.id?'checked':''}>
+              <span class="dot"></span>
+              <span><strong style="display:block;font-size:14px;">${esc(o[L][0])}</strong><span class="text-muted" style="font-size:12.5px;">${esc(o[L][1])}</span></span>
+            </label>`).join('')}
+        </div>
+        <button type="button" class="btn btn-primary btn-block" data-nl-onb-next>${esc(step[L].cta)}</button>
+      </div>
+    </div>`;
+}
+function applyOnboardingChoices(){
+  const picks = state.onbPicks;
+  // Paso 2: metrica principal + meta sugerida por el propio paso (RF-27).
+  const cfg = state.trackingConfigs.find(t => t.productId === state.activeProductId);
+  if(cfg && picks[1]){
+    cfg.metrics = { streak: picks[1]==='streak', frequency: picks[1]==='freq', time: picks[1]==='time' };
+    if(picks[1]==='streak') cfg.goal.streakTarget = 14;
+    if(picks[1]==='freq') cfg.goal.frequencyTarget = 5;
+  }
+  // Paso 3: recordatorios — la entrega real (notificaciones) es de fase 2
+  // (ver docs/nutrilog/requerimientos.md); aqui solo se guarda la preferencia.
+  state.reminderPref = picks[2] === 'on' ? { enabled:true, time:'08:00', days:[0,1,2,3,4,5,6] } : { enabled:false };
+}
+/* qa-lead encontro que elegir "Agregar mi propio producto" (paso 1) no hacia
+   nada distinto de elegir Urth -- picks[0] nunca se leia. En vez de crear un
+   producto vacio en silencio (que dejaria "metricas"/"meta" del paso 2
+   aplicadas a un producto que la usuaria todavia no definio), se la lleva
+   directo al dialogo de "agregar producto" al terminar, para que la eleccion
+   tenga un efecto real y visible. */
+function finishOnboarding(){
+  const wantsOwnProduct = state.onbPicks[0] === 'own';
+  applyOnboardingChoices();
+  state.onboardingDone = true;
+  if(wantsOwnProduct) state.screen = 'product';
+  saveData(); render();
+  if(wantsOwnProduct) openProductEditor();
+}
+function wireOnboarding(){
+  document.querySelectorAll('[data-nl-onb-pick]').forEach(el => {
+    el.addEventListener('change', () => {
+      state.onbPicks[state.onbStep] = el.dataset.nlOnbPick;
+      render();
+    });
+  });
+  const skip = document.querySelector('[data-nl-onb-skip]');
+  if(skip) skip.addEventListener('click', finishOnboarding);
+  const next = document.querySelector('[data-nl-onb-next]');
+  if(next) next.addEventListener('click', () => {
+    if(state.onbStep < ONB_STEPS.length - 1){ state.onbStep++; render(); return; }
+    finishOnboarding();
+  });
+}
+
+/* ===== Inicio / Home dashboard (RF-24, RF-25, RF-26) ===== */
+function activeProduct(){ return state.products.find(p => p.id === state.activeProductId) || state.products[0]; }
+function lastLogFor(productId){
+  const logs = logsForProduct(productId);
+  return logs[0] || null;
+}
+function renderHome(){
+  const L = state.lang, t = T[L].home, product = activeProduct();
+  if(!product) return `<div class="nl-empty">${esc(t.noProduct)}</div>`;
+  const done = loggedToday(product.id);
+  const streak = state.gamification.streakCurrent;
+  const dow = new Date(nlToday()+'T12:00:00Z').getUTCDay(); // 0=domingo
+  const week = weekProgress(product.id);
+  const activeChallenge = state.challenges.find(c => c.productId === product.id && c.status === 'active');
+  const dots = Array.from({length:7}, (_, i) => {
+    const offset = i - dow; // negativo = dia pasado de esta semana
+    const iso = nlDaysAgo(-offset);
+    const hasLog = state.logs.some(l => l.productId===product.id && l.startedAt.slice(0,10)===iso);
+    const isFuture = offset > 0;
+    return `<span class="${hasLog?'done':'pending'}" ${isFuture?'style="opacity:.5"':''}></span>`;
+  }).join('');
+  return `
+    <div class="card nl-streak-card elev-md">
+      <span style="font-size:12px;color:var(--color-ink-on-accent);">${esc(t.streakLabel)}</span>
+      <div class="nl-streak-num ${streak>0?'pop':''}">${streak}</div>
+      <span style="font-size:13px;color:var(--color-ink-on-accent);">${esc(t.days)}</span>
+      <div class="nl-dow">${dots}</div>
+    </div>
+    <div class="card elev-sm" style="flex-direction:row;align-items:center;gap:10px;">
+      <span style="width:11px;height:11px;border-radius:999px;flex:none;background:${done?'var(--color-accent-2)':'var(--color-neutral-400)'}"></span>
+      <div style="flex:1;">
+        <div style="font-weight:700;font-size:14px;">${esc(done ? t.loggedYes : t.loggedNo)}</div>
+        ${product.reminderTime ? `<div class="text-muted" style="font-size:12px;">${esc(t.nextLabel)} · ${esc(product.reminderTime)}</div>` : ''}
+      </div>
+    </div>
+    <button type="button" class="nl-quickbtn ${done?'done':'pending'}" data-nl-quicklog>
+      ${done ? `<i data-lucide="check-circle-2" style="width:16px;height:16px;display:inline;vertical-align:-3px;margin-right:6px"></i>${esc(T[L].home.quickYes)}` : esc(T[L].home.quickNo)}
+    </button>
+    <button type="button" class="btn btn-secondary btn-block" data-nl-nav="log">${esc(t.fullForm)}</button>
+    <div class="card elev-sm">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;">
+        <span class="card-title">${esc(t.weekTitle)}</span>
+        <span class="text-muted" style="font-size:12px;">${week.count}/${week.target}</span>
+      </div>
+      <div class="nl-bar-track"><div class="nl-bar-fill" style="width:${week.pct}%"></div></div>
+    </div>
+    ${activeChallenge ? `
+      <div class="card elev-sm" style="flex-direction:row;align-items:center;gap:12px;background:var(--color-accent-2-200);border:1px solid var(--color-accent-2-300);cursor:pointer;" data-nl-nav="challenge">
+        <div style="width:38px;height:38px;border-radius:999px;background:var(--color-accent-2);color:#fff;display:flex;align-items:center;justify-content:center;flex:none;">
+          <i data-lucide="trophy" style="width:18px;height:18px"></i>
+        </div>
+        <div style="flex:1;">
+          <div style="font-weight:700;font-size:13.5px;">${L==='es'?'Reto de 14 días':'14-day challenge'} · ${L==='es'?'Día':'Day'} ${challengeDayNumber(activeChallenge)}</div>
+        </div>
+        <i data-lucide="chevron-right" style="width:18px;height:18px"></i>
+      </div>` : ''}
+  `;
+}
+function challengeDayNumber(challenge){
+  const diff = Math.round((new Date(nlToday()) - new Date(challenge.startDate)) / 86400000) + 1;
+  return Math.max(1, Math.min(challenge.durationDays, diff));
+}
+function wireHome(){
+  const btn = document.querySelector('[data-nl-quicklog]');
+  if(btn) btn.addEventListener('click', () => {
+    const product = activeProduct();
+    if(loggedToday(product.id)){ state.screen = 'analytics'; render(); return; }
+    // Registro rapido (RF-25): reusa producto/receta/tipo del ultimo registro.
+    const last = lastLogFor(product.id);
+    const entry = {
+      id: uid('log'), productId: product.id,
+      recipeId: last ? last.recipeId : (product.id==='urth' ? 'latte' : null),
+      startedAt: nlToday() + 'T' + new Date().toTimeString().slice(0,5) + ':00',
+      consumptionType: last ? last.consumptionType : 'hot',
+      note: '', edited:false
+    };
+    update(s => { s.logs.push(entry); });
+    const streakMsg = L => L==='es' ? `¡Racha de ${state.gamification.streakCurrent} días! 🔥` : `${state.gamification.streakCurrent}-day streak! 🔥`;
+    showToast(streakMsg(state.lang), 'flame');
+  });
+}
+
+/* ===== Registro de consumo (RF-07 a RF-10) ===== */
+function renderLog(){
+  const L = state.lang, t = T[L].log, product = activeProduct();
+  const recipes = state.recipes.filter(r => r.productId === product.id);
+  const times = ['6:30','8:00','12:30','16:00'];
+  const types = [ {id:'hot',icon:'flame',label:t.hot}, {id:'cold',icon:'snowflake',label:t.cold}, {id:'blend',icon:'blend',label:t.blend} ];
+  const ui = state.ui;
+  return `
+    <h3>${esc(t.title)}</h3>
+    <div class="field">
+      <label>${esc(t.product)}</label>
+      <div class="card elev-sm" style="flex-direction:row;align-items:center;gap:10px;padding:10px 12px;">
+        <div class="nl-logo-slot"></div>
+        <div style="flex:1;">
+          <div style="font-weight:700;font-size:14px;">${esc(product.name)}</div>
+          <div class="text-muted" style="font-size:12px;">${esc(product.brand)}</div>
+        </div>
+      </div>
+    </div>
+    <div class="field">
+      <label id="nl-log-time-label">${esc(t.time)}</label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        ${times.map(tm => `<button type="button" class="nl-pill ${ui.logTime===tm?'active':'inactive'}" data-nl-logtime="${tm}">${tm}</button>`).join('')}
+        <input type="time" class="input" style="width:120px;" aria-labelledby="nl-log-time-label" value="${esc(ui.logTime.length<=5 && ui.logTime.includes(':') && ui.logTime.length===5 ? ui.logTime : '08:00')}" data-nl-logtime-custom>
+      </div>
+    </div>
+    <div class="field">
+      <label>${esc(t.type)}</label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        ${types.map(ty => `<button type="button" class="nl-pill ${ui.logType===ty.id?'active':'inactive'}" data-nl-logtype="${ty.id}"><i data-lucide="${ty.icon}" style="width:14px;height:14px"></i>${esc(ty.label)}</button>`).join('')}
+      </div>
+    </div>
+    <div class="field" style="position:relative;">
+      <label>${esc(t.recipe)}</label>
+      <div class="input" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;" data-nl-recipe-toggle>
+        <span>${ui.logRecipeId ? esc((recipes.find(r=>r.id===ui.logRecipeId)||{}).name?.[L] || '') : t.none}</span>
+        <i data-lucide="chevron-down" style="width:16px;height:16px"></i>
+      </div>
+      ${ui.logRecipePanelOpen ? `
+        <div class="nl-searchpanel">
+          <div class="nl-searchrow" data-nl-recipe-pick="">${esc(t.none)}</div>
+          <div class="nl-searchlist">
+            ${recipes.map(r => `<div class="nl-searchrow" data-nl-recipe-pick="${r.id}" style="${ui.logRecipeId===r.id?'border:1px solid var(--color-accent);':''}">${esc(r.name[L])}</div>`).join('')}
+          </div>
+        </div>` : ''}
+    </div>
+    <div class="field">
+      <label for="nl-log-note">${esc(t.note)}</label>
+      <input type="text" class="input" id="nl-log-note" placeholder="${esc(t.notePh)}" value="${esc(ui.logNote)}" data-nl-lognote>
+    </div>
+    <button type="button" class="btn btn-primary btn-block" data-nl-logsave>${esc(t.save)}</button>
+  `;
+}
+function wireLog(){
+  const ui = state.ui;
+  document.querySelectorAll('[data-nl-logtime]').forEach(b => b.addEventListener('click', () => { ui.logTime = b.dataset.nlLogtime; render(); }));
+  const custom = document.querySelector('[data-nl-logtime-custom]');
+  if(custom) custom.addEventListener('change', () => { ui.logTime = custom.value; render(); });
+  document.querySelectorAll('[data-nl-logtype]').forEach(b => b.addEventListener('click', () => { ui.logType = b.dataset.nlLogtype; render(); }));
+  const toggle = document.querySelector('[data-nl-recipe-toggle]');
+  if(toggle) toggle.addEventListener('click', () => { ui.logRecipePanelOpen = !ui.logRecipePanelOpen; render(); });
+  document.querySelectorAll('[data-nl-recipe-pick]').forEach(el => el.addEventListener('click', () => {
+    ui.logRecipeId = el.dataset.nlRecipePick || null;
+    ui.logRecipePanelOpen = false;
+    render();
+  }));
+  const note = document.querySelector('[data-nl-lognote]');
+  if(note) note.addEventListener('input', () => { ui.logNote = note.value; });
+  const save = document.querySelector('[data-nl-logsave]');
+  if(save) save.addEventListener('click', () => {
+    const product = activeProduct();
+    const entry = {
+      id: uid('log'), productId: product.id, recipeId: ui.logRecipeId || null,
+      startedAt: nlToday() + 'T' + (ui.logTime.length===5?ui.logTime:'08:00') + ':00',
+      consumptionType: ui.logType, note: note ? note.value : '', edited:false
+    };
+    update(s => { s.logs.push(entry); ui.logNote = ''; ui.logRecipePanelOpen = false; });
+    state.screen = 'home';
+    render();
+    showToast(state.lang==='es' ? 'Registro guardado.' : 'Entry saved.', 'check');
+  });
+}
+/* ===== Recetas (RF-11 a RF-14, 6.10, 9.9) ===== */
+const TYPE_ICON = { hot:'flame', cold:'snowflake', blend:'blend', other:'utensils' };
+function matchesRecipeQuery(recipe, L, query){
+  if(!query) return true;
+  const q = query.toLowerCase();
+  if(recipe.name[L].toLowerCase().includes(q)) return true;
+  return (recipe.extraIngredients||[]).some(i => (i[L]||'').toLowerCase().includes(q));
+}
+function renderRecipes(){
+  const L = state.lang, t = T[L].recipes, ui = state.ui;
+  const product = activeProduct();
+  let list = state.recipes.filter(r => r.productId === product.id);
+  if(ui.recipeFilter === 'fav') list = list.filter(r => r.favorite);
+  else if(['hot','cold','blend'].includes(ui.recipeFilter)) list = list.filter(r => r.consumptionType === ui.recipeFilter);
+  list = list.filter(r => matchesRecipeQuery(r, L, ui.recipeQuery));
+  const filters = [ {id:'all',label:t.all}, {id:'fav',label:t.fav}, {id:'hot',label:T[L].log.hot}, {id:'cold',label:T[L].log.cold}, {id:'blend',label:T[L].log.blend} ];
+  return `
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <h3>${esc(t.title)}</h3>
+      <button type="button" class="btn btn-primary" data-nl-recipe-new><i data-lucide="plus" style="width:14px;height:14px"></i>${esc(t.new)}</button>
+    </div>
+    <input type="text" class="input" placeholder="${esc(t.search)}" value="${esc(ui.recipeQuery)}" data-nl-recipe-search>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      ${filters.map(f => `<button type="button" class="nl-pill ${ui.recipeFilter===f.id?'active-2':'inactive'}" data-nl-recipe-filter="${f.id}">${esc(f.label)}</button>`).join('')}
+    </div>
+    ${list.length ? `<div class="nl-grid2">${list.map(r => renderRecipeCard(r, L)).join('')}</div>` : `<div class="nl-empty">${esc(T[L].nutri.empty)}</div>`}
+  `;
+}
+function renderRecipeCard(r, L){
+  const effects = computeEffectProfile(r).slice(0,3);
+  const caffeine = computeCaffeine(r);
+  return `
+    <div class="card elev-sm" style="cursor:pointer;" data-nl-recipe-open="${r.id}">
+      <div class="nl-thumb"></div>
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+        <span class="card-title">${esc(r.name[L])}</span>
+        <button type="button" class="nl-heart ${r.favorite?'on':''}" data-nl-recipe-fav="${r.id}" aria-label="${esc(r.favorite ? T[L].detail.fav : T[L].detail.notFav)}" aria-pressed="${r.favorite}">
+          <i data-lucide="heart" style="width:18px;height:18px;${r.favorite?'fill:currentColor':''}"></i>
+        </button>
+      </div>
+      <div class="card-meta"><i data-lucide="${TYPE_ICON[r.consumptionType]}" style="width:12px;height:12px"></i>${esc(T[L].log[r.consumptionType])} · ~${caffeine}mg ${esc(T[L].log.caffeine)}</div>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;">
+        ${effects.map(e => `<span class="tag tag-accent">${esc(e.label[L])}</span>`).join('')}
+      </div>
+      ${r.rating ? `<div>${renderStars(r.rating, false)}</div>` : ''}
+    </div>`;
+}
+function renderStars(rating, editable, recipeId){
+  const L = state.lang;
+  let out = '';
+  for(let i=1;i<=5;i++){
+    const label = L==='es' ? `Calificar con ${i} estrella${i>1?'s':''}` : `Rate ${i} star${i>1?'s':''}`;
+    out += `<button type="button" class="nl-star ${i<=rating?'on':''}" aria-label="${esc(label)}" aria-pressed="${i<=rating}" ${editable?`data-nl-rate="${recipeId}" data-nl-rate-val="${i}"`:'tabindex="-1" style="cursor:default"'}><i data-lucide="star" style="width:16px;height:16px;${i<=rating?'fill:currentColor':''}"></i></button>`;
+  }
+  return out;
+}
+function wireRecipes(){
+  const ui = state.ui;
+  const search = document.querySelector('[data-nl-recipe-search]');
+  if(search) search.addEventListener('input', () => { ui.recipeQuery = search.value; render(); });
+  document.querySelectorAll('[data-nl-recipe-filter]').forEach(b => b.addEventListener('click', () => { ui.recipeFilter = b.dataset.nlRecipeFilter; render(); }));
+  document.querySelectorAll('[data-nl-recipe-open]').forEach(el => el.addEventListener('click', (ev) => {
+    if(ev.target.closest('[data-nl-recipe-fav]')) return;
+    ui.openRecipeId = el.dataset.nlRecipeOpen; state.screen = 'recipeDetail'; render();
+  }));
+  document.querySelectorAll('[data-nl-recipe-fav]').forEach(el => el.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    const id = el.dataset.nlRecipeFav;
+    update(s => { const r = s.recipes.find(x=>x.id===id); if(r) r.favorite = !r.favorite; });
+  }));
+  const newBtn = document.querySelector('[data-nl-recipe-new]');
+  if(newBtn) newBtn.addEventListener('click', () => openRecipeEditor(null));
+}
+
+/* ===== Detalle de receta (RF-14, RF-15, RF-16, RF-35, RF-36) ===== */
+function renderRecipeDetail(){
+  const L = state.lang, t = T[L].detail;
+  const recipe = state.recipes.find(r => r.id === state.ui.openRecipeId) || state.recipes[0];
+  if(!recipe) return `<div class="nl-empty">${esc(T[L].nutri.empty)}</div>`;
+  const effects = computeEffectProfile(recipe);
+  const caffeine = computeCaffeine(recipe);
+  const nutri = computeNutrition(recipe.id);
+  return `
+    <button type="button" class="btn btn-ghost" data-nl-back><i data-lucide="arrow-left" style="width:16px;height:16px"></i>${L==='es'?'Volver':'Back'}</button>
+    <div class="nl-thumb-lg"></div>
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+      <div>
+        <span class="card-kicker">${esc(t.kicker)}</span>
+        <h3>${esc(recipe.name[L])}</h3>
+      </div>
+      <button type="button" class="nl-heart ${recipe.favorite?'on':''}" data-nl-recipe-fav="${recipe.id}" aria-label="${esc(recipe.favorite?t.fav:t.notFav)}" aria-pressed="${recipe.favorite}">
+        <i data-lucide="heart" style="width:22px;height:22px;${recipe.favorite?'fill:currentColor':''}"></i>
+      </button>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <span class="tag tag-outline">~${caffeine}mg ${esc(T[L].log.caffeine)}</span>
+      <span class="tag tag-neutral"><i data-lucide="${TYPE_ICON[recipe.consumptionType]}" style="width:11px;height:11px;display:inline;vertical-align:-1px;"></i> ${esc(T[L].log[recipe.consumptionType])}</span>
+    </div>
+    <div class="card elev-sm" style="cursor:pointer;flex-direction:row;justify-content:space-between;align-items:center;" data-nl-nutri-open="${recipe.id}">
+      <div>
+        <div style="font-family:var(--font-heading);font-size:26px;">${nutri.total.kcal} <span style="font-size:14px;">${esc(T[L].nutri.kcal)}</span></div>
+        <div class="text-muted" style="font-size:12px;">${esc(T[L].nutri.see || T[L].nutri.title)}</div>
+      </div>
+      <i data-lucide="chevron-right" style="width:18px;height:18px"></i>
+    </div>
+    <div class="card elev-sm">
+      <span class="card-title">${esc(t.effects)}</span>
+      ${effects.length ? effects.map(e => `
+        <div class="nl-effect-row nl-effect-lvl${e.lvl}">
+          <div style="display:flex;justify-content:space-between;font-size:12.5px;">
+            <span>${esc(e.label[L])}</span>
+            <span class="text-muted">${L==='es' ? ['','baja','media','alta'][e.lvl] : ['','low','medium','high'][e.lvl]}</span>
+          </div>
+          <div class="nl-bar-track"><div class="nl-bar-fill" style="width:${e.pct}%"></div></div>
+        </div>`).join('') : `<p class="text-muted">${L==='es'?'Sin efectos calculados todavía.':'No calculated effects yet.'}</p>`}
+    </div>
+    <div class="nl-disclaimer"><i data-lucide="info" style="width:15px;height:15px"></i><span>${esc(T[L].disclaimer)}</span></div>
+    <div class="card elev-sm">
+      <span class="card-title">${esc(t.ingredients)}</span>
+      <ul style="margin:0;padding-left:18px;font-size:13.5px;">${(recipe.extraIngredients||[]).map(i => `<li>${esc(i[L])}</li>`).join('')}</ul>
+    </div>
+    <div class="card elev-sm">
+      <span class="card-title">${esc(t.steps)}</span>
+      <ol style="margin:0;padding-left:18px;font-size:13.5px;">${(recipe.steps[L]||[]).map(s => `<li style="margin-bottom:4px;">${esc(s)}</li>`).join('')}</ol>
+    </div>
+    <div class="card elev-sm">
+      <span class="card-title">${esc(t.rate)}</span>
+      <div>${renderStars(recipe.rating || 0, true, recipe.id)}</div>
+    </div>
+    <button type="button" class="btn btn-primary btn-block" data-nl-log-with="${recipe.id}">${esc(t.logThis)}</button>
+    ${recipe.origin === 'user' ? `
+      <div style="display:flex;gap:8px;">
+        <button type="button" class="btn btn-secondary" style="flex:1" data-nl-recipe-edit="${recipe.id}">${esc(t.edit)}</button>
+        <button type="button" class="btn btn-secondary" style="flex:1;color:var(--color-accent-800)" data-nl-recipe-delete="${recipe.id}">${esc(t.delete)}</button>
+      </div>` : ''}
+  `;
+}
+function wireRecipeDetail(){
+  const back = document.querySelector('[data-nl-back]');
+  if(back) back.addEventListener('click', () => { state.screen = 'recipes'; render(); });
+  document.querySelectorAll('[data-nl-recipe-fav]').forEach(el => el.addEventListener('click', () => {
+    const id = el.dataset.nlRecipeFav;
+    update(s => { const r = s.recipes.find(x=>x.id===id); if(r) r.favorite = !r.favorite; });
+  }));
+  const nutriOpen = document.querySelector('[data-nl-nutri-open]');
+  if(nutriOpen) nutriOpen.addEventListener('click', () => {
+    state.ui.nutriRecipeId = nutriOpen.dataset.nlNutriOpen; state.screen = 'nutrition'; render();
+  });
+  document.querySelectorAll('[data-nl-rate]').forEach(el => el.addEventListener('click', () => {
+    const id = el.dataset.nlRate, val = +el.dataset.nlRateVal;
+    update(s => { const r = s.recipes.find(x=>x.id===id); if(r) r.rating = (r.rating === val ? null : val); });
+  }));
+  const logWith = document.querySelector('[data-nl-log-with]');
+  if(logWith) logWith.addEventListener('click', () => {
+    state.ui.logRecipeId = logWith.dataset.nlLogWith;
+    state.screen = 'log'; render();
+  });
+  const editBtn = document.querySelector('[data-nl-recipe-edit]');
+  if(editBtn) editBtn.addEventListener('click', () => openRecipeEditor(editBtn.dataset.nlRecipeEdit));
+  const delBtn = document.querySelector('[data-nl-recipe-delete]');
+  if(delBtn) delBtn.addEventListener('click', () => {
+    const id = delBtn.dataset.nlRecipeDelete;
+    openConfirmDialog(state.lang==='es' ? '¿Eliminar esta receta?' : 'Delete this recipe?', () => {
+      update(s => { s.recipes = s.recipes.filter(r => r.id !== id); });
+      state.screen = 'recipes'; render();
+    });
+  });
+}
+
+/* ===== Editor de receta propia (RF-13) ===== */
+function openRecipeEditor(recipeId){
+  const L = state.lang;
+  const existing = recipeId ? state.recipes.find(r => r.id === recipeId) : null;
+  const product = activeProduct();
+  const host = document.getElementById('nl-modal-host');
+  host.innerHTML = `
+    <div class="dialog-backdrop" data-nl-modal-close>
+      <div class="dialog" data-nl-modal-stop>
+        <span class="dialog-title">${L==='es' ? (existing?'Editar receta':'Nueva receta') : (existing?'Edit recipe':'New recipe')}</span>
+        <div class="field"><label for="nl-re-name">${L==='es'?'Nombre':'Name'}</label><input type="text" class="input" id="nl-re-name" value="${esc(existing ? existing.name[L] : '')}"></div>
+        <div class="field"><label for="nl-re-type">${T[L].log.type}</label>
+          <select class="input" id="nl-re-type">
+            ${CONSUMPTION_TYPES.map(ty => `<option value="${ty}" ${existing && existing.consumptionType===ty?'selected':''}>${esc(T[L].log[ty])}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field"><label for="nl-re-ingredients">${T[L].detail.ingredients} (${L==='es'?'uno por línea':'one per line'})</label>
+          <textarea class="input" id="nl-re-ingredients" rows="4">${esc((existing ? existing.extraIngredients.map(i=>i[L]) : []).join('\n'))}</textarea>
+        </div>
+        <div class="field"><label for="nl-re-steps">${T[L].detail.steps} (${L==='es'?'uno por línea':'one per line'})</label>
+          <textarea class="input" id="nl-re-steps" rows="4">${esc((existing ? existing.steps[L] : []).join('\n'))}</textarea>
+        </div>
+        <div class="dialog-actions">
+          <button type="button" class="btn btn-secondary" data-nl-modal-close>${L==='es'?'Cancelar':'Cancel'}</button>
+          <button type="button" class="btn btn-primary" id="nl-re-save">${L==='es'?'Guardar':'Save'}</button>
+        </div>
+      </div>
+    </div>`;
+  icons();
+  host.querySelectorAll('[data-nl-modal-close]').forEach(el => el.addEventListener('click', () => { host.innerHTML = ''; }));
+  host.querySelector('[data-nl-modal-stop]').addEventListener('click', ev => ev.stopPropagation());
+  host.querySelector('#nl-re-save').addEventListener('click', () => {
+    const name = host.querySelector('#nl-re-name').value.trim();
+    if(!name) return;
+    const type = host.querySelector('#nl-re-type').value;
+    const ingredientLines = host.querySelector('#nl-re-ingredients').value.split('\n').map(s=>s.trim()).filter(Boolean);
+    const stepLines = host.querySelector('#nl-re-steps').value.split('\n').map(s=>s.trim()).filter(Boolean);
+    update(s => {
+      if(existing){
+        const r = s.recipes.find(x => x.id === existing.id);
+        r.name[L] = name; r.consumptionType = type;
+        r.extraIngredients = ingredientLines.map(line => ({ es:line, en:line, nutri:{kcal:0,p:0,c:0,f:0} }));
+        r.steps[L] = stepLines;
+      } else {
+        s.recipes.push({
+          id: uid('recipe'), productId: product.id, name:{es:name,en:name}, consumptionType:type, origin:'user',
+          favorite:false, rating:null, extraCompounds:[],
+          extraIngredients: ingredientLines.map(line => ({ es:line, en:line, nutri:{kcal:0,p:0,c:0,f:0} })),
+          steps: { es: L==='es'?stepLines:[], en: L==='en'?stepLines:[] }
+        });
+      }
+    });
+    host.innerHTML = '';
+    showToast(L==='es' ? 'Receta guardada.' : 'Recipe saved.', 'check');
+  });
+}
+function openConfirmDialog(message, onConfirm){
+  const L = state.lang;
+  const host = document.getElementById('nl-modal-host');
+  host.innerHTML = `
+    <div class="dialog-backdrop" data-nl-modal-close>
+      <div class="dialog" data-nl-modal-stop style="width:min(360px,100%)">
+        <span class="dialog-title">${L==='es'?'Confirmar':'Confirm'}</span>
+        <p style="margin:0;">${esc(message)}</p>
+        <div class="dialog-actions">
+          <button type="button" class="btn btn-secondary" data-nl-modal-close>${L==='es'?'Cancelar':'Cancel'}</button>
+          <button type="button" class="btn btn-primary" id="nl-confirm-yes">${L==='es'?'Eliminar':'Delete'}</button>
+        </div>
+      </div>
+    </div>`;
+  host.querySelectorAll('[data-nl-modal-close]').forEach(el => el.addEventListener('click', () => { host.innerHTML = ''; }));
+  host.querySelector('[data-nl-modal-stop]').addEventListener('click', ev => ev.stopPropagation());
+  host.querySelector('#nl-confirm-yes').addEventListener('click', () => { host.innerHTML = ''; onConfirm(); });
+}
+
+/* ===== Nutricion (pantalla nueva del handoff, calorias y macros) ===== */
+function renderNutrition(){
+  const L = state.lang, t = T[L].nutri, product = activeProduct();
+  const all = state.recipes.filter(r => r.productId === product.id);
+  const ui = state.ui;
+  const nr = ui.nutriRecipeId || (all[0] && all[0].id);
+  const recipe = state.recipes.find(r => r.id === nr) || all[0];
+  if(!recipe) return `<div class="nl-empty">${esc(t.empty)}</div>`;
+  const { rows, total } = computeNutrition(recipe.id);
+  const kcalFromMacros = { p: total.p*4, c: total.c*4, f: total.f*9 };
+  const kcalTotalCheck = kcalFromMacros.p + kcalFromMacros.c + kcalFromMacros.f;
+  const pct = v => kcalTotalCheck ? Math.round((v/kcalTotalCheck)*100) : 0;
+  const caffeine = computeCaffeine(recipe);
+  const filtered = all.filter(r => matchesRecipeQuery(r, L, ui.nutriQuery));
+  return `
+    <h3>${esc(t.title)}</h3>
+    <p class="text-muted" style="margin-top:-8px;">${esc(t.sub)}</p>
+    <div class="field" style="position:relative;">
+      <div class="input" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;" data-nl-nutri-toggle>
+        <span>${esc(recipe.name[L])} · ${all.length} ${L==='es'?'recetas':'recipes'}</span>
+        <i data-lucide="chevron-down" style="width:16px;height:16px"></i>
+      </div>
+      ${ui.nutriOpen ? `
+        <div class="nl-searchpanel">
+          <input type="text" class="input" placeholder="${esc(T[L].recipes.search)}" value="${esc(ui.nutriQuery)}" data-nl-nutri-search>
+          <div class="nl-searchlist">
+            ${filtered.length ? filtered.map(r => `<div class="nl-searchrow" data-nl-nutri-pick="${r.id}">${esc(r.name[L])} ${r.id===recipe.id?'<i data-lucide=\"check\" style=\"width:14px;height:14px\"></i>':''}</div>`).join('') : `<div class="text-muted" style="padding:8px;font-size:13px;">${esc(t.empty)}</div>`}
+          </div>
+        </div>` : ''}
+    </div>
+    <div class="card nl-streak-card elev-md">
+      <span style="font-size:12px;color:var(--color-ink-on-accent);">${esc(t.perServing)}</span>
+      <div style="font-family:var(--font-heading);font-size:52px;line-height:1;">${total.kcal}<span style="font-size:16px;color:var(--color-ink-on-accent);"> ${esc(t.kcal)}</span></div>
+      <span style="font-size:12.5px;color:var(--color-ink-on-accent);">${esc(recipe.name[L])} · ${esc(T[L].log[recipe.consumptionType])} · ~${caffeine}mg ${esc(T[L].nutri.caffeine || T[L].log.caffeine)}</span>
+    </div>
+    <div class="card elev-sm nl-col" style="gap:10px;">
+      ${[['p',t.protein,total.p,'var(--color-accent)'],['c',t.carbs,total.c,'var(--color-accent-2)'],['f',t.fat,total.f,'var(--color-neutral-500)']].map(([k,label,val]) => `
+        <div class="nl-effect-row">
+          <div style="display:flex;justify-content:space-between;font-size:12.5px;"><span>${esc(label)}</span><span class="text-muted">${val}g · ${pct(kcalFromMacros[k])}%</span></div>
+          <div class="nl-bar-track"><div class="nl-bar-fill" style="width:${pct(kcalFromMacros[k])}%;background:${['var(--color-accent)','var(--color-accent-2)','var(--color-neutral-500)'][['p','c','f'].indexOf(k)]}"></div></div>
+        </div>`).join('')}
+    </div>
+    <div class="card elev-sm">
+      <span class="card-title">${esc(t.breakdown)}</span>
+      <table class="table">
+        <thead><tr><th></th><th>${esc(t.kcal)}</th><th>P</th><th>C</th><th>G</th></tr></thead>
+        <tbody>
+          ${rows.map(r => `<tr><td>${esc(r[L])}</td><td>${r.kcal}</td><td>${r.p}</td><td>${r.c}</td><td>${r.f}</td></tr>`).join('')}
+          <tr style="color:var(--color-accent-700);font-weight:700;"><td>${esc(t.total)}</td><td>${total.kcal}</td><td>${total.p}</td><td>${total.c}</td><td>${total.f}</td></tr>
+        </tbody>
+      </table>
+    </div>
+    ${renderNutritionAccumulators(product.id, L, t)}
+    <p class="text-muted" style="font-size:11.5px;">${esc(t.note)}</p>
+  `;
+}
+function renderNutritionAccumulators(productId, L, t){
+  const today = nlToday();
+  const logsToday = state.logs.filter(l => l.productId===productId && l.startedAt.slice(0,10)===today);
+  const weekStart = nlDaysAgo(6);
+  const logsWeek = state.logs.filter(l => l.productId===productId && l.startedAt.slice(0,10)>=weekStart);
+  const monthStart = nlDaysAgo(29);
+  const logsMonth = state.logs.filter(l => l.productId===productId && l.startedAt.slice(0,10)>=monthStart);
+  const kcalOf = log => log.recipeId ? computeNutrition(log.recipeId).total.kcal : NUTRI_BASE.kcal;
+  const sumKcal = logs => logs.reduce((a,l) => a + kcalOf(l), 0);
+  const avgKcal = logs => logs.length ? Math.round(sumKcal(logs)/logs.length) : 0;
+  return `
+    <div class="nl-grid2">
+      <div class="card elev-sm"><span class="card-kicker">${esc(t.today)}</span><span class="card-title">${sumKcal(logsToday)} ${esc(t.kcal)}</span><span class="text-muted" style="font-size:11.5px;">${logsToday.length} ${L==='es'?'registro(s)':'entr(y/ies)'}</span></div>
+      <div class="card elev-sm"><span class="card-kicker">${esc(t.week)}</span><span class="card-title">${avgKcal(logsWeek)} ${esc(t.kcal)}</span><span class="text-muted" style="font-size:11.5px;">${logsWeek.length} · 7 ${L==='es'?'días':'days'}</span></div>
+      <div class="card elev-sm"><span class="card-kicker">${esc(t.month)}</span><span class="card-title">${sumKcal(logsMonth)} ${esc(t.kcal)}</span><span class="text-muted" style="font-size:11.5px;">${logsMonth.length} ${L==='es'?'registrados':'logged'}</span></div>
+    </div>`;
+}
+function wireNutrition(){
+  const ui = state.ui;
+  const toggle = document.querySelector('[data-nl-nutri-toggle]');
+  if(toggle) toggle.addEventListener('click', () => { ui.nutriOpen = !ui.nutriOpen; render(); });
+  const search = document.querySelector('[data-nl-nutri-search]');
+  if(search){ search.addEventListener('input', () => { ui.nutriQuery = search.value; render(); }); search.focus(); }
+  document.querySelectorAll('[data-nl-nutri-pick]').forEach(el => el.addEventListener('click', () => {
+    ui.nutriRecipeId = el.dataset.nlNutriPick; ui.nutriOpen = false; ui.nutriQuery=''; render();
+  }));
+}
+/* ===== Analisis (RF-18 a RF-21, 9.7) ===== */
+function renderAnalytics(){
+  const L = state.lang, t = T[L].analytics, product = activeProduct();
+  const logs = logsForProduct(product.id);
+  if(!logs.length){
+    return `<h3>${esc(t.title)}</h3><div class="nl-empty">${esc(t.empty)}</div>`;
+  }
+  return `
+    <h3>${esc(t.title)}</h3>
+    ${renderKpis(product.id, L)}
+    <div class="card elev-sm">
+      <span class="card-title">${esc(t.heatmap)}</span>
+      ${renderHeatmap(product.id, L, t)}
+    </div>
+    <div class="nl-grid2">
+      <div class="card elev-sm">
+        <span class="card-title">${esc(t.weekly)}</span>
+        ${renderWeekdayBars(logs, L)}
+      </div>
+      <div class="card elev-sm">
+        <span class="card-title">${esc(t.types)}</span>
+        ${renderTypeDonut(logs, L)}
+      </div>
+    </div>
+    <div class="card elev-sm">
+      <span class="card-title">${esc(t.hours)}</span>
+      ${renderHourBars(logs, L)}
+    </div>
+    <div class="card elev-sm">
+      <span class="card-title">${esc(t.effects)}</span>
+      ${renderMonthEffects(logs, L)}
+      <div class="nl-disclaimer" style="margin-top:8px;"><i data-lucide="info" style="width:14px;height:14px"></i><span>${esc(T[L].disclaimer)}</span></div>
+    </div>
+    <div class="card elev-sm">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <span class="card-title">${esc(t.history)}</span>
+        <button type="button" class="btn btn-ghost" data-nl-export-csv><i data-lucide="download" style="width:14px;height:14px"></i>${esc(t.exportCsv)}</button>
+      </div>
+      <div style="overflow-x:auto;">
+        <table class="table">
+          <thead><tr><th>${esc(t.thDate)}</th><th>${esc(t.thTime)}</th><th>${esc(t.thType)}</th><th>${esc(t.thRecipe)}</th><th></th></tr></thead>
+          <tbody>
+            ${logs.map(l => `<tr>
+              <td>${esc(fmtDate(l.startedAt.slice(0,10), L))}${l.edited?` <span class="tag tag-neutral" style="font-size:9px;">${L==='es'?'editado':'edited'}</span>`:''}</td>
+              <td>${esc(l.startedAt.slice(11,16))}</td>
+              <td>${esc(T[L].log[l.consumptionType] || l.consumptionType)}</td>
+              <td>${l.recipeId ? esc((state.recipes.find(r=>r.id===l.recipeId)||{}).name?.[L] || '—') : '—'}</td>
+              <td><button type="button" class="btn-icon btn-ghost" data-nl-log-delete="${l.id}"><i data-lucide="trash-2" style="width:14px;height:14px"></i></button></td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+function renderKpis(productId, L){
+  const g = state.gamification, week = weekProgress(productId);
+  const monthStart = nlDaysAgo(29);
+  const monthCount = state.logs.filter(l => l.productId===productId && l.startedAt.slice(0,10)>=monthStart).length;
+  const items = [
+    { label: L==='es'?'Racha actual':'Current streak', value: g.streakCurrent },
+    { label: L==='es'?'Registros del mes':'Entries this month', value: monthCount },
+    { label: L==='es'?'Cumplimiento de meta':'Goal compliance', value: week.pct + '%' }
+  ];
+  return `<div class="nl-grid2">${items.map(i => `<div class="card elev-sm"><span class="card-kicker">${esc(i.label)}</span><span class="card-title">${i.value}</span></div>`).join('')}</div>`;
+}
+function renderHeatmap(productId, L, t){
+  const daysWithLog = new Set(state.logs.filter(l=>l.productId===productId).map(l=>l.startedAt.slice(0,10)));
+  const counts = {};
+  state.logs.filter(l=>l.productId===productId).forEach(l => { const d=l.startedAt.slice(0,10); counts[d]=(counts[d]||0)+1; });
+  const cells = [];
+  for(let i=55;i>=0;i--){
+    const day = nlDaysAgo(i);
+    const c = counts[day] || 0;
+    const lvl = c===0?0:c===1?1:c===2?2:3;
+    const colors = ['var(--color-neutral-300)','var(--color-accent-300)','var(--color-accent-500)','var(--color-accent-700)'];
+    cells.push(`<span style="background:${colors[lvl]}" title="${esc(day)} · ${c}"></span>`);
+  }
+  return `<div class="nl-heat">${cells.join('')}</div>
+    <div style="display:flex;align-items:center;gap:6px;font-size:11px;margin-top:6px;color:var(--color-neutral-600)">
+      <span>${esc(t.less)}</span>
+      ${['var(--color-neutral-300)','var(--color-accent-300)','var(--color-accent-500)','var(--color-accent-700)'].map(c=>`<span style="width:12px;height:12px;border-radius:3px;background:${c};display:inline-block"></span>`).join('')}
+      <span>${esc(t.more)}</span>
+    </div>`;
+}
+function renderWeekdayBars(logs, L){
+  const names = L==='es' ? ['D','L','M','X','J','V','S'] : ['S','M','T','W','T','F','S'];
+  const counts = [0,0,0,0,0,0,0];
+  logs.forEach(l => { counts[new Date(l.startedAt.slice(0,10)+'T12:00:00Z').getUTCDay()]++; });
+  const max = Math.max(1, ...counts);
+  return `<div style="display:flex;align-items:flex-end;gap:8px;height:100px;">
+    ${counts.map((c,i) => `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;">
+      <div style="width:100%;height:${Math.round((c/max)*80)}px;min-height:2px;border-radius:4px;background:var(--color-accent);"></div>
+      <span style="font-size:10px;color:var(--color-neutral-600)">${names[i]}</span>
+    </div>`).join('')}
+  </div>`;
+}
+function renderTypeDonut(logs, L){
+  const counts = { hot:0, cold:0, blend:0, other:0 };
+  logs.forEach(l => { counts[l.consumptionType] = (counts[l.consumptionType]||0)+1; });
+  const total = logs.length || 1;
+  const colors = { hot:'var(--color-accent)', cold:'var(--color-accent-2)', blend:'var(--color-neutral-500)', other:'var(--color-neutral-300)' };
+  let acc = 0;
+  const stops = Object.keys(counts).filter(k=>counts[k]>0).map(k => {
+    const from = acc/total*360; acc += counts[k]; const to = acc/total*360;
+    return `${colors[k]} ${from}deg ${to}deg`;
+  }).join(', ');
+  return `<div class="nl-donutwrap">
+    <div class="nl-donut" style="background:conic-gradient(${stops || 'var(--color-neutral-300) 0deg 360deg'})"></div>
+    <div class="nl-legend">
+      ${Object.keys(counts).filter(k=>counts[k]>0).map(k => `<span><span class="sw" style="background:${colors[k]}"></span>${esc(T[L].log[k])} · ${Math.round(counts[k]/total*100)}%</span>`).join('')}
+    </div>
+  </div>`;
+}
+function renderHourBars(logs, L){
+  const buckets = [0,0,0,0,0,0,0,0]; // 3h cada una, 0-24
+  logs.forEach(l => { const h = +l.startedAt.slice(11,13); buckets[Math.floor(h/3)]++; });
+  const max = Math.max(1, ...buckets);
+  const labels = ['12am','3am','6am','9am','12pm','3pm','6pm','9pm'];
+  return `<div style="display:flex;align-items:flex-end;gap:6px;height:90px;">
+    ${buckets.map((c,i) => `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;">
+      <div style="width:100%;height:${Math.round((c/max)*70)}px;min-height:2px;border-radius:4px;background:var(--color-accent-2);"></div>
+      <span style="font-size:9px;color:var(--color-neutral-600)">${labels[i]}</span>
+    </div>`).join('')}
+  </div>`;
+}
+function renderMonthEffects(logs, L){
+  const monthStart = nlDaysAgo(29);
+  const monthLogs = logs.filter(l => l.startedAt.slice(0,10) >= monthStart && l.recipeId);
+  const totals = {};
+  monthLogs.forEach(l => {
+    const recipe = state.recipes.find(r=>r.id===l.recipeId);
+    if(!recipe) return;
+    computeEffectProfile(recipe).forEach(e => { totals[e.key] = (totals[e.key]||0) + e.count; });
+  });
+  const keys = Object.keys(totals).sort((a,b)=>totals[b]-totals[a]).slice(0,6);
+  if(!keys.length) return `<p class="text-muted">${L==='es'?'Sin recetas registradas este mes todavía.':'No recipes logged this month yet.'}</p>`;
+  const max = Math.max(...keys.map(k=>totals[k]));
+  return keys.map(k => `
+    <div class="nl-effect-row">
+      <div style="display:flex;justify-content:space-between;font-size:12.5px;"><span>${esc(EFFECT_LABELS[k][L])}</span><span class="text-muted">${totals[k]}</span></div>
+      <div class="nl-bar-track"><div class="nl-bar-fill" style="width:${Math.round(totals[k]/max*100)}%"></div></div>
+    </div>`).join('');
+}
+function exportLogsCsv(productId, L){
+  const logs = logsForProduct(productId);
+  const header = [T[L].analytics.thDate, T[L].analytics.thTime, T[L].analytics.thType, T[L].analytics.thRecipe];
+  const rows = logs.map(l => [
+    l.startedAt.slice(0,10), l.startedAt.slice(11,16), T[L].log[l.consumptionType] || l.consumptionType,
+    l.recipeId ? ((state.recipes.find(r=>r.id===l.recipeId)||{}).name?.[L] || '') : ''
+  ]);
+  const csv = [header, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], { type:'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'nutri-log-historial.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+function wireAnalytics(){
+  const exportBtn = document.querySelector('[data-nl-export-csv]');
+  if(exportBtn) exportBtn.addEventListener('click', () => exportLogsCsv(activeProduct().id, state.lang));
+  document.querySelectorAll('[data-nl-log-delete]').forEach(el => el.addEventListener('click', () => {
+    const id = el.dataset.nlLogDelete;
+    openConfirmDialog(state.lang==='es' ? '¿Eliminar este registro?' : 'Delete this entry?', () => {
+      update(s => { s.logs = s.logs.filter(l => l.id !== id); });
+    });
+  }));
+}
+
+/* ===== Reto de 14 dias (RF-29 a RF-34, RF-42) ===== */
+function currentChallenge(productId){
+  return state.challenges.find(c => c.productId === productId && c.status === 'active') || null;
+}
+function planForDay(challenge, day){
+  const template = state.challengeTemplates.find(t => t.id === challenge.templateId);
+  if(!template) return null;
+  return template.values[day] || null;
+}
+function renderChallenge(){
+  const L = state.lang, t = T[L].challenge, product = activeProduct();
+  const challenge = currentChallenge(product.id);
+  if(!challenge){
+    const template = state.challengeTemplates.find(tp => tp.productId === product.id);
+    return `
+      <h3>${esc(t.title)}</h3>
+      <div class="nl-empty">
+        <p>${esc(t.none)}</p>
+        <button type="button" class="btn btn-primary" data-nl-challenge-start>${esc(t.start)}</button>
+        ${template ? `<div style="margin-top:10px;"><button type="button" class="btn btn-ghost" data-nl-nav="template">${esc(t.plan)}</button></div>` : ''}
+      </div>`;
+  }
+  const day = challengeDayNumber(challenge);
+  const plan = planForDay(challenge, day);
+  const recipeId = plan && plan.recipe !== 'fav' ? plan.recipe : (state.recipes.find(r=>r.productId===product.id && r.favorite)||{}).id;
+  const recipe = recipeId ? state.recipes.find(r=>r.id===recipeId) : null;
+  const checkin = (challenge.checkins || []).find(c => c.day === day) || { ratings:{focus:0,digestion:0,mood:0,skin:0}, habitDone:false, r1:'', r2:'' };
+  const isLastDay = day >= challenge.durationDays;
+  return `
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <h3>${esc(t.title)} · ${L==='es'?'Día':'Day'} ${day}</h3>
+      <button type="button" class="btn btn-ghost" data-nl-nav="template">${esc(t.plan)}</button>
+    </div>
+    <div style="display:flex;gap:4px;flex-wrap:wrap;">
+      ${Array.from({length:challenge.durationDays},(_,i)=>i+1).map(d => `
+        <span style="width:20px;height:20px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;
+          background:${d<day?'var(--color-accent-2)':d===day?'var(--color-accent)':'var(--color-neutral-300)'};
+          color:${d<=day?'#fff':'var(--color-neutral-600)'};${d===day?'box-shadow:var(--shadow-sm)':''}">${d}</span>`).join('')}
+    </div>
+    ${plan ? `
+      <div class="card elev-sm" style="background:var(--color-accent-2-200);border:1px solid var(--color-accent-2-300);">
+        <span class="card-title">${esc(t.todayPlan)}</span>
+        <div class="text-muted" style="font-size:13px;">${recipe ? esc(recipe.name[L]) : (L==='es'?'Receta favorita':'Favorite recipe')} · ${esc(plan.time[L])}</div>
+        <div style="font-size:13px;">${esc(plan.companion[L])}</div>
+      </div>` : ''}
+    <div class="card elev-sm">
+      <span class="card-title">${esc(t.checkin)}</span>
+      <p class="text-muted" style="font-size:12px;margin:-4px 0 0;">${esc(t.checkinSub)}</p>
+      ${['focus','digestion','mood','skin'].map(cat => `
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <span style="font-size:13px;">${esc(t[cat])}</span>
+          <div style="display:flex;gap:5px;">
+            ${[1,2,3,4,5].map(v => `<button type="button" class="nl-scale-btn ${checkin.ratings[cat]===v?'on':''}" aria-label="${esc(t[cat])}: ${v} ${L==='es'?'de 5':'of 5'}" aria-pressed="${checkin.ratings[cat]===v}" data-nl-ci-rate="${cat}" data-nl-ci-val="${v}">${v}</button>`).join('')}
+          </div>
+        </div>`).join('')}
+    </div>
+    <div class="card elev-sm" style="flex-direction:row;align-items:center;gap:12px;">
+      <button type="button" class="nl-check ${checkin.habitDone?'on':''}" aria-label="${esc(t.habit)}${plan?': '+esc(plan.companion[L]):''} — ${checkin.habitDone?(L==='es'?'cumplido':'done'):(L==='es'?'sin marcar':'not done')}" aria-pressed="${checkin.habitDone}" data-nl-ci-habit>${checkin.habitDone?'<i data-lucide="check" style="width:16px;height:16px"></i>':''}</button>
+      <div><div style="font-weight:700;font-size:13.5px;">${esc(t.habit)}</div><div class="text-muted" style="font-size:12px;">${plan ? esc(plan.companion[L]) : ''}</div></div>
+    </div>
+    <div class="field"><label for="nl-ci-r1">${esc(t.r1)}</label><textarea class="input" id="nl-ci-r1" data-nl-ci-r1>${esc(checkin.r1)}</textarea></div>
+    <div class="field"><label for="nl-ci-r2">${esc(t.r2)}</label><textarea class="input" id="nl-ci-r2" data-nl-ci-r2>${esc(checkin.r2)}</textarea></div>
+    <button type="button" class="btn btn-primary btn-block" data-nl-ci-save="${day}">${esc(t.save)} ${L==='es'?'del día':'for day'} ${day}</button>
+    ${isLastDay ? `<button type="button" class="btn btn-secondary btn-block" data-nl-challenge-finish>${esc(t.finish)}</button>` : ''}
+    <div class="nl-disclaimer"><i data-lucide="info" style="width:15px;height:15px"></i><span>${esc(t.disclaimer)}</span></div>
+    ${challenge.status === 'completed' ? renderChallengeSummary(challenge, L, t) : ''}
+  `;
+}
+function renderChallengeSummary(challenge, L, t){
+  const checkins = challenge.checkins || [];
+  const first = checkins.find(c => c.day === 1);
+  const last = checkins.slice().sort((a,b)=>b.day-a.day)[0];
+  if(!first || !last) return '';
+  const rows = ['focus','digestion','mood','skin'].map(cat => {
+    const before = first.ratings[cat] || 0, after = last.ratings[cat] || 0;
+    return `<tr><td>${esc(t[cat])}</td><td>${before || '—'}</td><td>${after || '—'}</td></tr>`;
+  }).join('');
+  return `
+    <div class="card elev-sm">
+      <span class="card-title">${esc(t.summary)}</span>
+      <table class="table"><thead><tr><th></th><th>${esc(t.day1)}</th><th>${esc(t.dayN)}</th></tr></thead><tbody>${rows}</tbody></table>
+      <div class="nl-disclaimer"><i data-lucide="info" style="width:14px;height:14px"></i><span>${esc(t.disclaimer)}</span></div>
+    </div>`;
+}
+function wireChallenge(){
+  const L = state.lang;
+  const startBtn = document.querySelector('[data-nl-challenge-start]');
+  if(startBtn) startBtn.addEventListener('click', () => {
+    const product = activeProduct();
+    const template = state.challengeTemplates.find(tp => tp.productId === product.id);
+    update(s => {
+      s.challenges.push({
+        id: uid('challenge'), productId: product.id, templateId: template ? template.id : null,
+        startDate: nlToday(), durationDays: template ? template.durationDays : 14,
+        companionHabit: '', status: 'active', checkins: []
+      });
+    });
+  });
+  const finishBtn = document.querySelector('[data-nl-challenge-finish]');
+  if(finishBtn) finishBtn.addEventListener('click', () => {
+    update(s => {
+      const c = currentChallenge(activeProduct().id);
+      if(c) c.status = 'completed';
+    });
+  });
+  document.querySelectorAll('[data-nl-ci-rate]').forEach(el => el.addEventListener('click', () => {
+    const day = challengeDayNumber(currentChallenge(activeProduct().id));
+    const cat = el.dataset.nlCiRate, val = +el.dataset.nlCiVal;
+    update(() => {
+      const ci = ensureCheckin(currentChallenge(activeProduct().id), day);
+      if(ci) ci.ratings[cat] = ci.ratings[cat] === val ? 0 : val;
+    });
+  }));
+  const habitBtn = document.querySelector('[data-nl-ci-habit]');
+  if(habitBtn) habitBtn.addEventListener('click', () => {
+    const day = challengeDayNumber(currentChallenge(activeProduct().id));
+    update(() => {
+      const ci = ensureCheckin(currentChallenge(activeProduct().id), day);
+      if(ci) ci.habitDone = !ci.habitDone;
+    });
+  });
+  const saveBtn = document.querySelector('[data-nl-ci-save]');
+  if(saveBtn) saveBtn.addEventListener('click', () => {
+    const day = +saveBtn.dataset.nlCiSave;
+    const r1 = document.querySelector('[data-nl-ci-r1]').value;
+    const r2 = document.querySelector('[data-nl-ci-r2]').value;
+    const challengeBefore = currentChallenge(activeProduct().id);
+    const isLastDay = challengeBefore && day >= challengeBefore.durationDays;
+    update(() => {
+      const challenge = currentChallenge(activeProduct().id);
+      if(!challenge) return;
+      const ci = ensureCheckin(challenge, day);
+      ci.r1 = r1; ci.r2 = r2;
+      if(day >= challenge.durationDays) challenge.status = 'completed';
+    });
+    showToast(isLastDay ? T[L].challenge.badge : (L==='es' ? 'Check-in guardado.' : 'Check-in saved.'), isLastDay ? 'trophy' : 'check');
+  });
+}
+function ensureCheckin(challenge, day){
+  if(!challenge) return null;
+  let ci = challenge.checkins.find(x => x.day === day);
+  if(!ci){ ci = { day, ratings:{focus:0,digestion:0,mood:0,skin:0}, habitDone:false, r1:'', r2:'' }; challenge.checkins.push(ci); }
+  return ci;
+}
+
+/* ===== Plantilla del reto (RF-39 a RF-43) ===== */
+/* La columna "receta" (RF-39/8.4) guarda un id de receta, no texto libre,
+   asi que se muestra el nombre real en el idioma activo en vez del id
+   crudo. Una vez que la persona edita esa celda a mano, el valor pasa a
+   ser texto libre (ver wireTemplate) y se muestra tal cual de ahi en
+   adelante -- coherente con que RF-40 permite reutilizar la plantilla con
+   otro producto renombrando columnas, sin asumir que siempre habra un
+   catalogo de recetas detras. */
+function resolveTemplateCellDisplay(columnId, val, L){
+  if(val && typeof val === 'object') return val[L] ?? '';
+  if(columnId === 'recipe' && typeof val === 'string'){
+    if(val === 'fav') return L==='es' ? 'Receta favorita' : 'Favorite recipe';
+    const recipe = state.recipes.find(r => r.id === val);
+    if(recipe) return recipe.name[L];
+  }
+  return val ?? '';
+}
+function renderTemplate(){
+  const L = state.lang, t = T[L].template, product = activeProduct();
+  const template = state.challengeTemplates.find(tp => tp.productId === product.id) || state.challengeTemplates[0];
+  if(!template) return `<div class="nl-empty">${L==='es'?'No hay plantilla todavía.':'No template yet.'}</div>`;
+  const days = Array.from({length: template.durationDays}, (_,i) => i+1);
+  return `
+    <button type="button" class="btn btn-ghost" data-nl-back-challenge><i data-lucide="arrow-left" style="width:16px;height:16px"></i>${L==='es'?'Volver':'Back'}</button>
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <div><h3>${esc(t.title)}</h3><p class="text-muted" style="margin:-8px 0 0;">${esc(product.name)} · ${template.durationDays} ${esc(t.days)}</p></div>
+      <div style="display:flex;gap:8px;">
+        <button type="button" class="btn btn-secondary" data-nl-tpl-edit>${esc(state.ui.editCols ? t.editOn : t.editOff)}</button>
+        <button type="button" class="btn btn-secondary" data-nl-tpl-duplicate>${esc(t.duplicate)}</button>
+      </div>
+    </div>
+    ${state.ui.editCols ? `<p class="text-muted" style="font-size:12px;">${esc(t.colsHelp)}</p>` : ''}
+    <div style="overflow-x:auto;">
+      <table class="table">
+        <caption class="text-muted" style="text-align:left;font-size:12px;padding-bottom:6px;">${esc(t.title)} · ${esc(product.name)} · ${template.durationDays} ${esc(t.days)}</caption>
+        <thead><tr>
+          <th scope="col">${esc(t.day)}</th>
+          ${template.columns.map(c => `<th scope="col">${state.ui.editCols ? `<input type="text" class="input" style="min-height:28px;padding:4px 10px;" aria-label="${L==='es'?'Nombre de columna':'Column name'}: ${esc(c.label[L])}" data-nl-tpl-colname="${c.id}" value="${esc(c.label[L])}">` : esc(c.label[L])}</th>`).join('')}
+        </tr></thead>
+        <tbody>
+          ${days.map(d => `<tr>
+            <th scope="row" style="font-weight:400;">${d}</th>
+            ${template.columns.map(c => {
+              const val = (template.values[d] || {})[c.id];
+              const display = resolveTemplateCellDisplay(c.id, val, L);
+              return `<td><input type="text" class="input" style="min-height:28px;padding:4px 10px;" aria-label="${esc(t.day)} ${d}, ${esc(c.label[L])}" data-nl-tpl-cell="${d}|${c.id}" value="${esc(display)}"></td>`;
+            }).join('')}
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+    <p class="text-muted" style="font-size:11.5px;">${esc(t.note)}</p>
+  `;
+}
+function wireTemplate(){
+  const L = state.lang;
+  const back = document.querySelector('[data-nl-back-challenge]');
+  if(back) back.addEventListener('click', () => { state.screen = 'challenge'; render(); });
+  const editBtn = document.querySelector('[data-nl-tpl-edit]');
+  if(editBtn) editBtn.addEventListener('click', () => { state.ui.editCols = !state.ui.editCols; render(); });
+  document.querySelectorAll('[data-nl-tpl-colname]').forEach(inp => inp.addEventListener('change', () => {
+    const colId = inp.dataset.nlTplColname;
+    update(s => {
+      const product = activeProduct();
+      const template = s.challengeTemplates.find(tp => tp.productId === product.id) || s.challengeTemplates[0];
+      const col = template.columns.find(c => c.id === colId);
+      if(col) col.label[L] = inp.value;
+    });
+  }));
+  document.querySelectorAll('[data-nl-tpl-cell]').forEach(inp => inp.addEventListener('change', () => {
+    const [day, colId] = inp.dataset.nlTplCell.split('|');
+    update(s => {
+      const product = activeProduct();
+      const template = s.challengeTemplates.find(tp => tp.productId === product.id) || s.challengeTemplates[0];
+      if(!template.values[day]) template.values[day] = {};
+      const current = template.values[day][colId];
+      // Si el valor original era bilingue ({es,en}), se preserva el idioma
+      // contrario y solo se actualiza el del idioma activo (RF-40/41: renombrar
+      // sin perder la estructura). Si era un id simple (ej. receta), se
+      // reemplaza tal cual por el texto libre editado.
+      if(current && typeof current === 'object') current[L] = inp.value;
+      else template.values[day][colId] = inp.value;
+    });
+  }));
+  const dup = document.querySelector('[data-nl-tpl-duplicate]');
+  if(dup) dup.addEventListener('click', () => {
+    update(s => {
+      const product = activeProduct();
+      const template = s.challengeTemplates.find(tp => tp.productId === product.id) || s.challengeTemplates[0];
+      const copy = JSON.parse(JSON.stringify(template));
+      copy.id = uid('template');
+      copy.name = { es: template.name.es + ' (copia)', en: template.name.en + ' (copy)' };
+      s.challengeTemplates.push(copy);
+    });
+    showToast(L==='es' ? 'Plantilla duplicada.' : 'Template duplicated.', 'check');
+  });
+}
+/* ===== Perfil / Insignias (RF-22, 9.2) ===== */
+function renderProfile(){
+  const L = state.lang, t = T[L].profile, g = state.gamification;
+  const unlocked = new Set(g.badgeIds || []);
+  return `
+    <div style="display:flex;align-items:center;gap:14px;">
+      <div style="width:62px;height:62px;border-radius:999px;background:var(--color-accent);color:#fff;display:flex;align-items:center;justify-content:center;flex:none;">
+        <i data-lucide="user" style="width:26px;height:26px"></i>
+      </div>
+      <div>
+        <div style="font-family:var(--font-heading);font-size:20px;">Nutri Log</div>
+        <div class="text-muted" style="font-size:12.5px;">${esc(t.since)} ${esc(fmtDate(state.createdAt || nlToday(), L))}</div>
+      </div>
+    </div>
+    <div class="nl-grid2" style="grid-template-columns:repeat(3,1fr);">
+      <div class="card elev-sm"><span class="card-kicker">${esc(T[L].home.streakLabel)}</span><span class="card-title">${g.streakCurrent}</span></div>
+      <div class="card elev-sm"><span class="card-kicker">${esc(t.best)}</span><span class="card-title">${g.streakMax}</span></div>
+      <div class="card elev-sm"><span class="card-kicker">${esc(t.badges)}</span><span class="card-title">${unlocked.size}/${BADGE_DEFS.length}</span></div>
+    </div>
+    <div class="card elev-sm" style="flex-direction:row;align-items:center;gap:12px;">
+      <div style="width:38px;height:38px;border-radius:999px;background:var(--color-accent-2-200);display:flex;align-items:center;justify-content:center;flex:none;color:var(--color-accent-2-800);">
+        <i data-lucide="snowflake" style="width:18px;height:18px"></i>
+      </div>
+      <div style="flex:1;">
+        <div style="font-weight:700;font-size:13.5px;">${esc(t.freeze)}</div>
+        <div class="text-muted" style="font-size:12px;">${g.freezesAvailable} ${L==='es'?'de':'of'} ${g.freezesTotal} · ${esc(t.freezeSub)}</div>
+      </div>
+      ${g.freezesAvailable > 0 && !loggedToday(activeProduct().id) ? `<button type="button" class="btn btn-secondary" data-nl-freeze-use>${L==='es'?'Usar hoy':'Use today'}</button>` : ''}
+    </div>
+    <span class="card-title">${esc(t.badges)}</span>
+    <div class="nl-badge-grid">
+      ${BADGE_DEFS.map(b => {
+        const on = unlocked.has(b.id);
+        /* Antes esto se atenuaba con opacity:.75 en toda la caja -- accessibility-reviewer
+           midio que asi, el texto secundario quedaba en 4.04:1 (bajo el 4.5:1 de AA),
+           porque la opacidad diluye texto y fondo por igual. Se reemplaza por
+           background transparente real + colores explicitos que sí cumplen contra
+           el fondo de la pagina, en vez de un truco visual que no garantiza nada. */
+        return `<div class="card ${on?'elev-sm':''}" style="${on?'':'border:1.5px dashed var(--color-neutral-400);background:transparent;'}">
+          <div style="width:48px;height:48px;border-radius:999px;display:flex;align-items:center;justify-content:center;background:${on?'var(--color-accent)':'var(--color-neutral-300)'};color:${on?'var(--color-ink-on-accent)':'var(--color-neutral-700)'};">
+            <i data-lucide="${b.icon}" style="width:22px;height:22px"></i>
+          </div>
+          <span class="card-title" style="font-size:14px;${on?'':'color:var(--color-neutral-800);'}">${esc(b.name[L])}</span>
+          <span class="card-body" style="${on?'':'color:var(--color-neutral-700);opacity:1;'}">${on ? esc(b.desc[L]) : esc(t.locked)}</span>
+        </div>`;
+      }).join('')}
+    </div>
+  `;
+}
+function wireProfile(){
+  const freezeBtn = document.querySelector('[data-nl-freeze-use]');
+  if(freezeBtn) freezeBtn.addEventListener('click', () => {
+    update(s => {
+      if(s.gamification.freezesAvailable <= 0) return;
+      s.gamification.freezesAvailable--;
+      if(!s.gamification.freezeDaysUsed) s.gamification.freezeDaysUsed = [];
+      s.gamification.freezeDaysUsed.push(nlToday());
+    });
+  });
+}
+
+/* ===== Productos y metas (RF-01 a RF-06, RF-27, RF-28, 9.1, 9.12) ===== */
+function renderProduct(){
+  const L = state.lang, t = T[L].product;
+  const editingId = state.ui.editingProductId || state.activeProductId;
+  const product = state.products.find(p => p.id === editingId) || state.products[0];
+  const cfg = state.trackingConfigs.find(tc => tc.productId === product.id) || { metrics:{}, goal:{} };
+  const visible = state.products.filter(p => !p.archived);
+  return `
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <h3>${esc(t.title)}</h3>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      ${visible.map(p => `<button type="button" class="nl-pill ${p.id===editingId?'active':'inactive'}" data-nl-product-tab="${p.id}">${esc(p.name)}</button>`).join('')}
+      <button type="button" class="nl-pill inactive" style="border:1.5px dashed var(--color-neutral-400);background:transparent;" data-nl-product-add>
+        <i data-lucide="plus" style="width:13px;height:13px"></i>${esc(t.add)}
+      </button>
+    </div>
+    <div class="card elev-sm" style="flex-direction:row;align-items:center;gap:12px;">
+      <div class="nl-logo-slot" style="width:74px;height:74px;"></div>
+      <div style="flex:1;">
+        <input type="text" class="input" style="font-family:var(--font-heading);font-size:16px;border:none;background:transparent;padding-left:0;" value="${esc(product.name)}" data-nl-product-name>
+        <input type="text" class="input" style="font-size:12.5px;border:none;background:transparent;padding-left:0;" value="${esc(product.brand)}" data-nl-product-brand>
+      </div>
+      ${state.products.length > 1 ? `<button type="button" class="btn btn-ghost" data-nl-product-archive="${product.id}">${esc(t.archive)}</button>` : ''}
+    </div>
+    <div class="card elev-sm">
+      <span class="card-title">${esc(t.compounds)}</span>
+      <div class="nl-col" style="gap:6px;">
+        ${(product.compounds||[]).map((ref,i) => {
+          const compound = state.compounds.find(c=>c.id===ref.compoundId);
+          if(!compound) return '';
+          return `<div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;">
+            <span>${esc(compound.name[L])}${ref.amount && ref.amount[L] ? ` · ${esc(ref.amount[L])}` : ''}</span>
+            <span class="tag ${i%2?'tag-accent-2':'tag-accent'}">${esc((compound.effects||[]).map(e=>EFFECT_LABELS[e][L]).join(', '))}</span>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+    <div class="card elev-sm">
+      <span class="card-title">${esc(t.metrics)}</span>
+      <p class="text-muted" style="font-size:12px;margin:-4px 0 0;">${esc(t.metricsSub)}</p>
+      ${['streak','frequency','time'].map(m => `
+        <div style="padding:10px 0;border-top:1px solid var(--color-divider);">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="font-size:13.5px;font-weight:600;">${esc(t['metric'+m[0].toUpperCase()+m.slice(1)])}</span>
+            <label class="nl-switch"><input type="checkbox" data-nl-metric-toggle="${m}" aria-label="${esc(t['metric'+m[0].toUpperCase()+m.slice(1)])}" ${cfg.metrics[m]?'checked':''}><span class="track"><span class="knob"></span></span></label>
+          </div>
+          ${cfg.metrics[m] ? renderGoalField(m, cfg.goal, t, L) : ''}
+        </div>`).join('')}
+    </div>
+    <div class="card elev-sm">
+      <span class="card-title">${esc(t.reminders)}</span>
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <span style="font-size:13.5px;">${L==='es'?'Impulso matutino':'Morning boost'} · ${esc(state.reminderPref.time || '08:00')}</span>
+        <label class="nl-switch"><input type="checkbox" data-nl-reminder-toggle aria-label="${L==='es'?'Impulso matutino':'Morning boost'}" ${state.reminderPref.enabled?'checked':''}><span class="track"><span class="knob"></span></span></label>
+      </div>
+      <p class="text-muted" style="font-size:11px;margin:4px 0 0;">${L==='es'?'La entrega de notificaciones llega en una fase futura; por ahora esto guarda tu preferencia.':'Notification delivery is coming in a future phase; for now this saves your preference.'}</p>
+    </div>
+  `;
+}
+function renderGoalField(metric, goal, t, L){
+  if(metric === 'streak') return `<div class="field" style="margin-top:8px;"><label for="nl-goal-streak">${esc(t.goalStreak)}</label><input type="number" min="1" class="input" id="nl-goal-streak" value="${goal.streakTarget||14}" data-nl-goal="streakTarget"></div>`;
+  if(metric === 'frequency') return `<div class="field" style="margin-top:8px;"><label for="nl-goal-freq">${esc(t.goalFrequency)}</label><input type="number" min="1" class="input" id="nl-goal-freq" value="${goal.frequencyTarget||5}" data-nl-goal="frequencyTarget"></div>`;
+  return `<div class="field" style="margin-top:8px;"><label for="nl-goal-time">${L==='es'?'Antes de':'Before'}</label><input type="time" class="input" id="nl-goal-time" value="${goal.timeTarget||'09:00'}" data-nl-goal="timeTarget"></div>`;
+}
+function wireProduct(){
+  document.querySelectorAll('[data-nl-product-tab]').forEach(b => b.addEventListener('click', () => { state.ui.editingProductId = b.dataset.nlProductTab; render(); }));
+  const addBtn = document.querySelector('[data-nl-product-add]');
+  if(addBtn) addBtn.addEventListener('click', () => openProductEditor());
+  const name = document.querySelector('[data-nl-product-name]');
+  if(name) name.addEventListener('change', () => update(s => { const p = s.products.find(x=>x.id===(s.ui.editingProductId||s.activeProductId)); if(p) p.name = name.value; }));
+  const brand = document.querySelector('[data-nl-product-brand]');
+  if(brand) brand.addEventListener('change', () => update(s => { const p = s.products.find(x=>x.id===(s.ui.editingProductId||s.activeProductId)); if(p) p.brand = brand.value; }));
+  const archiveBtn = document.querySelector('[data-nl-product-archive]');
+  if(archiveBtn) archiveBtn.addEventListener('click', () => {
+    const id = archiveBtn.dataset.nlProductArchive;
+    openConfirmDialog(state.lang==='es' ? '¿Archivar este producto?' : 'Archive this product?', () => {
+      update(s => {
+        const p = s.products.find(x=>x.id===id); if(p) p.archived = true;
+        if(s.activeProductId === id) s.activeProductId = s.products.find(x=>!x.archived)?.id || s.activeProductId;
+        s.ui.editingProductId = s.activeProductId;
+      });
+    });
+  });
+  document.querySelectorAll('[data-nl-metric-toggle]').forEach(el => el.addEventListener('change', () => {
+    const metric = el.dataset.nlMetricToggle;
+    update(s => {
+      const productId = s.ui.editingProductId || s.activeProductId;
+      const cfg = s.trackingConfigs.find(tc => tc.productId === productId);
+      if(cfg) cfg.metrics[metric] = el.checked;
+    });
+  }));
+  document.querySelectorAll('[data-nl-goal]').forEach(el => el.addEventListener('change', () => {
+    const field = el.dataset.nlGoal;
+    update(s => {
+      const productId = s.ui.editingProductId || s.activeProductId;
+      const cfg = s.trackingConfigs.find(tc => tc.productId === productId);
+      if(cfg) cfg.goal[field] = field === 'timeTarget' ? el.value : (+el.value || 1);
+    });
+  }));
+  const reminderToggle = document.querySelector('[data-nl-reminder-toggle]');
+  if(reminderToggle) reminderToggle.addEventListener('change', () => {
+    update(s => { s.reminderPref.enabled = reminderToggle.checked; if(!s.reminderPref.time) s.reminderPref.time = '08:00'; });
+  });
+}
+function openProductEditor(){
+  const L = state.lang;
+  const host = document.getElementById('nl-modal-host');
+  host.innerHTML = `
+    <div class="dialog-backdrop" data-nl-modal-close>
+      <div class="dialog" data-nl-modal-stop>
+        <span class="dialog-title">${esc(T[L].product.add)}</span>
+        <div class="field"><label for="nl-np-name">${L==='es'?'Nombre':'Name'}</label><input type="text" class="input" id="nl-np-name"></div>
+        <div class="field"><label for="nl-np-brand">${L==='es'?'Marca':'Brand'}</label><input type="text" class="input" id="nl-np-brand"></div>
+        <div class="dialog-actions">
+          <button type="button" class="btn btn-secondary" data-nl-modal-close>${L==='es'?'Cancelar':'Cancel'}</button>
+          <button type="button" class="btn btn-primary" id="nl-np-save">${L==='es'?'Agregar':'Add'}</button>
+        </div>
+      </div>
+    </div>`;
+  host.querySelectorAll('[data-nl-modal-close]').forEach(el => el.addEventListener('click', () => { host.innerHTML = ''; }));
+  host.querySelector('[data-nl-modal-stop]').addEventListener('click', ev => ev.stopPropagation());
+  host.querySelector('#nl-np-save').addEventListener('click', () => {
+    const name = host.querySelector('#nl-np-name').value.trim();
+    if(!name) return;
+    const brand = host.querySelector('#nl-np-brand').value.trim();
+    const id = uid('product');
+    update(s => {
+      s.products.push({ id, name, brand, category:{es:'',en:''}, servingDefault:{es:'',en:''}, archived:false, compounds:[] });
+      s.trackingConfigs.push({ id: uid('tc'), productId: id, metrics:{streak:true,frequency:false,time:false}, goal:{streakTarget:14} });
+      s.ui.editingProductId = id;
+    });
+    host.innerHTML = '';
+  });
+}
+
+loadData();
+</script>
+</body>
+</html>
