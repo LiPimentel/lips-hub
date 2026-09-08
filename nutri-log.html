@@ -227,6 +227,45 @@ textarea.input{ min-height:80px; border-radius:var(--radius-md); resize:vertical
 @media (max-width: 760px){
   .nl-donutwrap{ flex-direction:column; align-items:flex-start; }
 }
+
+/* ===== Móvil (392×812, tab bar inferior) =====
+   Último paso: la navegación pasa de sidebar fija a barra inferior de 5
+   pestañas (Inicio, Recetas, Reto, Análisis, Perfil — mismas 5 del
+   handoff), más una barra superior compacta con el acceso a "Producto y
+   metas", que no entra en la barra inferior. Los dos bloques de
+   navegación existen siempre en el DOM; el media query decide cuál se ve,
+   así un cambio de tamaño de ventana no depende de JS para reajustarse. */
+.nl-mobile-top{ display:none; }
+.nl-tabbar{ display:none; }
+@media (max-width: 768px){
+  :root{ --aiapps-chrome-bottom: 62px; }
+  .nl-shell{ flex-direction:column; min-height:auto; }
+  .nl-sidebar{ display:none; }
+  .nl-mobile-top{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    padding:14px 16px; background:var(--color-surface); border-bottom:1px solid var(--color-divider);
+    position:sticky; top:0; z-index:20;
+  }
+  .nl-mobile-top .brand{ display:flex; align-items:center; gap:9px; }
+  .nl-mobile-top .mark{ width:30px; height:30px; border-radius:999px; background:var(--color-accent); color:#fff; display:flex; align-items:center; justify-content:center; }
+  .nl-mobile-top .name{ font-family:var(--font-heading); font-size:16px; }
+  .nl-mobile-top .lang{ display:flex; gap:5px; }
+  .nl-mobile-top .lang button{ padding:5px 10px; font-size:11.5px; }
+  .nl-content{ max-width:100%; padding:16px 16px calc(78px + env(safe-area-inset-bottom, 0px)); margin:0; }
+  .nl-grid2{ grid-template-columns:1fr; }
+  .nl-badge-grid{ grid-template-columns:repeat(2, 1fr); }
+  .nl-tabbar{
+    display:flex; position:fixed; left:0; right:0; bottom:0; z-index:30;
+    background:var(--color-surface); border-top:1px solid var(--color-divider);
+    padding:6px 4px calc(6px + env(safe-area-inset-bottom, 0px));
+  }
+  .nl-tabitem{
+    flex:1; display:flex; flex-direction:column; align-items:center; gap:2px;
+    padding:6px 2px; border:none; background:none; font-family:inherit; font-size:10px; font-weight:600;
+    color:var(--color-neutral-600); cursor:pointer;
+  }
+  .nl-tabitem[aria-current="page"]{ color:var(--color-accent); }
+}
 </style>
 </head>
 <body>
@@ -458,8 +497,9 @@ const SEED_COMPOUNDS = [
 const SEED_PRODUCTS = [
   { id:'urth', name:"Urth Superfood Brew", brand:"Urth Labs", category:{es:"Bebida funcional / superfood en polvo",en:"Functional drink / superfood powder"},
     servingDefault:{es:"1 porción (1 cucharada)",en:"1 serving (1 scoop)"}, archived:false,
-    compounds:[ {compoundId:'ashwagandha',amount:''}, {compoundId:'lionsmane',amount:''}, {compoundId:'cordyceps',amount:''},
-      {compoundId:'turkeytail',amount:''}, {compoundId:'collagen',amount:''}, {compoundId:'coffee',amount:'45mg cafeína'} ] }
+    compounds:[ {compoundId:'ashwagandha',amount:{es:'',en:''}}, {compoundId:'lionsmane',amount:{es:'',en:''}}, {compoundId:'cordyceps',amount:{es:'',en:''}},
+      {compoundId:'turkeytail',amount:{es:'',en:''}}, {compoundId:'collagen',amount:{es:'',en:''}},
+      {compoundId:'coffee',amount:{es:'45mg cafeína',en:'45mg caffeine'}} ] }
 ];
 const SEED_RECIPES = [
   { id:'mocha', productId:'urth', name:{es:"Collagen Iced Mocha",en:"Collagen Iced Mocha"}, consumptionType:'cold', origin:'preloaded',
@@ -755,6 +795,7 @@ function render(){
     icons(); wireOnboarding();
     return;
   }
+  const mobileTabs = NAV_ITEMS.filter(item => item.id !== 'product');
   app.innerHTML = `
     <nav class="nl-sidebar">
       <div class="nl-brand">
@@ -775,11 +816,32 @@ function render(){
         <button type="button" class="btn btn-secondary" data-nl-lang="en" ${L==='en'?'style="background:var(--color-accent);color:#fff"':''}>EN</button>
       </div>
     </nav>
+    <header class="nl-mobile-top">
+      <div class="brand">
+        <div class="mark"><i data-lucide="leaf" style="width:16px;height:16px"></i></div>
+        <span class="name">Nutri Log</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div class="lang">
+          <button type="button" class="btn btn-secondary" data-nl-lang="es" ${L==='es'?'style="background:var(--color-accent);color:#fff"':''}>ES</button>
+          <button type="button" class="btn btn-secondary" data-nl-lang="en" ${L==='en'?'style="background:var(--color-accent);color:#fff"':''}>EN</button>
+        </div>
+        <button type="button" class="btn-icon btn-secondary" data-nl-nav="product" aria-label="${esc(t.nav.product)}" title="${esc(t.nav.product)}">
+          <i data-lucide="settings" style="width:16px;height:16px"></i>
+        </button>
+      </div>
+    </header>
     <main class="nl-main">
       <div class="nl-content nl-col">
         ${renderScreen()}
       </div>
     </main>
+    <nav class="nl-tabbar">
+      ${mobileTabs.map(item => `
+        <button type="button" class="nl-tabitem" data-nl-nav="${item.id}" ${state.screen===item.id ? 'aria-current="page"' : ''}>
+          <i data-lucide="${item.icon}" style="width:19px;height:19px"></i>${esc(t.nav[item.id])}
+        </button>`).join('')}
+    </nav>
   `;
   icons();
   wireGlobalNav();
@@ -1903,7 +1965,7 @@ function renderProduct(){
           const compound = state.compounds.find(c=>c.id===ref.compoundId);
           if(!compound) return '';
           return `<div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;">
-            <span>${esc(compound.name[L])}${ref.amount?` · ${esc(ref.amount)}`:''}</span>
+            <span>${esc(compound.name[L])}${ref.amount && ref.amount[L] ? ` · ${esc(ref.amount[L])}` : ''}</span>
             <span class="tag ${i%2?'tag-accent-2':'tag-accent'}">${esc((compound.effects||[]).map(e=>EFFECT_LABELS[e][L]).join(', '))}</span>
           </div>`;
         }).join('')}
