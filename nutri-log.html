@@ -1078,12 +1078,331 @@ function wireLog(){
     showToast(state.lang==='es' ? 'Registro guardado.' : 'Entry saved.', 'check');
   });
 }
-function renderRecipes(){ return '<p>Recetas — pendiente</p>'; }
-function wireRecipes(){}
-function renderRecipeDetail(){ return '<p>Detalle de receta — pendiente</p>'; }
-function wireRecipeDetail(){}
-function renderNutrition(){ return '<p>Nutrición — pendiente</p>'; }
-function wireNutrition(){}
+/* ===== Recetas (RF-11 a RF-14, 6.10, 9.9) ===== */
+const TYPE_ICON = { hot:'flame', cold:'snowflake', blend:'blend', other:'utensils' };
+function matchesRecipeQuery(recipe, L, query){
+  if(!query) return true;
+  const q = query.toLowerCase();
+  if(recipe.name[L].toLowerCase().includes(q)) return true;
+  return (recipe.extraIngredients||[]).some(i => (i[L]||'').toLowerCase().includes(q));
+}
+function renderRecipes(){
+  const L = state.lang, t = T[L].recipes, ui = state.ui;
+  const product = activeProduct();
+  let list = state.recipes.filter(r => r.productId === product.id);
+  if(ui.recipeFilter === 'fav') list = list.filter(r => r.favorite);
+  else if(['hot','cold','blend'].includes(ui.recipeFilter)) list = list.filter(r => r.consumptionType === ui.recipeFilter);
+  list = list.filter(r => matchesRecipeQuery(r, L, ui.recipeQuery));
+  const filters = [ {id:'all',label:t.all}, {id:'fav',label:t.fav}, {id:'hot',label:T[L].log.hot}, {id:'cold',label:T[L].log.cold}, {id:'blend',label:T[L].log.blend} ];
+  return `
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <h3>${esc(t.title)}</h3>
+      <button type="button" class="btn btn-primary" data-nl-recipe-new><i data-lucide="plus" style="width:14px;height:14px"></i>${esc(t.new)}</button>
+    </div>
+    <input type="text" class="input" placeholder="${esc(t.search)}" value="${esc(ui.recipeQuery)}" data-nl-recipe-search>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      ${filters.map(f => `<button type="button" class="nl-pill ${ui.recipeFilter===f.id?'active-2':'inactive'}" data-nl-recipe-filter="${f.id}">${esc(f.label)}</button>`).join('')}
+    </div>
+    ${list.length ? `<div class="nl-grid2">${list.map(r => renderRecipeCard(r, L)).join('')}</div>` : `<div class="nl-empty">${esc(T[L].nutri.empty)}</div>`}
+  `;
+}
+function renderRecipeCard(r, L){
+  const effects = computeEffectProfile(r).slice(0,3);
+  const caffeine = computeCaffeine(r);
+  return `
+    <div class="card elev-sm" style="cursor:pointer;" data-nl-recipe-open="${r.id}">
+      <div class="nl-thumb"></div>
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+        <span class="card-title">${esc(r.name[L])}</span>
+        <button type="button" class="nl-heart ${r.favorite?'on':''}" data-nl-recipe-fav="${r.id}" aria-label="${esc(T[L].detail.fav)}">
+          <i data-lucide="heart" style="width:18px;height:18px;${r.favorite?'fill:currentColor':''}"></i>
+        </button>
+      </div>
+      <div class="card-meta"><i data-lucide="${TYPE_ICON[r.consumptionType]}" style="width:12px;height:12px"></i>${esc(T[L].log[r.consumptionType])} · ~${caffeine}mg ${esc(T[L].log.caffeine)}</div>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;">
+        ${effects.map(e => `<span class="tag tag-accent">${esc(e.label[L])}</span>`).join('')}
+      </div>
+      ${r.rating ? `<div>${renderStars(r.rating, false)}</div>` : ''}
+    </div>`;
+}
+function renderStars(rating, editable, recipeId){
+  let out = '';
+  for(let i=1;i<=5;i++){
+    out += `<button type="button" class="nl-star ${i<=rating?'on':''}" ${editable?`data-nl-rate="${recipeId}" data-nl-rate-val="${i}"`:'tabindex="-1" style="cursor:default"'}><i data-lucide="star" style="width:16px;height:16px;${i<=rating?'fill:currentColor':''}"></i></button>`;
+  }
+  return out;
+}
+function wireRecipes(){
+  const ui = state.ui;
+  const search = document.querySelector('[data-nl-recipe-search]');
+  if(search) search.addEventListener('input', () => { ui.recipeQuery = search.value; render(); });
+  document.querySelectorAll('[data-nl-recipe-filter]').forEach(b => b.addEventListener('click', () => { ui.recipeFilter = b.dataset.nlRecipeFilter; render(); }));
+  document.querySelectorAll('[data-nl-recipe-open]').forEach(el => el.addEventListener('click', (ev) => {
+    if(ev.target.closest('[data-nl-recipe-fav]')) return;
+    ui.openRecipeId = el.dataset.nlRecipeOpen; state.screen = 'recipeDetail'; render();
+  }));
+  document.querySelectorAll('[data-nl-recipe-fav]').forEach(el => el.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    const id = el.dataset.nlRecipeFav;
+    update(s => { const r = s.recipes.find(x=>x.id===id); if(r) r.favorite = !r.favorite; });
+  }));
+  const newBtn = document.querySelector('[data-nl-recipe-new]');
+  if(newBtn) newBtn.addEventListener('click', () => openRecipeEditor(null));
+}
+
+/* ===== Detalle de receta (RF-14, RF-15, RF-16, RF-35, RF-36) ===== */
+function renderRecipeDetail(){
+  const L = state.lang, t = T[L].detail;
+  const recipe = state.recipes.find(r => r.id === state.ui.openRecipeId) || state.recipes[0];
+  if(!recipe) return `<div class="nl-empty">${esc(T[L].nutri.empty)}</div>`;
+  const effects = computeEffectProfile(recipe);
+  const caffeine = computeCaffeine(recipe);
+  const nutri = computeNutrition(recipe.id);
+  return `
+    <button type="button" class="btn btn-ghost" data-nl-back><i data-lucide="arrow-left" style="width:16px;height:16px"></i>${L==='es'?'Volver':'Back'}</button>
+    <div class="nl-thumb-lg"></div>
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+      <div>
+        <span class="card-kicker">${esc(t.kicker)}</span>
+        <h3>${esc(recipe.name[L])}</h3>
+      </div>
+      <button type="button" class="nl-heart ${recipe.favorite?'on':''}" data-nl-recipe-fav="${recipe.id}" title="${esc(recipe.favorite?t.fav:t.notFav)}">
+        <i data-lucide="heart" style="width:22px;height:22px;${recipe.favorite?'fill:currentColor':''}"></i>
+      </button>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <span class="tag tag-outline">~${caffeine}mg ${esc(T[L].log.caffeine)}</span>
+      <span class="tag tag-neutral"><i data-lucide="${TYPE_ICON[recipe.consumptionType]}" style="width:11px;height:11px;display:inline;vertical-align:-1px;"></i> ${esc(T[L].log[recipe.consumptionType])}</span>
+    </div>
+    <div class="card elev-sm" style="cursor:pointer;flex-direction:row;justify-content:space-between;align-items:center;" data-nl-nutri-open="${recipe.id}">
+      <div>
+        <div style="font-family:var(--font-heading);font-size:26px;">${nutri.total.kcal} <span style="font-size:14px;">${esc(T[L].nutri.kcal)}</span></div>
+        <div class="text-muted" style="font-size:12px;">${esc(T[L].nutri.see || T[L].nutri.title)}</div>
+      </div>
+      <i data-lucide="chevron-right" style="width:18px;height:18px"></i>
+    </div>
+    <div class="card elev-sm">
+      <span class="card-title">${esc(t.effects)}</span>
+      ${effects.length ? effects.map(e => `
+        <div class="nl-effect-row nl-effect-lvl${e.lvl}">
+          <div style="display:flex;justify-content:space-between;font-size:12.5px;">
+            <span>${esc(e.label[L])}</span>
+            <span class="text-muted">${L==='es' ? ['','baja','media','alta'][e.lvl] : ['','low','medium','high'][e.lvl]}</span>
+          </div>
+          <div class="nl-bar-track"><div class="nl-bar-fill" style="width:${e.pct}%"></div></div>
+        </div>`).join('') : `<p class="text-muted">${L==='es'?'Sin efectos calculados todavía.':'No calculated effects yet.'}</p>`}
+    </div>
+    <div class="nl-disclaimer"><i data-lucide="info" style="width:15px;height:15px"></i><span>${esc(T[L].disclaimer)}</span></div>
+    <div class="card elev-sm">
+      <span class="card-title">${esc(t.ingredients)}</span>
+      <ul style="margin:0;padding-left:18px;font-size:13.5px;">${(recipe.extraIngredients||[]).map(i => `<li>${esc(i[L])}</li>`).join('')}</ul>
+    </div>
+    <div class="card elev-sm">
+      <span class="card-title">${esc(t.steps)}</span>
+      <ol style="margin:0;padding-left:18px;font-size:13.5px;">${(recipe.steps[L]||[]).map(s => `<li style="margin-bottom:4px;">${esc(s)}</li>`).join('')}</ol>
+    </div>
+    <div class="card elev-sm">
+      <span class="card-title">${esc(t.rate)}</span>
+      <div>${renderStars(recipe.rating || 0, true, recipe.id)}</div>
+    </div>
+    <button type="button" class="btn btn-primary btn-block" data-nl-log-with="${recipe.id}">${esc(t.logThis)}</button>
+    ${recipe.origin === 'user' ? `
+      <div style="display:flex;gap:8px;">
+        <button type="button" class="btn btn-secondary" style="flex:1" data-nl-recipe-edit="${recipe.id}">${esc(t.edit)}</button>
+        <button type="button" class="btn btn-secondary" style="flex:1;color:var(--color-accent-800)" data-nl-recipe-delete="${recipe.id}">${esc(t.delete)}</button>
+      </div>` : ''}
+  `;
+}
+function wireRecipeDetail(){
+  const back = document.querySelector('[data-nl-back]');
+  if(back) back.addEventListener('click', () => { state.screen = 'recipes'; render(); });
+  document.querySelectorAll('[data-nl-recipe-fav]').forEach(el => el.addEventListener('click', () => {
+    const id = el.dataset.nlRecipeFav;
+    update(s => { const r = s.recipes.find(x=>x.id===id); if(r) r.favorite = !r.favorite; });
+  }));
+  const nutriOpen = document.querySelector('[data-nl-nutri-open]');
+  if(nutriOpen) nutriOpen.addEventListener('click', () => {
+    state.ui.nutriRecipeId = nutriOpen.dataset.nlNutriOpen; state.screen = 'nutrition'; render();
+  });
+  document.querySelectorAll('[data-nl-rate]').forEach(el => el.addEventListener('click', () => {
+    const id = el.dataset.nlRate, val = +el.dataset.nlRateVal;
+    update(s => { const r = s.recipes.find(x=>x.id===id); if(r) r.rating = (r.rating === val ? null : val); });
+  }));
+  const logWith = document.querySelector('[data-nl-log-with]');
+  if(logWith) logWith.addEventListener('click', () => {
+    state.ui.logRecipeId = logWith.dataset.nlLogWith;
+    state.screen = 'log'; render();
+  });
+  const editBtn = document.querySelector('[data-nl-recipe-edit]');
+  if(editBtn) editBtn.addEventListener('click', () => openRecipeEditor(editBtn.dataset.nlRecipeEdit));
+  const delBtn = document.querySelector('[data-nl-recipe-delete]');
+  if(delBtn) delBtn.addEventListener('click', () => {
+    const id = delBtn.dataset.nlRecipeDelete;
+    openConfirmDialog(state.lang==='es' ? '¿Eliminar esta receta?' : 'Delete this recipe?', () => {
+      update(s => { s.recipes = s.recipes.filter(r => r.id !== id); });
+      state.screen = 'recipes'; render();
+    });
+  });
+}
+
+/* ===== Editor de receta propia (RF-13) ===== */
+function openRecipeEditor(recipeId){
+  const L = state.lang;
+  const existing = recipeId ? state.recipes.find(r => r.id === recipeId) : null;
+  const product = activeProduct();
+  const host = document.getElementById('nl-modal-host');
+  host.innerHTML = `
+    <div class="dialog-backdrop" data-nl-modal-close>
+      <div class="dialog" data-nl-modal-stop>
+        <span class="dialog-title">${L==='es' ? (existing?'Editar receta':'Nueva receta') : (existing?'Edit recipe':'New recipe')}</span>
+        <div class="field"><label>${L==='es'?'Nombre':'Name'}</label><input type="text" class="input" id="nl-re-name" value="${esc(existing ? existing.name[L] : '')}"></div>
+        <div class="field"><label>${T[L].log.type}</label>
+          <select class="input" id="nl-re-type">
+            ${CONSUMPTION_TYPES.map(ty => `<option value="${ty}" ${existing && existing.consumptionType===ty?'selected':''}>${esc(T[L].log[ty])}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field"><label>${T[L].detail.ingredients} (${L==='es'?'uno por línea':'one per line'})</label>
+          <textarea class="input" id="nl-re-ingredients" rows="4">${esc((existing ? existing.extraIngredients.map(i=>i[L]) : []).join('\n'))}</textarea>
+        </div>
+        <div class="field"><label>${T[L].detail.steps} (${L==='es'?'uno por línea':'one per line'})</label>
+          <textarea class="input" id="nl-re-steps" rows="4">${esc((existing ? existing.steps[L] : []).join('\n'))}</textarea>
+        </div>
+        <div class="dialog-actions">
+          <button type="button" class="btn btn-secondary" data-nl-modal-close>${L==='es'?'Cancelar':'Cancel'}</button>
+          <button type="button" class="btn btn-primary" id="nl-re-save">${L==='es'?'Guardar':'Save'}</button>
+        </div>
+      </div>
+    </div>`;
+  icons();
+  host.querySelectorAll('[data-nl-modal-close]').forEach(el => el.addEventListener('click', () => { host.innerHTML = ''; }));
+  host.querySelector('[data-nl-modal-stop]').addEventListener('click', ev => ev.stopPropagation());
+  host.querySelector('#nl-re-save').addEventListener('click', () => {
+    const name = host.querySelector('#nl-re-name').value.trim();
+    if(!name) return;
+    const type = host.querySelector('#nl-re-type').value;
+    const ingredientLines = host.querySelector('#nl-re-ingredients').value.split('\n').map(s=>s.trim()).filter(Boolean);
+    const stepLines = host.querySelector('#nl-re-steps').value.split('\n').map(s=>s.trim()).filter(Boolean);
+    update(s => {
+      if(existing){
+        const r = s.recipes.find(x => x.id === existing.id);
+        r.name[L] = name; r.consumptionType = type;
+        r.extraIngredients = ingredientLines.map(line => ({ es:line, en:line, nutri:{kcal:0,p:0,c:0,f:0} }));
+        r.steps[L] = stepLines;
+      } else {
+        s.recipes.push({
+          id: uid('recipe'), productId: product.id, name:{es:name,en:name}, consumptionType:type, origin:'user',
+          favorite:false, rating:null, extraCompounds:[],
+          extraIngredients: ingredientLines.map(line => ({ es:line, en:line, nutri:{kcal:0,p:0,c:0,f:0} })),
+          steps: { es: L==='es'?stepLines:[], en: L==='en'?stepLines:[] }
+        });
+      }
+    });
+    host.innerHTML = '';
+    showToast(L==='es' ? 'Receta guardada.' : 'Recipe saved.', 'check');
+  });
+}
+function openConfirmDialog(message, onConfirm){
+  const L = state.lang;
+  const host = document.getElementById('nl-modal-host');
+  host.innerHTML = `
+    <div class="dialog-backdrop" data-nl-modal-close>
+      <div class="dialog" data-nl-modal-stop style="width:min(360px,100%)">
+        <span class="dialog-title">${L==='es'?'Confirmar':'Confirm'}</span>
+        <p style="margin:0;">${esc(message)}</p>
+        <div class="dialog-actions">
+          <button type="button" class="btn btn-secondary" data-nl-modal-close>${L==='es'?'Cancelar':'Cancel'}</button>
+          <button type="button" class="btn btn-primary" id="nl-confirm-yes">${L==='es'?'Eliminar':'Delete'}</button>
+        </div>
+      </div>
+    </div>`;
+  host.querySelectorAll('[data-nl-modal-close]').forEach(el => el.addEventListener('click', () => { host.innerHTML = ''; }));
+  host.querySelector('[data-nl-modal-stop]').addEventListener('click', ev => ev.stopPropagation());
+  host.querySelector('#nl-confirm-yes').addEventListener('click', () => { host.innerHTML = ''; onConfirm(); });
+}
+
+/* ===== Nutricion (pantalla nueva del handoff, calorias y macros) ===== */
+function renderNutrition(){
+  const L = state.lang, t = T[L].nutri, product = activeProduct();
+  const all = state.recipes.filter(r => r.productId === product.id);
+  const ui = state.ui;
+  const nr = ui.nutriRecipeId || (all[0] && all[0].id);
+  const recipe = state.recipes.find(r => r.id === nr) || all[0];
+  if(!recipe) return `<div class="nl-empty">${esc(t.empty)}</div>`;
+  const { rows, total } = computeNutrition(recipe.id);
+  const kcalFromMacros = { p: total.p*4, c: total.c*4, f: total.f*9 };
+  const kcalTotalCheck = kcalFromMacros.p + kcalFromMacros.c + kcalFromMacros.f;
+  const pct = v => kcalTotalCheck ? Math.round((v/kcalTotalCheck)*100) : 0;
+  const caffeine = computeCaffeine(recipe);
+  const filtered = all.filter(r => matchesRecipeQuery(r, L, ui.nutriQuery));
+  return `
+    <h3>${esc(t.title)}</h3>
+    <p class="text-muted" style="margin-top:-8px;">${esc(t.sub)}</p>
+    <div class="field" style="position:relative;">
+      <div class="input" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;" data-nl-nutri-toggle>
+        <span>${esc(recipe.name[L])} · ${all.length} ${L==='es'?'recetas':'recipes'}</span>
+        <i data-lucide="chevron-down" style="width:16px;height:16px"></i>
+      </div>
+      ${ui.nutriOpen ? `
+        <div class="nl-searchpanel">
+          <input type="text" class="input" placeholder="${esc(T[L].recipes.search)}" value="${esc(ui.nutriQuery)}" data-nl-nutri-search>
+          <div class="nl-searchlist">
+            ${filtered.length ? filtered.map(r => `<div class="nl-searchrow" data-nl-nutri-pick="${r.id}">${esc(r.name[L])} ${r.id===recipe.id?'<i data-lucide=\"check\" style=\"width:14px;height:14px\"></i>':''}</div>`).join('') : `<div class="text-muted" style="padding:8px;font-size:13px;">${esc(t.empty)}</div>`}
+          </div>
+        </div>` : ''}
+    </div>
+    <div class="card nl-streak-card elev-md">
+      <span style="font-size:12px;opacity:.85;">${esc(t.perServing)}</span>
+      <div style="font-family:var(--font-heading);font-size:52px;line-height:1;">${total.kcal}<span style="font-size:16px;"> ${esc(t.kcal)}</span></div>
+      <span style="font-size:12.5px;">${esc(recipe.name[L])} · ${esc(T[L].log[recipe.consumptionType])} · ~${caffeine}mg ${esc(T[L].nutri.caffeine || T[L].log.caffeine)}</span>
+    </div>
+    <div class="card elev-sm nl-col" style="gap:10px;">
+      ${[['p',t.protein,total.p,'var(--color-accent)'],['c',t.carbs,total.c,'var(--color-accent-2)'],['f',t.fat,total.f,'var(--color-neutral-500)']].map(([k,label,val]) => `
+        <div class="nl-effect-row">
+          <div style="display:flex;justify-content:space-between;font-size:12.5px;"><span>${esc(label)}</span><span class="text-muted">${val}g · ${pct(kcalFromMacros[k])}%</span></div>
+          <div class="nl-bar-track"><div class="nl-bar-fill" style="width:${pct(kcalFromMacros[k])}%;background:${['var(--color-accent)','var(--color-accent-2)','var(--color-neutral-500)'][['p','c','f'].indexOf(k)]}"></div></div>
+        </div>`).join('')}
+    </div>
+    <div class="card elev-sm">
+      <span class="card-title">${esc(t.breakdown)}</span>
+      <table class="table">
+        <thead><tr><th></th><th>${esc(t.kcal)}</th><th>P</th><th>C</th><th>G</th></tr></thead>
+        <tbody>
+          ${rows.map(r => `<tr><td>${esc(r[L])}</td><td>${r.kcal}</td><td>${r.p}</td><td>${r.c}</td><td>${r.f}</td></tr>`).join('')}
+          <tr style="color:var(--color-accent-700);font-weight:700;"><td>${esc(t.total)}</td><td>${total.kcal}</td><td>${total.p}</td><td>${total.c}</td><td>${total.f}</td></tr>
+        </tbody>
+      </table>
+    </div>
+    ${renderNutritionAccumulators(product.id, L, t)}
+    <p class="text-muted" style="font-size:11.5px;">${esc(t.note)}</p>
+  `;
+}
+function renderNutritionAccumulators(productId, L, t){
+  const today = nlToday();
+  const logsToday = state.logs.filter(l => l.productId===productId && l.startedAt.slice(0,10)===today);
+  const weekStart = nlDaysAgo(6);
+  const logsWeek = state.logs.filter(l => l.productId===productId && l.startedAt.slice(0,10)>=weekStart);
+  const monthStart = nlDaysAgo(29);
+  const logsMonth = state.logs.filter(l => l.productId===productId && l.startedAt.slice(0,10)>=monthStart);
+  const kcalOf = log => log.recipeId ? computeNutrition(log.recipeId).total.kcal : NUTRI_BASE.kcal;
+  const sumKcal = logs => logs.reduce((a,l) => a + kcalOf(l), 0);
+  const avgKcal = logs => logs.length ? Math.round(sumKcal(logs)/logs.length) : 0;
+  return `
+    <div class="nl-grid2">
+      <div class="card elev-sm"><span class="card-kicker">${esc(t.today)}</span><span class="card-title">${sumKcal(logsToday)} ${esc(t.kcal)}</span><span class="text-muted" style="font-size:11.5px;">${logsToday.length} ${L==='es'?'registro(s)':'entr(y/ies)'}</span></div>
+      <div class="card elev-sm"><span class="card-kicker">${esc(t.week)}</span><span class="card-title">${avgKcal(logsWeek)} ${esc(t.kcal)}</span><span class="text-muted" style="font-size:11.5px;">${logsWeek.length} · 7 ${L==='es'?'días':'days'}</span></div>
+      <div class="card elev-sm"><span class="card-kicker">${esc(t.month)}</span><span class="card-title">${sumKcal(logsMonth)} ${esc(t.kcal)}</span><span class="text-muted" style="font-size:11.5px;">${logsMonth.length} ${L==='es'?'registrados':'logged'}</span></div>
+    </div>`;
+}
+function wireNutrition(){
+  const ui = state.ui;
+  const toggle = document.querySelector('[data-nl-nutri-toggle]');
+  if(toggle) toggle.addEventListener('click', () => { ui.nutriOpen = !ui.nutriOpen; render(); });
+  const search = document.querySelector('[data-nl-nutri-search]');
+  if(search){ search.addEventListener('input', () => { ui.nutriQuery = search.value; render(); }); search.focus(); }
+  document.querySelectorAll('[data-nl-nutri-pick]').forEach(el => el.addEventListener('click', () => {
+    ui.nutriRecipeId = el.dataset.nlNutriPick; ui.nutriOpen = false; ui.nutriQuery=''; render();
+  }));
+}
 function renderAnalytics(){ return '<p>Análisis — pendiente</p>'; }
 function wireAnalytics(){}
 function renderChallenge(){ return '<p>Reto — pendiente</p>'; }
