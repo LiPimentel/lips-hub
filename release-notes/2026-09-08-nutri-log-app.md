@@ -62,10 +62,34 @@ el motor de cálculo da los mismos valores que trae el documento de
 requerimientos (por ejemplo, Collagen Iced Mocha ≈184 kcal, Adaptogen Latte
 ≈83 kcal), la racha sube al registrar, el reto de 14 días se puede iniciar y
 completar un check-in, la plantilla se puede editar y duplicar, y la vista
-móvil no tapa ningún botón. Pendiente de la revisión de calidad, seguridad y
-accesibilidad antes de fusionar (ver el proceso habitual del proyecto).
+móvil no tapa ningún botón.
+
+Después de esta primera versión se corrieron las revisiones de calidad,
+seguridad y accesibilidad del proyecto, y sus observaciones **ya se
+corrigieron en la misma rama** (commit `4982f8d`, 8 de septiembre):
+- Se agregó la preferencia de "reducir movimiento" a las dos animaciones
+  propias de la app (número de racha, aviso de confirmación) — antes no la
+  respetaban.
+- Se corrigieron los textos que usan los lectores de pantalla en las
+  estrellas de valoración, las escalas 1-5 del reto, el botón de hábito
+  cumplido, el corazón de favorito y unos 15 campos de formulario que no
+  estaban conectados a su etiqueta.
+- Se mejoró el contraste de color en varios puntos donde el texto blanco
+  sobre el color de acento de la app no se leía con suficiente claridad
+  (insignia bloqueada, etiquetas de racha, botones activos), y el contorno
+  que marca qué casilla está seleccionada al navegar con teclado.
+- Se corrigió que elegir "Agregar mi propio producto" en la bienvenida no
+  hacía nada (quedaba en silencio con el producto por defecto).
+
+Quedan pendientes, sin bloquear este release, dos observaciones menores de
+seguridad (de bajo impacto: un archivo CSV exportado podría necesitar un
+ajuste si se abre en Excel, y el campo de nota del registro no se vuelve a
+mostrar después de guardarlo) y un detalle de un indicador de la pantalla de
+Análisis — ver `docs/nutrilog/requerimientos.md` ("Casos borde") para el
+detalle completo.
 
 ## Dónde quedó
 
-Solo en la rama `claude/nutri-log-app` y su vista previa. **Todavía no está en
-producción** (https://lips-hub.lissette2402.workers.dev).
+Solo en la rama `claude/nutri-log-app` y su vista previa (build local
+verificado por `release-manager` — ver `docs/release-log.md`). **Todavía no
+está en producción** (https://lips-hub.lissette2402.workers.dev).
