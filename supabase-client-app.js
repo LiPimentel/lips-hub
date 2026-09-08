@@ -9,7 +9,7 @@
   const SUPABASE_URL = "https://mkliirscqulfrutmjncu.supabase.co";
   const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1rbGlpcnNjcXVsZnJ1dG1qbmN1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQzMDE0NzcsImV4cCI6MjA5OTg3NzQ3N30.4Qk-hH3NjawJX1eGQtzPnPOtwE9RieK42pjLxR0t65s";
 
-  const VALID_APP_IDS = ["mentor", "staffgate", "lpbag", "mytravel", "gantt", "hourglass"];
+  const VALID_APP_IDS = ["mentor", "staffgate", "lpbag", "mytravel", "gantt", "hourglass", "nutrilog"];
   const appId = window.AIAPPS_APP_ID;
 
   if (!appId || VALID_APP_IDS.indexOf(appId) === -1) {
