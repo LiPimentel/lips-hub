@@ -556,6 +556,7 @@ function defaultState(){
   return {
     lang: 'es',
     screen: 'home',
+    createdAt: nlToday(),
     onboardingDone: false, onbStep: 0, onbPicks: {},
     activeProductId: 'urth',
     compounds: SEED_COMPOUNDS.map(c => ({...c})),
@@ -1814,10 +1815,197 @@ function wireTemplate(){
     showToast(L==='es' ? 'Plantilla duplicada.' : 'Template duplicated.', 'check');
   });
 }
-function renderProfile(){ return '<p>Perfil — pendiente</p>'; }
-function wireProfile(){}
-function renderProduct(){ return '<p>Producto — pendiente</p>'; }
-function wireProduct(){}
+/* ===== Perfil / Insignias (RF-22, 9.2) ===== */
+function renderProfile(){
+  const L = state.lang, t = T[L].profile, g = state.gamification;
+  const unlocked = new Set(g.badgeIds || []);
+  return `
+    <div style="display:flex;align-items:center;gap:14px;">
+      <div style="width:62px;height:62px;border-radius:999px;background:var(--color-accent);color:#fff;display:flex;align-items:center;justify-content:center;flex:none;">
+        <i data-lucide="user" style="width:26px;height:26px"></i>
+      </div>
+      <div>
+        <div style="font-family:var(--font-heading);font-size:20px;">Nutri Log</div>
+        <div class="text-muted" style="font-size:12.5px;">${esc(t.since)} ${esc(fmtDate(state.createdAt || nlToday(), L))}</div>
+      </div>
+    </div>
+    <div class="nl-grid2" style="grid-template-columns:repeat(3,1fr);">
+      <div class="card elev-sm"><span class="card-kicker">${esc(T[L].home.streakLabel)}</span><span class="card-title">${g.streakCurrent}</span></div>
+      <div class="card elev-sm"><span class="card-kicker">${esc(t.best)}</span><span class="card-title">${g.streakMax}</span></div>
+      <div class="card elev-sm"><span class="card-kicker">${esc(t.badges)}</span><span class="card-title">${unlocked.size}/${BADGE_DEFS.length}</span></div>
+    </div>
+    <div class="card elev-sm" style="flex-direction:row;align-items:center;gap:12px;">
+      <div style="width:38px;height:38px;border-radius:999px;background:var(--color-accent-2-200);display:flex;align-items:center;justify-content:center;flex:none;color:var(--color-accent-2-800);">
+        <i data-lucide="snowflake" style="width:18px;height:18px"></i>
+      </div>
+      <div style="flex:1;">
+        <div style="font-weight:700;font-size:13.5px;">${esc(t.freeze)}</div>
+        <div class="text-muted" style="font-size:12px;">${g.freezesAvailable} ${L==='es'?'de':'of'} ${g.freezesTotal} · ${esc(t.freezeSub)}</div>
+      </div>
+      ${g.freezesAvailable > 0 && !loggedToday(activeProduct().id) ? `<button type="button" class="btn btn-secondary" data-nl-freeze-use>${L==='es'?'Usar hoy':'Use today'}</button>` : ''}
+    </div>
+    <span class="card-title">${esc(t.badges)}</span>
+    <div class="nl-badge-grid">
+      ${BADGE_DEFS.map(b => {
+        const on = unlocked.has(b.id);
+        return `<div class="card ${on?'elev-sm':''}" style="${on?'':'border:1.5px dashed var(--color-neutral-400);opacity:.75;'}">
+          <div style="width:48px;height:48px;border-radius:999px;display:flex;align-items:center;justify-content:center;background:${on?'var(--color-accent)':'var(--color-neutral-300)'};color:${on?'#fff':'var(--color-neutral-600)'};">
+            <i data-lucide="${b.icon}" style="width:22px;height:22px"></i>
+          </div>
+          <span class="card-title" style="font-size:14px;">${esc(b.name[L])}</span>
+          <span class="card-body">${on ? esc(b.desc[L]) : esc(t.locked)}</span>
+        </div>`;
+      }).join('')}
+    </div>
+  `;
+}
+function wireProfile(){
+  const freezeBtn = document.querySelector('[data-nl-freeze-use]');
+  if(freezeBtn) freezeBtn.addEventListener('click', () => {
+    update(s => {
+      if(s.gamification.freezesAvailable <= 0) return;
+      s.gamification.freezesAvailable--;
+      if(!s.gamification.freezeDaysUsed) s.gamification.freezeDaysUsed = [];
+      s.gamification.freezeDaysUsed.push(nlToday());
+    });
+  });
+}
+
+/* ===== Productos y metas (RF-01 a RF-06, RF-27, RF-28, 9.1, 9.12) ===== */
+function renderProduct(){
+  const L = state.lang, t = T[L].product;
+  const editingId = state.ui.editingProductId || state.activeProductId;
+  const product = state.products.find(p => p.id === editingId) || state.products[0];
+  const cfg = state.trackingConfigs.find(tc => tc.productId === product.id) || { metrics:{}, goal:{} };
+  const visible = state.products.filter(p => !p.archived);
+  return `
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <h3>${esc(t.title)}</h3>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      ${visible.map(p => `<button type="button" class="nl-pill ${p.id===editingId?'active':'inactive'}" data-nl-product-tab="${p.id}">${esc(p.name)}</button>`).join('')}
+      <button type="button" class="nl-pill inactive" style="border:1.5px dashed var(--color-neutral-400);background:transparent;" data-nl-product-add>
+        <i data-lucide="plus" style="width:13px;height:13px"></i>${esc(t.add)}
+      </button>
+    </div>
+    <div class="card elev-sm" style="flex-direction:row;align-items:center;gap:12px;">
+      <div class="nl-logo-slot" style="width:74px;height:74px;"></div>
+      <div style="flex:1;">
+        <input type="text" class="input" style="font-family:var(--font-heading);font-size:16px;border:none;background:transparent;padding-left:0;" value="${esc(product.name)}" data-nl-product-name>
+        <input type="text" class="input" style="font-size:12.5px;border:none;background:transparent;padding-left:0;" value="${esc(product.brand)}" data-nl-product-brand>
+      </div>
+      ${state.products.length > 1 ? `<button type="button" class="btn btn-ghost" data-nl-product-archive="${product.id}">${esc(t.archive)}</button>` : ''}
+    </div>
+    <div class="card elev-sm">
+      <span class="card-title">${esc(t.compounds)}</span>
+      <div class="nl-col" style="gap:6px;">
+        ${(product.compounds||[]).map((ref,i) => {
+          const compound = state.compounds.find(c=>c.id===ref.compoundId);
+          if(!compound) return '';
+          return `<div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;">
+            <span>${esc(compound.name[L])}${ref.amount?` · ${esc(ref.amount)}`:''}</span>
+            <span class="tag ${i%2?'tag-accent-2':'tag-accent'}">${esc((compound.effects||[]).map(e=>EFFECT_LABELS[e][L]).join(', '))}</span>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+    <div class="card elev-sm">
+      <span class="card-title">${esc(t.metrics)}</span>
+      <p class="text-muted" style="font-size:12px;margin:-4px 0 0;">${esc(t.metricsSub)}</p>
+      ${['streak','frequency','time'].map(m => `
+        <div style="padding:10px 0;border-top:1px solid var(--color-divider);">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="font-size:13.5px;font-weight:600;">${esc(t['metric'+m[0].toUpperCase()+m.slice(1)])}</span>
+            <label class="nl-switch"><input type="checkbox" data-nl-metric-toggle="${m}" aria-label="${esc(t['metric'+m[0].toUpperCase()+m.slice(1)])}" ${cfg.metrics[m]?'checked':''}><span class="track"><span class="knob"></span></span></label>
+          </div>
+          ${cfg.metrics[m] ? renderGoalField(m, cfg.goal, t, L) : ''}
+        </div>`).join('')}
+    </div>
+    <div class="card elev-sm">
+      <span class="card-title">${esc(t.reminders)}</span>
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <span style="font-size:13.5px;">${L==='es'?'Impulso matutino':'Morning boost'} · ${esc(state.reminderPref.time || '08:00')}</span>
+        <label class="nl-switch"><input type="checkbox" data-nl-reminder-toggle aria-label="${L==='es'?'Impulso matutino':'Morning boost'}" ${state.reminderPref.enabled?'checked':''}><span class="track"><span class="knob"></span></span></label>
+      </div>
+      <p class="text-muted" style="font-size:11px;margin:4px 0 0;">${L==='es'?'La entrega de notificaciones llega en una fase futura; por ahora esto guarda tu preferencia.':'Notification delivery is coming in a future phase; for now this saves your preference.'}</p>
+    </div>
+  `;
+}
+function renderGoalField(metric, goal, t, L){
+  if(metric === 'streak') return `<div class="field" style="margin-top:8px;"><label>${esc(t.goalStreak)}</label><input type="number" min="1" class="input" value="${goal.streakTarget||14}" data-nl-goal="streakTarget"></div>`;
+  if(metric === 'frequency') return `<div class="field" style="margin-top:8px;"><label>${esc(t.goalFrequency)}</label><input type="number" min="1" class="input" value="${goal.frequencyTarget||5}" data-nl-goal="frequencyTarget"></div>`;
+  return `<div class="field" style="margin-top:8px;"><label>${L==='es'?'Antes de':'Before'}</label><input type="time" class="input" value="${goal.timeTarget||'09:00'}" data-nl-goal="timeTarget"></div>`;
+}
+function wireProduct(){
+  document.querySelectorAll('[data-nl-product-tab]').forEach(b => b.addEventListener('click', () => { state.ui.editingProductId = b.dataset.nlProductTab; render(); }));
+  const addBtn = document.querySelector('[data-nl-product-add]');
+  if(addBtn) addBtn.addEventListener('click', () => openProductEditor());
+  const name = document.querySelector('[data-nl-product-name]');
+  if(name) name.addEventListener('change', () => update(s => { const p = s.products.find(x=>x.id===(s.ui.editingProductId||s.activeProductId)); if(p) p.name = name.value; }));
+  const brand = document.querySelector('[data-nl-product-brand]');
+  if(brand) brand.addEventListener('change', () => update(s => { const p = s.products.find(x=>x.id===(s.ui.editingProductId||s.activeProductId)); if(p) p.brand = brand.value; }));
+  const archiveBtn = document.querySelector('[data-nl-product-archive]');
+  if(archiveBtn) archiveBtn.addEventListener('click', () => {
+    const id = archiveBtn.dataset.nlProductArchive;
+    openConfirmDialog(state.lang==='es' ? '¿Archivar este producto?' : 'Archive this product?', () => {
+      update(s => {
+        const p = s.products.find(x=>x.id===id); if(p) p.archived = true;
+        if(s.activeProductId === id) s.activeProductId = s.products.find(x=>!x.archived)?.id || s.activeProductId;
+        s.ui.editingProductId = s.activeProductId;
+      });
+    });
+  });
+  document.querySelectorAll('[data-nl-metric-toggle]').forEach(el => el.addEventListener('change', () => {
+    const metric = el.dataset.nlMetricToggle;
+    update(s => {
+      const productId = s.ui.editingProductId || s.activeProductId;
+      const cfg = s.trackingConfigs.find(tc => tc.productId === productId);
+      if(cfg) cfg.metrics[metric] = el.checked;
+    });
+  }));
+  document.querySelectorAll('[data-nl-goal]').forEach(el => el.addEventListener('change', () => {
+    const field = el.dataset.nlGoal;
+    update(s => {
+      const productId = s.ui.editingProductId || s.activeProductId;
+      const cfg = s.trackingConfigs.find(tc => tc.productId === productId);
+      if(cfg) cfg.goal[field] = field === 'timeTarget' ? el.value : (+el.value || 1);
+    });
+  }));
+  const reminderToggle = document.querySelector('[data-nl-reminder-toggle]');
+  if(reminderToggle) reminderToggle.addEventListener('change', () => {
+    update(s => { s.reminderPref.enabled = reminderToggle.checked; if(!s.reminderPref.time) s.reminderPref.time = '08:00'; });
+  });
+}
+function openProductEditor(){
+  const L = state.lang;
+  const host = document.getElementById('nl-modal-host');
+  host.innerHTML = `
+    <div class="dialog-backdrop" data-nl-modal-close>
+      <div class="dialog" data-nl-modal-stop>
+        <span class="dialog-title">${esc(T[L].product.add)}</span>
+        <div class="field"><label>${L==='es'?'Nombre':'Name'}</label><input type="text" class="input" id="nl-np-name"></div>
+        <div class="field"><label>${L==='es'?'Marca':'Brand'}</label><input type="text" class="input" id="nl-np-brand"></div>
+        <div class="dialog-actions">
+          <button type="button" class="btn btn-secondary" data-nl-modal-close>${L==='es'?'Cancelar':'Cancel'}</button>
+          <button type="button" class="btn btn-primary" id="nl-np-save">${L==='es'?'Agregar':'Add'}</button>
+        </div>
+      </div>
+    </div>`;
+  host.querySelectorAll('[data-nl-modal-close]').forEach(el => el.addEventListener('click', () => { host.innerHTML = ''; }));
+  host.querySelector('[data-nl-modal-stop]').addEventListener('click', ev => ev.stopPropagation());
+  host.querySelector('#nl-np-save').addEventListener('click', () => {
+    const name = host.querySelector('#nl-np-name').value.trim();
+    if(!name) return;
+    const brand = host.querySelector('#nl-np-brand').value.trim();
+    const id = uid('product');
+    update(s => {
+      s.products.push({ id, name, brand, category:{es:'',en:''}, servingDefault:{es:'',en:''}, archived:false, compounds:[] });
+      s.trackingConfigs.push({ id: uid('tc'), productId: id, metrics:{streak:true,frequency:false,time:false}, goal:{streakTarget:14} });
+      s.ui.editingProductId = id;
+    });
+    host.innerHTML = '';
+  });
+}
 
 loadData();
 </script>
