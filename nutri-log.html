@@ -556,7 +556,7 @@ function defaultState(){
   return {
     lang: 'es',
     screen: 'home',
-    onboardingDone: false, onbStep: 0,
+    onboardingDone: false, onbStep: 0, onbPicks: {},
     activeProductId: 'urth',
     compounds: SEED_COMPOUNDS.map(c => ({...c})),
     products: SEED_PRODUCTS.map(p => ({...p, compounds: p.compounds.map(c => ({...c}))})),
@@ -571,7 +571,8 @@ function defaultState(){
     gamification: { streakCurrent:0, streakMax:0, freezesAvailable:2, freezesTotal:2, badgeIds:[] },
     challengeTemplates: [ { ...SEED_TEMPLATE, columns:SEED_TEMPLATE.columns.map(c=>({...c})), values: JSON.parse(JSON.stringify(SEED_TEMPLATE.values)) } ],
     challenges: [],
-    ui: { logRecipeId:null, logTime:'08:00', logType:'hot', logNote:'', recipeFilter:'all', recipeQuery:'',
+    reminderPref: { enabled:false },
+    ui: { logRecipeId:null, logRecipePanelOpen:false, logTime:'08:00', logType:'hot', logNote:'', recipeFilter:'all', recipeQuery:'',
       openRecipeId:null, nutriRecipeId:null, nutriOpen:false, nutriQuery:'', editingProductId:null, editCols:false }
   };
 }
@@ -706,8 +707,10 @@ async function loadData(){
       ['compounds','products','recipes','trackingConfigs','logs','challengeTemplates','challenges'].forEach(k => {
         if(!Array.isArray(state[k])) state[k] = defaultState()[k];
       });
-      if(!state.gamification) state.gamification = defaultState().gamification;
-      if(!state.ui) state.ui = defaultState().ui;
+      state.gamification = Object.assign(defaultState().gamification, loaded.gamification || {});
+      state.ui = Object.assign(defaultState().ui, loaded.ui || {});
+      state.reminderPref = Object.assign(defaultState().reminderPref, loaded.reminderPref || {});
+      if(!loaded.onbPicks) state.onbPicks = {};
     } else {
       state = defaultState();
     }
@@ -819,13 +822,262 @@ function wireScreen(){
   }
 }
 
-/* ===== TODO: pantallas — se agregan en los siguientes commits ===== */
-function renderOnboarding(){ return '<div class="nl-content"><p>Onboarding — pendiente</p></div>'; }
-function wireOnboarding(){}
-function renderHome(){ return '<p>Inicio — pendiente</p>'; }
-function wireHome(){}
-function renderLog(){ return '<p>Registro — pendiente</p>'; }
-function wireLog(){}
+/* ===== Onboarding (RF-37, RF-38) =====
+   3 pasos, "Omitir" siempre visible, dots de progreso. Aplica las
+   elecciones a datos reales al finalizar (o al omitir, con valores por
+   defecto razonables) — el flujo nunca bloquea el uso basico de la app. */
+const ONB_STEPS = [
+  { icon:'package-open',
+    es:{title:"Tu producto ya está listo", body:"Urth Superfood Brew viene precargado con sus compuestos, efectos y 3 recetas de la guía. Puedes agregar otros productos cuando quieras.", cta:"Continuar"},
+    en:{title:"Your product is ready", body:"Urth Superfood Brew comes preloaded with its compounds, effects and 3 recipes from the guide. You can add other products anytime.", cta:"Continue"},
+    options:[
+      { id:'urth', es:["Usar Urth Superfood Brew","Precargado con 3 recetas"], en:["Use Urth Superfood Brew","Preloaded with 3 recipes"] },
+      { id:'own', es:["Agregar mi propio producto","Defines compuestos y efectos"], en:["Add my own product","You define compounds and effects"] }
+    ] },
+  { icon:'target',
+    es:{title:"¿Qué quieres medir?", body:"Elige la métrica principal y su meta. Puedes activar más de una después, desde Producto y metas.", cta:"Continuar"},
+    en:{title:"What do you want to track?", body:"Pick the main metric and its goal. You can turn on more later from Product & goals.", cta:"Continue"},
+    options:[
+      { id:'streak', es:["Racha de días","Meta: 14 días seguidos"], en:["Day streak","Goal: 14 days in a row"] },
+      { id:'freq', es:["Frecuencia","Meta: 5 veces por semana"], en:["Frequency","Goal: 5 times per week"] },
+      { id:'time', es:["Horario","Meta: antes de las 9 AM"], en:["Time of day","Goal: before 9 AM"] }
+    ] },
+  { icon:'bell',
+    es:{title:"¿Te recordamos?", body:"Un aviso a la hora de tu impulso matutino ayuda a sostener la racha. Puedes silenciarlo sin perder progreso.", cta:"Empezar"},
+    en:{title:"Want a reminder?", body:"A nudge at your morning boost time helps keep the streak alive. You can mute it without losing progress.", cta:"Get started"},
+    options:[
+      { id:'on', es:["Sí, a las 8:00 AM","Lunes a domingo"], en:["Yes, at 8:00 AM","Monday to Sunday"] },
+      { id:'off', es:["Por ahora no","Se activa luego en ajustes"], en:["Not now","Turn it on later in settings"] }
+    ] }
+];
+function renderOnboarding(){
+  const L = state.lang, step = ONB_STEPS[state.onbStep], picked = state.onbPicks[state.onbStep];
+  const isLast = state.onbStep === ONB_STEPS.length - 1;
+  return `
+    <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;">
+      <div class="nl-col" style="max-width:420px;width:100%;">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <div style="display:flex;gap:6px;">
+            ${[0,1,2].map(i => `<span class="nl-onb-dot ${i===state.onbStep?'active':''}"></span>`).join('')}
+          </div>
+          <button type="button" class="btn btn-ghost" data-nl-onb-skip>${esc(T[L].onb.skip)}</button>
+        </div>
+        <div style="width:96px;height:96px;border-radius:999px;background:var(--color-accent-200);display:flex;align-items:center;justify-content:center;margin:8px auto 0;">
+          <i data-lucide="${step.icon}" style="width:40px;height:40px;color:var(--color-accent-800)"></i>
+        </div>
+        <h3 style="text-align:center;font-size:30px;">${esc(step[L].title)}</h3>
+        <p class="text-muted" style="text-align:center;">${esc(step[L].body)}</p>
+        <div class="nl-col" style="gap:10px;">
+          ${step.options.map(o => `
+            <label class="nl-onb-radio ${picked===o.id?'on':''}">
+              <input type="radio" name="nl-onb-opt" style="position:absolute;opacity:0" data-nl-onb-pick="${o.id}" ${picked===o.id?'checked':''}>
+              <span class="dot"></span>
+              <span><strong style="display:block;font-size:14px;">${esc(o[L][0])}</strong><span class="text-muted" style="font-size:12.5px;">${esc(o[L][1])}</span></span>
+            </label>`).join('')}
+        </div>
+        <button type="button" class="btn btn-primary btn-block" data-nl-onb-next>${esc(step[L].cta)}</button>
+      </div>
+    </div>`;
+}
+function applyOnboardingChoices(){
+  const picks = state.onbPicks;
+  // Paso 2: metrica principal + meta sugerida por el propio paso (RF-27).
+  const cfg = state.trackingConfigs.find(t => t.productId === state.activeProductId);
+  if(cfg && picks[1]){
+    cfg.metrics = { streak: picks[1]==='streak', frequency: picks[1]==='freq', time: picks[1]==='time' };
+    if(picks[1]==='streak') cfg.goal.streakTarget = 14;
+    if(picks[1]==='freq') cfg.goal.frequencyTarget = 5;
+  }
+  // Paso 3: recordatorios — la entrega real (notificaciones) es de fase 2
+  // (ver docs/nutrilog/requerimientos.md); aqui solo se guarda la preferencia.
+  state.reminderPref = picks[2] === 'on' ? { enabled:true, time:'08:00', days:[0,1,2,3,4,5,6] } : { enabled:false };
+}
+function wireOnboarding(){
+  document.querySelectorAll('[data-nl-onb-pick]').forEach(el => {
+    el.addEventListener('change', () => {
+      state.onbPicks[state.onbStep] = el.dataset.nlOnbPick;
+      render();
+    });
+  });
+  const skip = document.querySelector('[data-nl-onb-skip]');
+  if(skip) skip.addEventListener('click', () => {
+    applyOnboardingChoices();
+    state.onboardingDone = true;
+    saveData(); render();
+  });
+  const next = document.querySelector('[data-nl-onb-next]');
+  if(next) next.addEventListener('click', () => {
+    if(state.onbStep < ONB_STEPS.length - 1){ state.onbStep++; render(); return; }
+    applyOnboardingChoices();
+    state.onboardingDone = true;
+    saveData(); render();
+  });
+}
+
+/* ===== Inicio / Home dashboard (RF-24, RF-25, RF-26) ===== */
+function activeProduct(){ return state.products.find(p => p.id === state.activeProductId) || state.products[0]; }
+function lastLogFor(productId){
+  const logs = logsForProduct(productId);
+  return logs[0] || null;
+}
+function renderHome(){
+  const L = state.lang, t = T[L].home, product = activeProduct();
+  if(!product) return `<div class="nl-empty">${esc(t.noProduct)}</div>`;
+  const done = loggedToday(product.id);
+  const streak = state.gamification.streakCurrent;
+  const dow = new Date(nlToday()+'T12:00:00Z').getUTCDay(); // 0=domingo
+  const week = weekProgress(product.id);
+  const activeChallenge = state.challenges.find(c => c.productId === product.id && c.status === 'active');
+  const dots = Array.from({length:7}, (_, i) => {
+    const offset = i - dow; // negativo = dia pasado de esta semana
+    const iso = nlDaysAgo(-offset);
+    const hasLog = state.logs.some(l => l.productId===product.id && l.startedAt.slice(0,10)===iso);
+    const isFuture = offset > 0;
+    return `<span class="${hasLog?'done':'pending'}" ${isFuture?'style="opacity:.5"':''}></span>`;
+  }).join('');
+  return `
+    <div class="card nl-streak-card elev-md">
+      <span style="font-size:12px;opacity:.85;">${esc(t.streakLabel)}</span>
+      <div class="nl-streak-num ${streak>0?'pop':''}">${streak}</div>
+      <span style="font-size:13px;">${esc(t.days)}</span>
+      <div class="nl-dow">${dots}</div>
+    </div>
+    <div class="card elev-sm" style="flex-direction:row;align-items:center;gap:10px;">
+      <span style="width:11px;height:11px;border-radius:999px;flex:none;background:${done?'var(--color-accent-2)':'var(--color-neutral-400)'}"></span>
+      <div style="flex:1;">
+        <div style="font-weight:700;font-size:14px;">${esc(done ? t.loggedYes : t.loggedNo)}</div>
+        ${product.reminderTime ? `<div class="text-muted" style="font-size:12px;">${esc(t.nextLabel)} · ${esc(product.reminderTime)}</div>` : ''}
+      </div>
+    </div>
+    <button type="button" class="nl-quickbtn ${done?'done':'pending'}" data-nl-quicklog>
+      ${done ? `<i data-lucide="check-circle-2" style="width:16px;height:16px;display:inline;vertical-align:-3px;margin-right:6px"></i>${esc(T[L].home.quickYes)}` : esc(T[L].home.quickNo)}
+    </button>
+    <button type="button" class="btn btn-secondary btn-block" data-nl-nav="log">${esc(t.fullForm)}</button>
+    <div class="card elev-sm">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;">
+        <span class="card-title">${esc(t.weekTitle)}</span>
+        <span class="text-muted" style="font-size:12px;">${week.count}/${week.target}</span>
+      </div>
+      <div class="nl-bar-track"><div class="nl-bar-fill" style="width:${week.pct}%"></div></div>
+    </div>
+    ${activeChallenge ? `
+      <div class="card elev-sm" style="flex-direction:row;align-items:center;gap:12px;background:var(--color-accent-2-200);border:1px solid var(--color-accent-2-300);cursor:pointer;" data-nl-nav="challenge">
+        <div style="width:38px;height:38px;border-radius:999px;background:var(--color-accent-2);color:#fff;display:flex;align-items:center;justify-content:center;flex:none;">
+          <i data-lucide="trophy" style="width:18px;height:18px"></i>
+        </div>
+        <div style="flex:1;">
+          <div style="font-weight:700;font-size:13.5px;">${L==='es'?'Reto de 14 días':'14-day challenge'} · ${L==='es'?'Día':'Day'} ${challengeDayNumber(activeChallenge)}</div>
+        </div>
+        <i data-lucide="chevron-right" style="width:18px;height:18px"></i>
+      </div>` : ''}
+  `;
+}
+function challengeDayNumber(challenge){
+  const diff = Math.round((new Date(nlToday()) - new Date(challenge.startDate)) / 86400000) + 1;
+  return Math.max(1, Math.min(challenge.durationDays, diff));
+}
+function wireHome(){
+  const btn = document.querySelector('[data-nl-quicklog]');
+  if(btn) btn.addEventListener('click', () => {
+    const product = activeProduct();
+    if(loggedToday(product.id)){ state.screen = 'analytics'; render(); return; }
+    // Registro rapido (RF-25): reusa producto/receta/tipo del ultimo registro.
+    const last = lastLogFor(product.id);
+    const entry = {
+      id: uid('log'), productId: product.id,
+      recipeId: last ? last.recipeId : (product.id==='urth' ? 'latte' : null),
+      startedAt: nlToday() + 'T' + new Date().toTimeString().slice(0,5) + ':00',
+      consumptionType: last ? last.consumptionType : 'hot',
+      note: '', edited:false
+    };
+    update(s => { s.logs.push(entry); });
+    const streakMsg = L => L==='es' ? `¡Racha de ${state.gamification.streakCurrent} días! 🔥` : `${state.gamification.streakCurrent}-day streak! 🔥`;
+    showToast(streakMsg(state.lang), 'flame');
+  });
+}
+
+/* ===== Registro de consumo (RF-07 a RF-10) ===== */
+function renderLog(){
+  const L = state.lang, t = T[L].log, product = activeProduct();
+  const recipes = state.recipes.filter(r => r.productId === product.id);
+  const times = ['6:30','8:00','12:30','16:00'];
+  const types = [ {id:'hot',icon:'flame',label:t.hot}, {id:'cold',icon:'snowflake',label:t.cold}, {id:'blend',icon:'blend',label:t.blend} ];
+  const ui = state.ui;
+  return `
+    <h3>${esc(t.title)}</h3>
+    <div class="field">
+      <label>${esc(t.product)}</label>
+      <div class="card elev-sm" style="flex-direction:row;align-items:center;gap:10px;padding:10px 12px;">
+        <div class="nl-logo-slot"></div>
+        <div style="flex:1;">
+          <div style="font-weight:700;font-size:14px;">${esc(product.name)}</div>
+          <div class="text-muted" style="font-size:12px;">${esc(product.brand)}</div>
+        </div>
+      </div>
+    </div>
+    <div class="field">
+      <label>${esc(t.time)}</label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        ${times.map(tm => `<button type="button" class="nl-pill ${ui.logTime===tm?'active':'inactive'}" data-nl-logtime="${tm}">${tm}</button>`).join('')}
+        <input type="time" class="input" style="width:120px;" value="${esc(ui.logTime.length<=5 && ui.logTime.includes(':') && ui.logTime.length===5 ? ui.logTime : '08:00')}" data-nl-logtime-custom>
+      </div>
+    </div>
+    <div class="field">
+      <label>${esc(t.type)}</label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        ${types.map(ty => `<button type="button" class="nl-pill ${ui.logType===ty.id?'active':'inactive'}" data-nl-logtype="${ty.id}"><i data-lucide="${ty.icon}" style="width:14px;height:14px"></i>${esc(ty.label)}</button>`).join('')}
+      </div>
+    </div>
+    <div class="field" style="position:relative;">
+      <label>${esc(t.recipe)}</label>
+      <div class="input" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;" data-nl-recipe-toggle>
+        <span>${ui.logRecipeId ? esc((recipes.find(r=>r.id===ui.logRecipeId)||{}).name?.[L] || '') : t.none}</span>
+        <i data-lucide="chevron-down" style="width:16px;height:16px"></i>
+      </div>
+      ${ui.logRecipePanelOpen ? `
+        <div class="nl-searchpanel">
+          <div class="nl-searchrow" data-nl-recipe-pick="">${esc(t.none)}</div>
+          <div class="nl-searchlist">
+            ${recipes.map(r => `<div class="nl-searchrow" data-nl-recipe-pick="${r.id}" style="${ui.logRecipeId===r.id?'border:1px solid var(--color-accent);':''}">${esc(r.name[L])}</div>`).join('')}
+          </div>
+        </div>` : ''}
+    </div>
+    <div class="field">
+      <label>${esc(t.note)}</label>
+      <input type="text" class="input" placeholder="${esc(t.notePh)}" value="${esc(ui.logNote)}" data-nl-lognote>
+    </div>
+    <button type="button" class="btn btn-primary btn-block" data-nl-logsave>${esc(t.save)}</button>
+  `;
+}
+function wireLog(){
+  const ui = state.ui;
+  document.querySelectorAll('[data-nl-logtime]').forEach(b => b.addEventListener('click', () => { ui.logTime = b.dataset.nlLogtime; render(); }));
+  const custom = document.querySelector('[data-nl-logtime-custom]');
+  if(custom) custom.addEventListener('change', () => { ui.logTime = custom.value; render(); });
+  document.querySelectorAll('[data-nl-logtype]').forEach(b => b.addEventListener('click', () => { ui.logType = b.dataset.nlLogtype; render(); }));
+  const toggle = document.querySelector('[data-nl-recipe-toggle]');
+  if(toggle) toggle.addEventListener('click', () => { ui.logRecipePanelOpen = !ui.logRecipePanelOpen; render(); });
+  document.querySelectorAll('[data-nl-recipe-pick]').forEach(el => el.addEventListener('click', () => {
+    ui.logRecipeId = el.dataset.nlRecipePick || null;
+    ui.logRecipePanelOpen = false;
+    render();
+  }));
+  const note = document.querySelector('[data-nl-lognote]');
+  if(note) note.addEventListener('input', () => { ui.logNote = note.value; });
+  const save = document.querySelector('[data-nl-logsave]');
+  if(save) save.addEventListener('click', () => {
+    const product = activeProduct();
+    const entry = {
+      id: uid('log'), productId: product.id, recipeId: ui.logRecipeId || null,
+      startedAt: nlToday() + 'T' + (ui.logTime.length===5?ui.logTime:'08:00') + ':00',
+      consumptionType: ui.logType, note: note ? note.value : '', edited:false
+    };
+    update(s => { s.logs.push(entry); ui.logNote = ''; ui.logRecipePanelOpen = false; });
+    state.screen = 'home';
+    render();
+    showToast(state.lang==='es' ? 'Registro guardado.' : 'Entry saved.', 'check');
+  });
+}
 function renderRecipes(){ return '<p>Recetas — pendiente</p>'; }
 function wireRecipes(){}
 function renderRecipeDetail(){ return '<p>Detalle de receta — pendiente</p>'; }
